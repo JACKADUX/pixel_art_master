@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.prose-xs {
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.prose-xs h1,
+.prose-xs h2,
+.prose-xs h3 {
+  font-size: 0.85rem;
+  margin-top: 0.5em;
+  margin-bottom: 0.25em;
+}
+
+.prose-xs p {
+  margin: 0.25em 0;
+}
+
+.prose-xs ul,
+.prose-xs ol {
+  padding-left: 1.2em;
+  margin: 0.25em 0;
+}
+
+.prose-xs code {
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.1em 0.3em;
+  border-radius: 2px;
+}
