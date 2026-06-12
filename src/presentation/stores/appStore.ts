@@ -8,6 +8,57 @@ import {
 
 } from "@/application/use-cases/DrawStroke";
 
+import {
+  pushHistory,
+  undoHistory,
+  redoHistory,
+} from "@/application/use-cases/HistoryUseCases";
+
+import {
+  clearSelectionPixels,
+  deselectSelection,
+  invertSelection,
+  nudgeSelection,
+  selectAll,
+  beginMoveSelection,
+} from "@/application/use-cases/SelectionUseCases";
+
+import {
+  copySelectionToClipboard,
+  cutSelectionPixels,
+  pasteFromClipboard,
+} from "@/application/use-cases/ClipboardUseCases";
+
+import { HistoryStack } from "@/domain/history/HistoryStack";
+
+import type { SelectionState } from "@/domain/selection/SelectionState";
+
+import type { FloatingSelection } from "@/domain/selection/FloatingSelection";
+
+import { isSelectionEmpty } from "@/domain/selection/SelectionState";
+
+import type { SelectionRect } from "@/domain/selection/SelectionRect";
+
+import {
+  clampMagicWandTolerance,
+} from "@/domain/tool/ToolType";
+
+import { webClipboardService } from "@/infrastructure/clipboard/WebClipboardService";
+
+import {
+  cancelActiveFloating,
+  commitActiveFloating,
+  handleSelectPointerDown,
+  handleSelectPointerMove,
+  handleSelectPointerUp,
+  handleTransformPointerDown,
+  handleTransformPointerMove,
+  flipFloatingHorizontal,
+  flipFloatingVertical,
+  rotateFloatingSelection90,
+  type SelectionDragState,
+} from "@/presentation/controllers/canvasInteraction";
+
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
 
 import {
@@ -24,7 +75,11 @@ import {
 
   addDrawingLayer,
 
+  addReferenceLayer,
+
   getActiveLayerGridFromProject,
+
+  moveReferenceLayer as moveReferenceLayerInProject,
 
   removeLayerFromProject,
 
@@ -34,15 +89,26 @@ import {
 
   setActiveLayer,
 
+  setReferenceCrop as setReferenceCropInProject,
+
   syncActiveLayerPixels,
 
   toggleLayerVisibilityInProject,
 
+  toggleReferenceGrid as toggleReferenceGridInProject,
+
 } from "@/application/use-cases/LayerUseCases";
 
+import { resolveColorAtCanvasPoint } from "@/application/use-cases/PickColorAtPoint";
+import { loadEditorPreferences } from "@/application/use-cases/LoadEditorPreferences";
 import { loadProject } from "@/application/use-cases/LoadProject";
+import { openLastProjectOnStartup } from "@/application/use-cases/OpenLastProjectOnStartup";
+import { saveEditorPreferences } from "@/application/use-cases/SaveEditorPreferences";
+import { saveLastOpenedProject } from "@/application/use-cases/SaveLastOpenedProject";
 
 import { deleteProject } from "@/application/use-cases/DeleteProject";
+
+import { renameProjectInWorkspace } from "@/application/use-cases/RenameProjectInWorkspace";
 
 import { ensureWorkspaceAccess } from "@/application/use-cases/EnsureWorkspaceAccess";
 import { listProjectsInWorkspace } from "@/application/use-cases/ListProjectsInWorkspace";
@@ -66,58 +132,53 @@ import {
 } from "@/application/use-cases/NoteUseCases";
 
 import { saveProject } from "@/application/use-cases/SaveProject";
+import { resizeCanvas } from "@/application/use-cases/ResizeCanvas";
 
+import type { ColorMode } from "@/domain/color/ColorMode";
 import { rgba, TRANSPARENT, type PixelColor } from "@/domain/canvas/PixelColor";
+import {
+  DEFAULT_COLOR_PICKER_PANEL_HEIGHT,
+  DEFAULT_NAVIGATOR_HEIGHT,
+  DEFAULT_NAVIGATOR_WIDTH,
+  DEFAULT_SIDEBAR_WIDTH,
+  DEFAULT_SPLIT_PANE_RATIO,
+  extractEditorPreferences,
+} from "@/domain/preferences/EditorPreferences";
 
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 
-import {
-
-  getFirstReferenceLayer,
-
-  getLayerGrid,
-
-  resizeAllLayers,
-
-} from "@/domain/layer/LayerOperations";
-
-import type { Note } from "@/domain/note/Note";
-
-import type { ProjectSummary } from "@/domain/project/ProjectSummary";
+import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 
 import {
+
+  getActiveLayer,
 
   createEmptyProject,
 
   isUnsavedEmptyProject,
 
-  getCanvasSize,
-
   getCompositeGrid as compositeProjectLayers,
-
-  touchProject,
-
-  withCanvasSize,
-
-  withLayers,
 
   type Project,
 
 } from "@/domain/project/Project";
 
+import type { CropRect, LayerPosition } from "@/domain/layer/Layer";
+
+import type { Note } from "@/domain/note/Note";
+
+import type { ProjectSummary } from "@/domain/project/ProjectSummary";
+
 import type { Point } from "@/domain/tool/ITool";
 
 import {
-
   DEFAULT_TOOL_SETTINGS,
-
   clampStampSize,
-
   type ToolSettings,
-
   type ToolType,
-
 } from "@/domain/tool/ToolType";
+
+import { isDrawingToolType } from "@/domain/tool/ToolRegistry";
 
 export type ColorSlot = "foreground" | "background";
 export type DrawingButton = "primary" | "secondary";
@@ -126,13 +187,22 @@ import {
   addColorToPalette as addColorToPaletteUseCase,
   removeColorsFromPalette as removeColorsFromPaletteUseCase,
 } from "@/application/use-cases/PaletteUseCases";
+import {
+  importReferenceLayerColorsToPalette,
+  type ReferenceColorImportScope,
+} from "@/application/use-cases/ImportReferenceLayerColorsToPalette";
 
+import {
+  ensureReferenceLayerFullPixelCache,
+  ensureReferenceLayerPixelCache,
+  getReferenceLayerPixelCache,
+} from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
-
-import { downscaleImage, detectPixelScale } from "@/infrastructure/image/PixelDownscaler";
 
 import { projectRepository } from "@/infrastructure/storage/JsonProjectRepository";
 
+import { editorPreferencesRepository } from "@/infrastructure/storage/LocalEditorPreferencesRepository";
+import { lastOpenedProjectStore } from "@/infrastructure/storage/LocalLastOpenedProjectStore";
 import { projectsWorkspaceStore } from "@/infrastructure/storage/LocalProjectsWorkspaceStore";
 
 import { captureService } from "@/infrastructure/tauri/TauriCaptureService";
@@ -159,14 +229,19 @@ import { create } from "zustand";
 const NAVIGATOR_HEADER_HEIGHT = 28;
 const NAVIGATOR_MIN_WIDTH = 100;
 const NAVIGATOR_MIN_HEIGHT = 80;
-const NAVIGATOR_DEFAULT_WIDTH = 160;
-const NAVIGATOR_DEFAULT_HEIGHT = 120;
+const NAVIGATOR_DEFAULT_WIDTH = DEFAULT_NAVIGATOR_WIDTH;
+const NAVIGATOR_DEFAULT_HEIGHT = DEFAULT_NAVIGATOR_HEIGHT;
 
 const COLOR_PICKER_FLOAT_WIDTH = 240;
-const COLOR_PICKER_FLOAT_HEADER_HEIGHT = 28;
-const COLOR_PICKER_FLOAT_BODY_HEIGHT = 460;
-const COLOR_PICKER_FLOAT_HEIGHT =
-  COLOR_PICKER_FLOAT_HEADER_HEIGHT + COLOR_PICKER_FLOAT_BODY_HEIGHT;
+const COLOR_PICKER_FLOAT_DEFAULT_HEIGHT = DEFAULT_COLOR_PICKER_PANEL_HEIGHT;
+
+const SIDEBAR_MIN_WIDTH = 180;
+const SIDEBAR_MAX_WIDTH = 400;
+const SPLIT_PANE_MIN_RATIO = 0.15;
+const SPLIT_PANE_MAX_RATIO = 0.85;
+
+let isHydratingPreferences = false;
+let preferencesSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 function toNavigatorLayout(navigator: NavigatorState) {
   return {
@@ -194,6 +269,7 @@ export interface FloatingColorPickerState {
   visible: boolean;
   position: { x: number; y: number };
   activeSlot: ColorSlot;
+  panelHeight: number;
 }
 
 interface AppState {
@@ -230,6 +306,12 @@ interface AppState {
 
   paletteViewMode: "grid" | "oklabMap";
 
+  colorPickerMode: ColorMode;
+
+  sidebarWidth: number;
+
+  splitPaneRatio: number;
+
   editingNoteId: string | null;
 
   draftNote: string;
@@ -261,6 +343,24 @@ interface AppState {
   viewportSnapshot: ViewportSnapshot | null;
 
   viewportContainer: HTMLDivElement | null;
+
+  cropEditorLayerId: string | null;
+
+  importTargetLayerId: string | null;
+
+  canvasSizeModalOpen: boolean;
+
+  historyStack: HistoryStack;
+
+  selection: SelectionState | null;
+
+  selectionDrag: SelectionDragState | null;
+
+  lassoPoints: Point[];
+
+  selectionPreviewRect: SelectionRect | null;
+
+  internalClipboard: FloatingSelection | null;
 
 
 
@@ -295,9 +395,12 @@ interface AppState {
   detachColorPicker: (
     slot: ColorSlot,
     position: { x: number; y: number },
+    panelHeight?: number,
   ) => void;
 
   setFloatingColorPickerPosition: (x: number, y: number) => void;
+
+  setFloatingColorPickerPanelHeight: (height: number) => void;
 
   setFloatingColorPickerSlot: (slot: ColorSlot) => void;
 
@@ -348,11 +451,57 @@ interface AppState {
 
   importImage: () => Promise<void>;
 
-  pointerDown: (point: Point, button: DrawingButton) => void;
+  pointerDown: (
+    point: Point,
+    button: DrawingButton,
+    modifiers?: { shiftKey: boolean; altKey: boolean },
+  ) => void;
 
-  pointerMove: (point: Point, button: DrawingButton) => void;
+  pointerMove: (
+    point: Point,
+    button: DrawingButton,
+    modifiers?: { shiftKey: boolean; altKey: boolean },
+  ) => void;
 
-  pointerUp: (point: Point, button: DrawingButton) => void;
+  pointerUp: (
+    point: Point,
+    button: DrawingButton,
+    modifiers?: { shiftKey: boolean; altKey: boolean },
+  ) => void;
+
+  undo: () => void;
+
+  redo: () => void;
+
+  canUndo: () => boolean;
+
+  canRedo: () => boolean;
+
+  selectAllCanvas: () => void;
+
+  deselectCanvas: () => void;
+
+  invertCanvasSelection: () => void;
+
+  copySelection: () => Promise<void>;
+
+  cutSelection: () => Promise<void>;
+
+  pasteSelection: () => Promise<void>;
+
+  clearSelectionContent: () => void;
+
+  commitSelection: () => void;
+
+  cancelSelection: () => void;
+
+  nudgeSelectionBy: (dx: number, dy: number) => void;
+
+  rotateSelection90: (steps: number) => void;
+
+  flipSelectionHorizontal: () => void;
+
+  flipSelectionVertical: () => void;
 
   pickColorAt: (point: Point, slot: ColorSlot) => void;
 
@@ -360,9 +509,17 @@ interface AppState {
 
   setPaletteViewMode: (mode: "grid" | "oklabMap") => void;
 
+  setColorPickerMode: (mode: ColorMode) => void;
+
+  setSidebarWidth: (width: number) => void;
+
+  setSplitPaneRatio: (ratio: number) => void;
+
   addColorToPalette: (color: PixelColor) => void;
 
   removeColorsFromPalette: (hexes: string[]) => void;
+
+  importReferenceLayerColors: (scope: ReferenceColorImportScope) => Promise<void>;
 
   setActiveLayer: (layerId: string) => void;
 
@@ -372,9 +529,29 @@ interface AppState {
 
   addDrawingLayer: () => void;
 
+  addReferenceLayer: () => void;
+
   removeLayer: (layerId: string) => void;
 
   reorderLayer: (fromIndex: number, toIndex: number) => void;
+
+  moveReferenceLayer: (layerId: string, position: LayerPosition) => void;
+
+  setReferenceCrop: (layerId: string, crop: CropRect) => void;
+
+  toggleReferenceGrid: (layerId: string) => void;
+
+  openCropEditor: (layerId: string) => void;
+
+  closeCropEditor: () => void;
+
+  importImageToReferenceLayer: (layerId: string) => Promise<void>;
+
+  openCanvasSizeModal: () => void;
+
+  closeCanvasSizeModal: () => void;
+
+  applyCanvasSize: (width: number, height: number) => void;
 
   setDraftNote: (content: string) => void;
 
@@ -407,6 +584,8 @@ interface AppState {
   openProjectByPath: (path: string) => Promise<void>;
 
   requestDeleteProject: (summary: ProjectSummary) => void;
+
+  renameProjectFromList: (filePath: string, newName: string) => Promise<void>;
 
   cancelDeleteProject: () => void;
 
@@ -468,6 +647,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   paletteViewMode: "grid",
 
+  colorPickerMode: "hsl",
+
+  sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
+
+  splitPaneRatio: DEFAULT_SPLIT_PANE_RATIO,
+
   editingNoteId: null,
 
   draftNote: "",
@@ -504,17 +689,100 @@ export const useAppStore = create<AppState>((set, get) => ({
     visible: false,
     position: { x: 16, y: 16 },
     activeSlot: "foreground",
+    panelHeight: COLOR_PICKER_FLOAT_DEFAULT_HEIGHT,
   },
 
   viewportSnapshot: null,
 
   viewportContainer: null,
 
+  cropEditorLayerId: null,
+
+  importTargetLayerId: null,
+
+  canvasSizeModalOpen: false,
+
+  historyStack: new HistoryStack(),
+
+  selection: null,
+
+  selectionDrag: null,
+
+  lassoPoints: [],
+
+  selectionPreviewRect: null,
+
+  internalClipboard: null,
+
 
 
   init: async () => {
 
+    isHydratingPreferences = true;
+
     set({ projectsWorkspacePath: projectsWorkspaceStore.getPath() });
+
+    const prefs = loadEditorPreferences(editorPreferencesRepository);
+
+    if (prefs) {
+
+      const current = get();
+
+      set({
+
+        activeTool: prefs.activeTool,
+
+        toolSettings: prefs.toolSettings,
+
+        foregroundColor: prefs.foregroundColor,
+
+        backgroundColor: prefs.backgroundColor,
+
+        zoom: prefs.zoom,
+
+        rightPanelTab: prefs.rightPanelTab,
+
+        paletteViewMode: prefs.paletteViewMode,
+
+        colorPickerMode: prefs.colorPickerMode,
+
+        sidebarWidth: prefs.sidebarWidth,
+
+        splitPaneRatio: prefs.splitPaneRatio,
+
+        navigator: {
+
+          ...current.navigator,
+
+          visible: prefs.navigatorLayout.visible,
+
+          position: prefs.navigatorLayout.position,
+
+          size: prefs.navigatorLayout.size,
+
+          previewScale: 1,
+
+          previewPan: { x: 0, y: 0 },
+
+        },
+
+        floatingColorPicker: {
+
+          ...current.floatingColorPicker,
+
+          visible: prefs.floatingColorPickerLayout.visible,
+
+          position: prefs.floatingColorPickerLayout.position,
+
+          panelHeight: prefs.floatingColorPickerLayout.panelHeight,
+
+          activeSlot: prefs.floatingColorPickerLayout.activeSlot,
+
+        },
+
+      });
+
+    }
 
     const stored = windowService.getStoredPreference();
 
@@ -523,6 +791,49 @@ export const useAppStore = create<AppState>((set, get) => ({
       await windowService.setAlwaysOnTop(true);
 
       set({ alwaysOnTop: true });
+
+    }
+
+    isHydratingPreferences = false;
+
+    const lastProject = await openLastProjectOnStartup(
+      lastOpenedProjectStore,
+      projectRepository,
+    );
+
+    if (lastProject) {
+
+      get().historyStack.clear();
+
+      set({
+
+        project: lastProject,
+
+        manualScaleOverride: null,
+
+        detectedScale: lastProject.canvas.scaleFactor,
+
+        editingNoteId: null,
+
+        draftNote: "",
+
+        projectManagerOpen: false,
+
+        deleteConfirmTarget: null,
+
+        projectManagerError: null,
+
+        selection: null,
+
+        selectionDrag: null,
+
+        lassoPoints: [],
+
+        selectionPreviewRect: null,
+
+      });
+
+      return;
 
     }
 
@@ -550,6 +861,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createBlankProject: () => {
 
+    get().historyStack.clear();
+
     set({
 
       project: createEmptyProject(),
@@ -567,6 +880,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       deleteConfirmTarget: null,
 
       projectManagerError: null,
+
+      selection: null,
+
+      selectionDrag: null,
+
+      lassoPoints: [],
+
+      selectionPreviewRect: null,
 
     });
 
@@ -588,6 +909,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const project = await loadProject(projectRepository, selected);
 
+    saveLastOpenedProject(lastOpenedProjectStore, selected);
+
+    get().historyStack.clear();
+
     set({
 
       project,
@@ -605,6 +930,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       deleteConfirmTarget: null,
 
       projectManagerError: null,
+
+      selection: null,
+
+      selectionDrag: null,
+
+      lassoPoints: [],
+
+      selectionPreviewRect: null,
 
     });
 
@@ -684,7 +1017,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  setActiveTool: (tool) => set({ activeTool: tool }),
+  setActiveTool: (tool) => {
+    const { selection, project } = get();
+    if (selection?.floating && project) {
+      const grid = getActiveLayerGridFromProject(project);
+      if (grid) {
+        const { grid: committedGrid, selection: committedSelection } =
+          commitActiveFloating({ grid, selection });
+        get().syncActiveLayer(committedGrid);
+        set({ selection: committedSelection });
+      }
+    }
+    set({ activeTool: tool });
+  },
 
 
 
@@ -696,6 +1041,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       if (settings.eraserSize !== undefined) {
         next.eraserSize = clampStampSize(settings.eraserSize);
+      }
+      if (settings.magicWandTolerance !== undefined) {
+        next.magicWandTolerance = clampMagicWandTolerance(settings.magicWandTolerance);
       }
       return { toolSettings: next };
     }),
@@ -793,14 +1141,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  detachColorPicker: (slot, position) =>
+  detachColorPicker: (slot, position, panelHeight) =>
     set((s) => {
       const container = s.viewportContainer;
+      const height = panelHeight ?? COLOR_PICKER_FLOAT_DEFAULT_HEIGHT;
       const clamped = clampPanelPosition(
         position.x,
         position.y,
         COLOR_PICKER_FLOAT_WIDTH,
-        COLOR_PICKER_FLOAT_HEIGHT,
+        height,
         container?.clientWidth ?? null,
         container?.clientHeight ?? null,
       );
@@ -809,6 +1158,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           visible: true,
           activeSlot: slot,
           position: clamped,
+          panelHeight: height,
         },
       };
     }),
@@ -820,13 +1170,33 @@ export const useAppStore = create<AppState>((set, get) => ({
         x,
         y,
         COLOR_PICKER_FLOAT_WIDTH,
-        COLOR_PICKER_FLOAT_HEIGHT,
+        s.floatingColorPicker.panelHeight,
         container?.clientWidth ?? null,
         container?.clientHeight ?? null,
       );
       return {
         floatingColorPicker: {
           ...s.floatingColorPicker,
+          position,
+        },
+      };
+    }),
+
+  setFloatingColorPickerPanelHeight: (height) =>
+    set((s) => {
+      const container = s.viewportContainer;
+      const position = clampPanelPosition(
+        s.floatingColorPicker.position.x,
+        s.floatingColorPicker.position.y,
+        COLOR_PICKER_FLOAT_WIDTH,
+        height,
+        container?.clientWidth ?? null,
+        container?.clientHeight ?? null,
+      );
+      return {
+        floatingColorPicker: {
+          ...s.floatingColorPicker,
+          panelHeight: height,
           position,
         },
       };
@@ -1194,95 +1564,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
   reapplyScale: () => {
-
-    const { project, manualScaleOverride } = get();
-
-    if (!project) return;
-
-
-
-    const refLayer = getFirstReferenceLayer(project.canvas.layers);
-
-    if (!refLayer) return;
-
-
-
-    const size = getCanvasSize(project);
-
-    const refGrid = getLayerGrid(refLayer, size);
-
-    const scale = project.canvas.scaleFactor;
-
-    const upscaled = upscaleGrid(refGrid, scale);
-
-    const upscaledRgba = upscaled.toRgba();
-
-    const upscaledImage = new ImageData(
-
-      new Uint8ClampedArray(upscaledRgba),
-
-      upscaled.width,
-
-      upscaled.height,
-
-    );
-
-    const detected = detectPixelScale(upscaledImage);
-
-    const applied = manualScaleOverride ?? detected;
-
-    const newRefGrid = downscaleImage(upscaledImage, applied);
-
-
-
-    const oldSize = size;
-
-    const newSize = { width: newRefGrid.width, height: newRefGrid.height };
-
-    let layers = project.canvas.layers.map((l) =>
-
-      l.id === refLayer.id
-
-        ? { ...l, pixels: newRefGrid.toUint32Array() }
-
-        : l,
-
-    );
-
-    layers = resizeAllLayers(layers, oldSize, newSize);
-
-
-
-    const updated = touchProject({
-
-      ...withLayers(withCanvasSize(project, newSize.width, newSize.height), layers),
-
-      canvas: {
-
-        ...project.canvas,
-
-        width: newSize.width,
-
-        height: newSize.height,
-
-        scaleFactor: applied,
-
-        layers,
-
-      },
-
-    });
-
-
-
-    set({
-
-      project: updated,
-
-      detectedScale: detected,
-
-    });
-
+    // Reference layers no longer use pixel downscaling; scaleFactor is legacy metadata.
   },
 
 
@@ -1325,7 +1607,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   captureMonitor: async (monitorId) => {
 
-    const { project, manualScaleOverride } = get();
+    const { project } = get();
 
     if (!project) return;
 
@@ -1349,8 +1631,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         promptSaveAs,
 
-        manualScaleOverride ?? undefined,
-
       );
 
       if (result) {
@@ -1359,9 +1639,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
           project: result.project,
 
-          detectedScale: result.detectedScale,
-
-          manualScaleOverride: null,
+          cropEditorLayerId: result.openCropEditor ? result.layerId : null,
 
         });
 
@@ -1391,7 +1669,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   windowCapture: async (windowId) => {
 
-    const { project, manualScaleOverride } = get();
+    const { project } = get();
 
     if (!project) return;
 
@@ -1415,8 +1693,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         promptSaveAs,
 
-        manualScaleOverride ?? undefined,
-
       );
 
       if (result) {
@@ -1425,9 +1701,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
           project: result.project,
 
-          detectedScale: result.detectedScale,
-
-          manualScaleOverride: null,
+          cropEditorLayerId: result.openCropEditor ? result.layerId : null,
 
         });
 
@@ -1465,7 +1739,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-    const { project, manualScaleOverride } = get();
+    const { project } = get();
 
     if (!project) return;
 
@@ -1487,8 +1761,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         promptSaveAs,
 
-        manualScaleOverride ?? undefined,
-
       );
 
       if (result) {
@@ -1497,9 +1769,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
           project: result.project,
 
-          detectedScale: result.detectedScale,
-
-          manualScaleOverride: null,
+          cropEditorLayerId: result.openCropEditor ? result.layerId : null,
 
         });
 
@@ -1519,18 +1789,88 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  pointerDown: (point, button) => {
+  pointerDown: (point, button, modifiers = { shiftKey: false, altKey: false }) => {
 
-    const { project, activeTool, foregroundColor, backgroundColor, toolSettings } = get();
+    const {
+      project,
+      activeTool,
+      foregroundColor,
+      backgroundColor,
+      toolSettings,
+      selection,
+      historyStack,
+    } = get();
 
     if (!project) return;
 
+    const activeLayer = getActiveLayer(project);
+    if (isReferenceLayer(activeLayer)) return;
+
     const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+
+    if (activeTool === "select") {
+      const result = handleSelectPointerDown({
+        project,
+        grid,
+        point,
+        settings: toolSettings,
+        selection,
+        modifiers,
+        historyStack,
+      });
+      if (result.grid) get().syncActiveLayer(result.grid);
+      set({
+        selection: result.selection,
+        selectionDrag: result.selectionDrag,
+        lassoPoints: result.lassoPoints,
+        selectionPreviewRect: result.selectionPreviewRect,
+        isDrawing: true,
+        drawingButton: button,
+        drawStart: point,
+        lastPoint: point,
+      });
+      return;
+    }
+
+    if (activeTool === "transform") {
+      const result = handleTransformPointerDown({
+        project,
+        grid,
+        point,
+        selection,
+        historyStack,
+      });
+      if (result.grid) get().syncActiveLayer(result.grid);
+      set({
+        selection: result.selection,
+        selectionDrag: result.selectionDrag,
+        isDrawing: result.selectionDrag !== null,
+        drawingButton: result.selectionDrag ? button : null,
+        drawStart: point,
+        lastPoint: point,
+      });
+      return;
+    }
+
+    pushHistory(historyStack, project, selection);
 
     const selectedColor = button === "primary" ? foregroundColor : backgroundColor;
     const color = activeTool === "eraser" ? TRANSPARENT : selectedColor;
 
-    applyToolPointerDown(grid, activeTool, color, toolSettings, point);
+    const selectionMask =
+      selection && !isSelectionEmpty(selection) ? selection.mask : null;
+
+    if (!isDrawingToolType(activeTool)) return;
+
+    applyToolPointerDown(
+      grid,
+      activeTool,
+      color,
+      toolSettings,
+      point,
+      selectionMask,
+    );
 
     get().syncActiveLayer(grid);
 
@@ -1546,18 +1886,81 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  pointerMove: (point, button) => {
+  pointerMove: (point, button, modifiers = { shiftKey: false, altKey: false }) => {
 
-    const { project, activeTool, toolSettings, isDrawing, lastPoint, drawingButton, drawingColor } =
-      get();
+    const {
+      project,
+      activeTool,
+      toolSettings,
+      isDrawing,
+      lastPoint,
+      drawingButton,
+      drawingColor,
+      selection,
+      selectionDrag,
+      lassoPoints,
+    } = get();
 
-    if (!project || !isDrawing || !lastPoint || drawingButton !== button || drawingColor === null) return;
+    if (!project) return;
+
+    if (isReferenceLayer(getActiveLayer(project))) return;
+
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+
+    if (activeTool === "select" && selectionDrag) {
+      const result = handleSelectPointerMove({
+        project,
+        point,
+        settings: toolSettings,
+        selection,
+        selectionDrag,
+        lassoPoints,
+        grid,
+      });
+      if (result.grid) get().syncActiveLayer(result.grid);
+      set({
+        selection: result.selection,
+        selectionDrag: result.selectionDrag,
+        lassoPoints: result.lassoPoints,
+        selectionPreviewRect: result.selectionPreviewRect,
+      });
+      return;
+    }
+
+    if (activeTool === "transform" && selectionDrag && selection) {
+      const result = handleTransformPointerMove({
+        point,
+        selection,
+        selectionDrag,
+        grid,
+        shiftKey: modifiers.shiftKey,
+      });
+      set({
+        selection: result.selection,
+        selectionDrag: result.selectionDrag,
+      });
+      return;
+    }
+
+    if (!isDrawing || !lastPoint || drawingButton !== button || drawingColor === null) return;
 
     if (activeTool === "fill") return;
 
-    const grid = getActiveLayerGridFromProject(project);
+    const selectionMask =
+      selection && !isSelectionEmpty(selection) ? selection.mask : null;
 
-    applyToolPointerMove(grid, activeTool, drawingColor, toolSettings, lastPoint, point);
+    if (!isDrawingToolType(activeTool)) return;
+
+    applyToolPointerMove(
+      grid,
+      activeTool,
+      drawingColor,
+      toolSettings,
+      lastPoint,
+      point,
+      selectionMask,
+    );
 
     get().syncActiveLayer(grid);
 
@@ -1567,18 +1970,84 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  pointerUp: (point, button) => {
+  pointerUp: (point, button, modifiers = { shiftKey: false, altKey: false }) => {
 
-    const { project, activeTool, toolSettings, isDrawing, drawStart, drawingButton, drawingColor } =
-      get();
+    const {
+      project,
+      activeTool,
+      toolSettings,
+      isDrawing,
+      drawStart,
+      drawingButton,
+      drawingColor,
+      selection,
+      selectionDrag,
+      lassoPoints,
+      historyStack,
+    } = get();
 
-    if (!project || !isDrawing || !drawStart || drawingButton !== button || drawingColor === null) return;
+    if (!project) return;
+
+    if (isReferenceLayer(getActiveLayer(project))) return;
+
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+
+    if (activeTool === "select" && selectionDrag) {
+      const result = handleSelectPointerUp({
+        project,
+        point,
+        settings: toolSettings,
+        selection,
+        selectionDrag,
+        lassoPoints,
+        modifiers,
+        historyStack,
+        grid,
+      });
+      set({
+        selection: result.selection,
+        selectionDrag: result.selectionDrag,
+        lassoPoints: result.lassoPoints,
+        selectionPreviewRect: result.selectionPreviewRect,
+        isDrawing: false,
+        drawingButton: null,
+        drawStart: null,
+        lastPoint: null,
+      });
+      return;
+    }
+
+    if (activeTool === "transform" && selectionDrag) {
+      set({
+        selectionDrag: null,
+        isDrawing: false,
+        drawingButton: null,
+        drawStart: null,
+        lastPoint: null,
+      });
+      get().syncActiveLayer(grid);
+      return;
+    }
+
+    if (!isDrawing || !drawStart || drawingButton !== button || drawingColor === null) return;
 
     if (activeTool === "shape") {
 
-      const grid = getActiveLayerGridFromProject(project);
+      const selectionMask =
+        selection && !isSelectionEmpty(selection) ? selection.mask : null;
 
-      applyToolPointerUp(grid, activeTool, drawingColor, toolSettings, drawStart, point);
+      if (isDrawingToolType(activeTool)) {
+        applyToolPointerUp(
+          grid,
+          activeTool,
+          drawingColor,
+          toolSettings,
+          drawStart,
+          point,
+          selectionMask,
+        );
+      }
 
       get().syncActiveLayer(grid);
 
@@ -1598,14 +2067,207 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   pickColorAt: (point, slot) => {
 
-    const composite = get().getCompositeGrid();
+    const { project } = get();
 
-    if (!composite) return;
+    if (!project) return;
 
-    const color = composite.getPixel(point.x, point.y);
+    const color = resolveColorAtCanvasPoint(
+      project,
+      point,
+      getReferenceLayerPixelCache,
+    );
 
     get().setColorSlot(slot, color);
 
+  },
+
+  undo: () => {
+    const { project, selection, historyStack } = get();
+    if (!project) return;
+    const result = undoHistory(historyStack, project, selection);
+    if (!result) return;
+    set({
+      project: result.project,
+      selection: result.selection,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+    });
+  },
+
+  redo: () => {
+    const { project, selection, historyStack } = get();
+    if (!project) return;
+    const result = redoHistory(historyStack, project, selection);
+    if (!result) return;
+    set({
+      project: result.project,
+      selection: result.selection,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+    });
+  },
+
+  canUndo: () => get().historyStack.canUndo,
+
+  canRedo: () => get().historyStack.canRedo,
+
+  selectAllCanvas: () => {
+    const { project } = get();
+    if (!project) return;
+    set({
+      selection: selectAll(project.canvas.width, project.canvas.height),
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+    });
+  },
+
+  deselectCanvas: () => {
+    set({
+      selection: deselectSelection(),
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+    });
+  },
+
+  invertCanvasSelection: () => {
+    const { selection } = get();
+    if (!selection) return;
+    set({ selection: invertSelection(selection) });
+  },
+
+  copySelection: async () => {
+    const { project, selection, internalClipboard } = get();
+    if (!project || !selection || isSelectionEmpty(selection)) return;
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+    const copied = await copySelectionToClipboard(
+      webClipboardService,
+      grid,
+      selection,
+      internalClipboard,
+    );
+    if (copied) set({ internalClipboard: copied });
+  },
+
+  cutSelection: async () => {
+    const { project, selection, historyStack, internalClipboard } = get();
+    if (!project || !selection || isSelectionEmpty(selection)) return;
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+    pushHistory(historyStack, project, selection);
+    const copied = await copySelectionToClipboard(
+      webClipboardService,
+      grid,
+      selection,
+      internalClipboard,
+    );
+    cutSelectionPixels(grid, selection);
+    get().syncActiveLayer(grid);
+    set({
+      internalClipboard: copied ?? internalClipboard,
+      selection: deselectSelection(),
+    });
+  },
+
+  pasteSelection: async () => {
+    const { project, internalClipboard, historyStack, selection } = get();
+    if (!project) return;
+    pushHistory(historyStack, project, selection);
+    const pasted = await pasteFromClipboard(
+      webClipboardService,
+      project.canvas.width,
+      project.canvas.height,
+      internalClipboard,
+    );
+    if (!pasted) return;
+    set({
+      selection: pasted,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+      activeTool: "select",
+    });
+  },
+
+  clearSelectionContent: () => {
+    const { project, selection, historyStack } = get();
+    if (!project || !selection || isSelectionEmpty(selection)) return;
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+    pushHistory(historyStack, project, selection);
+    clearSelectionPixels(grid, selection);
+    get().syncActiveLayer(grid);
+  },
+
+  commitSelection: () => {
+    const { project, selection } = get();
+    if (!project || !selection?.floating) return;
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+    const { grid: committedGrid, selection: committedSelection } =
+      commitActiveFloating({ grid, selection });
+    get().syncActiveLayer(committedGrid);
+    set({ selection: committedSelection, selectionDrag: null });
+  },
+
+  cancelSelection: () => {
+    const { project, selection } = get();
+    if (!project || !selection?.floating) {
+      get().deselectCanvas();
+      return;
+    }
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+    const { grid: restoredGrid, selection: restoredSelection } =
+      cancelActiveFloating({ grid, selection });
+    get().syncActiveLayer(restoredGrid);
+    set({ selection: restoredSelection, selectionDrag: null });
+  },
+
+  nudgeSelectionBy: (dx, dy) => {
+    const { project, selection, historyStack } = get();
+    if (!project || !selection || isSelectionEmpty(selection)) return;
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+    if (!selection.floating) {
+      pushHistory(historyStack, project, selection);
+    }
+    const result = nudgeSelection(grid, selection, dx, dy);
+    get().syncActiveLayer(result.grid);
+    set({ selection: result.selection });
+  },
+
+  rotateSelection90: (steps) => {
+    const { project, selection, historyStack } = get();
+    if (!project || !selection || isSelectionEmpty(selection)) return;
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+    pushHistory(historyStack, project, selection);
+    let state = selection;
+    if (!state.floating) {
+      state = beginMoveSelection(grid, state);
+      get().syncActiveLayer(grid);
+    }
+    const rotated = rotateFloatingSelection90(state, steps);
+    set({ selection: rotated });
+  },
+
+  flipSelectionHorizontal: () => {
+    const { project, selection, historyStack } = get();
+    if (!project || !selection?.floating) return;
+    pushHistory(historyStack, project, selection);
+    set({ selection: flipFloatingHorizontal(selection) });
+  },
+
+  flipSelectionVertical: () => {
+    const { project, selection, historyStack } = get();
+    if (!project || !selection?.floating) return;
+    pushHistory(historyStack, project, selection);
+    set({ selection: flipFloatingVertical(selection) });
   },
 
 
@@ -1614,7 +2276,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setPaletteViewMode: (mode) => set({ paletteViewMode: mode }),
 
+  setColorPickerMode: (mode) => set({ colorPickerMode: mode }),
 
+  setSidebarWidth: (width) => {
+    const viewportMax = Math.floor(window.innerWidth * 0.45);
+    const upper = Math.min(SIDEBAR_MAX_WIDTH, viewportMax);
+    set({ sidebarWidth: Math.min(Math.max(width, SIDEBAR_MIN_WIDTH), upper) });
+  },
+
+  setSplitPaneRatio: (ratio) =>
+    set({
+      splitPaneRatio: Math.min(
+        Math.max(ratio, SPLIT_PANE_MIN_RATIO),
+        SPLIT_PANE_MAX_RATIO,
+      ),
+    }),
 
   addColorToPalette: (color) => {
 
@@ -1640,13 +2316,55 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
+  importReferenceLayerColors: async (scope) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    const activeLayer = getActiveLayer(project);
+
+    if (!isReferenceLayer(activeLayer) || !activeLayer.imageData) return;
+
+    const loadPixels = async (
+      layer: typeof activeLayer,
+      importScope: ReferenceColorImportScope,
+    ) => {
+      const cache =
+        importScope === "full"
+          ? await ensureReferenceLayerFullPixelCache(layer)
+          : await ensureReferenceLayerPixelCache(layer);
+      return cache?.pixels ?? null;
+    };
+
+    const nextProject = await importReferenceLayerColorsToPalette(
+      project,
+      activeLayer,
+      scope,
+      loadPixels,
+    );
+
+    set({ project: nextProject });
+
+  },
+
+
+
   setActiveLayer: (layerId) => {
 
     const { project } = get();
 
     if (!project) return;
 
-    set({ project: setActiveLayer(project, layerId) });
+    get().historyStack.clear();
+
+    set({
+      project: setActiveLayer(project, layerId),
+      selection: null,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+    });
 
   },
 
@@ -1683,6 +2401,163 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!project) return;
 
     set({ project: addDrawingLayer(project) });
+
+  },
+
+
+
+  addReferenceLayer: () => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    set({ project: addReferenceLayer(project) });
+
+  },
+
+
+
+  moveReferenceLayer: (layerId, position) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    const updated = moveReferenceLayerInProject(project, layerId, position);
+
+    if (updated) set({ project: updated });
+
+  },
+
+
+
+  setReferenceCrop: (layerId, crop) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    const updated = setReferenceCropInProject(project, layerId, crop);
+
+    if (updated) set({ project: updated });
+
+  },
+
+
+
+  toggleReferenceGrid: (layerId) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    const updated = toggleReferenceGridInProject(project, layerId);
+
+    if (updated) set({ project: updated });
+
+  },
+
+
+
+  openCropEditor: (layerId) => set({ cropEditorLayerId: layerId }),
+
+
+
+  closeCropEditor: () => set({ cropEditorLayerId: null }),
+
+
+
+  openCanvasSizeModal: () => {
+    const { project } = get();
+    if (!project) return;
+    set({ canvasSizeModalOpen: true });
+  },
+
+  closeCanvasSizeModal: () => set({ canvasSizeModalOpen: false }),
+
+  applyCanvasSize: (width, height) => {
+    const { project } = get();
+    if (!project) return;
+    get().historyStack.clear();
+    set({
+      project: resizeCanvas(project, width, height),
+      selection: null,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+    });
+  },
+
+
+
+  importImageToReferenceLayer: async (layerId) => {
+
+    const selected = await open({
+
+      multiple: false,
+
+      filters: [
+
+        { name: "图片", extensions: ["png", "jpg", "jpeg", "bmp", "gif", "webp"] },
+
+      ],
+
+    });
+
+    if (!selected || typeof selected !== "string") return;
+
+
+
+    const { project } = get();
+
+    if (!project) return;
+
+    set({ isCapturing: true, captureError: null });
+
+    try {
+
+      const result = await replaceProjectFromImagePath(
+
+        projectRepository,
+
+        project,
+
+        imageProcessor,
+
+        selected,
+
+        `导入图片 ${new Date().toLocaleString()}`,
+
+        promptSaveAs,
+
+        undefined,
+
+        layerId,
+
+      );
+
+      if (result) {
+
+        set({
+
+          project: result.project,
+
+          cropEditorLayerId: result.openCropEditor ? result.layerId : null,
+
+        });
+
+      }
+
+    } catch {
+
+      set({ captureError: "导入图片失败，请重试" });
+
+    } finally {
+
+      set({ isCapturing: false });
+
+    }
 
   },
 
@@ -1966,6 +2841,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const project = await loadProject(projectRepository, path);
 
+      saveLastOpenedProject(lastOpenedProjectStore, path);
+
+      get().historyStack.clear();
+
       set({
 
         project,
@@ -1984,6 +2863,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         projectManagerError: null,
 
+        selection: null,
+
+        selectionDrag: null,
+
+        lassoPoints: [],
+
+        selectionPreviewRect: null,
+
       });
 
     } catch {
@@ -1999,6 +2886,52 @@ export const useAppStore = create<AppState>((set, get) => ({
   requestDeleteProject: (summary) => {
 
     set({ deleteConfirmTarget: summary });
+
+  },
+
+
+
+  renameProjectFromList: async (filePath, newName) => {
+
+    try {
+
+      const result = await renameProjectInWorkspace(
+
+        projectRepository,
+
+        projectsWorkspaceStore,
+
+        filePath,
+
+        newName,
+
+      );
+
+      if (!result) return;
+
+
+
+      const { project } = get();
+
+      if (project?.filePath === filePath) {
+
+        set({ project: result.project });
+
+      }
+
+
+
+      set({ projectManagerError: null });
+
+      await get().refreshProjectList();
+
+    } catch {
+
+      set({ projectManagerError: "重命名失败，请检查文件权限或名称是否冲突" });
+
+      throw new Error("rename failed");
+
+    }
 
   },
 
@@ -2030,6 +2963,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         project,
 
+        lastOpenedProjectStore,
+
       );
 
       if (result.shouldReset) {
@@ -2058,38 +2993,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 }));
 
+useAppStore.subscribe(() => {
+  if (isHydratingPreferences) return;
 
-
-function upscaleGrid(grid: PixelGrid, scale: number): PixelGrid {
-
-  const w = grid.width * scale;
-
-  const h = grid.height * scale;
-
-  const result = PixelGrid.createEmpty(w, h);
-
-  for (let y = 0; y < grid.height; y++) {
-
-    for (let x = 0; x < grid.width; x++) {
-
-      const color = grid.getPixel(x, y);
-
-      for (let dy = 0; dy < scale; dy++) {
-
-        for (let dx = 0; dx < scale; dx++) {
-
-          result.setPixel(x * scale + dx, y * scale + dy, color);
-
-        }
-
-      }
-
-    }
-
+  if (preferencesSaveTimer) {
+    clearTimeout(preferencesSaveTimer);
   }
 
-  return result;
-
-}
-
+  preferencesSaveTimer = setTimeout(() => {
+    saveEditorPreferences(
+      editorPreferencesRepository,
+      extractEditorPreferences(useAppStore.getState()),
+    );
+    preferencesSaveTimer = null;
+  }, 300);
+});
 

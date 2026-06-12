@@ -1,15 +1,10 @@
 import { useEffect, useRef } from "react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
-import { useAppStore, type ColorSlot } from "@/presentation/stores/appStore";
+import { useAppStore } from "@/presentation/stores/appStore";
 import { ColorPickerPanel } from "./ColorPickerPanel";
 
 const HEADER_HEIGHT = 28;
 const PANEL_WIDTH = 240;
-
-const SLOTS: { id: ColorSlot; label: string }[] = [
-  { id: "foreground", label: "前景" },
-  { id: "background", label: "背景" },
-];
 
 export function FloatingColorPickerPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -24,8 +19,8 @@ export function FloatingColorPickerPanel() {
   const setFloatingColorPickerPosition = useAppStore(
     (s) => s.setFloatingColorPickerPosition,
   );
-  const setFloatingColorPickerSlot = useAppStore(
-    (s) => s.setFloatingColorPickerSlot,
+  const setFloatingColorPickerPanelHeight = useAppStore(
+    (s) => s.setFloatingColorPickerPanelHeight,
   );
   const closeFloatingColorPicker = useAppStore((s) => s.closeFloatingColorPicker);
 
@@ -33,6 +28,20 @@ export function FloatingColorPickerPanel() {
     floatingColorPicker.activeSlot === "background"
       ? backgroundColor
       : foregroundColor;
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || !floatingColorPicker.visible) return;
+
+    const updateHeight = () => {
+      setFloatingColorPickerPanelHeight(panel.offsetHeight);
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [floatingColorPicker.visible, setFloatingColorPickerPanelHeight]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -91,25 +100,6 @@ export function FloatingColorPickerPanel() {
         onMouseDown={handleHeaderMouseDown}
       >
         <span className="shrink-0">色彩选择器</span>
-        <div
-          className="flex items-center gap-0.5 rounded border border-zinc-600 text-[10px]"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          {SLOTS.map((slot) => (
-            <button
-              key={slot.id}
-              type="button"
-              onClick={() => setFloatingColorPickerSlot(slot.id)}
-              className={`px-1.5 py-0.5 transition ${
-                floatingColorPicker.activeSlot === slot.id
-                  ? "bg-zinc-600 text-zinc-100"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              {slot.label}
-            </button>
-          ))}
-        </div>
         <button
           type="button"
           title="关闭"

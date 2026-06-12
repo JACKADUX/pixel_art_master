@@ -1,10 +1,13 @@
-import type { PixelGrid } from "@/domain/canvas/PixelGrid";
-import { createLayer } from "@/domain/layer/Layer";
-import { resizeAllLayers } from "@/domain/layer/LayerOperations";
+import { encodeImageDataToPngBase64 } from "@/infrastructure/image/ImageDataCodec";
+import { createEmptyReferenceLayer } from "@/domain/layer/Layer";
+import {
+  setReferenceImage,
+  updateReferenceLayer,
+} from "@/domain/layer/ReferenceLayerOperations";
 import {
   getCanvasSize,
+  getLayerById,
   touchProject,
-  withCanvasSize,
   withLayers,
   type Project,
 } from "@/domain/project/Project";
@@ -13,37 +16,46 @@ import type { IImageProcessor } from "../ports/IImageProcessor";
 
 export interface ImportToReferenceLayerResult {
   project: Project;
-  detectedScale: number;
+  layerId: string;
+  openCropEditor: boolean;
 }
 
-function applyReferenceLayerToProject(
+function applyImageToReferenceLayer(
   project: Project,
-  grid: PixelGrid,
+  targetLayerId: string | null,
+  imageData: ImageData,
   layerName: string,
-  appliedScale: number,
-): Project {
-  const oldSize = getCanvasSize(project);
-  const newSize = { width: grid.width, height: grid.height };
+): ImportToReferenceLayerResult {
+  const canvasSize = getCanvasSize(project);
+  const base64 = encodeImageDataToPngBase64(imageData);
+  const imageSize = { width: imageData.width, height: imageData.height };
 
-  let layers = project.canvas.layers;
-  if (oldSize.width !== newSize.width || oldSize.height !== newSize.height) {
-    layers = resizeAllLayers(layers, oldSize, newSize);
+  const existing = targetLayerId ? getLayerById(project, targetLayerId) : undefined;
+
+  if (existing?.type === "reference") {
+    const layers = updateReferenceLayer(project.canvas.layers, targetLayerId!, (ref) =>
+      setReferenceImage(ref, base64, imageSize, canvasSize),
+    );
+    return {
+      project: touchProject(withLayers(project, layers)),
+      layerId: targetLayerId!,
+      openCropEditor: true,
+    };
   }
 
-  const referenceLayer = createLayer("reference", grid, layerName);
-  layers = [referenceLayer, ...layers];
+  const newRef = setReferenceImage(
+    createEmptyReferenceLayer(layerName),
+    base64,
+    imageSize,
+    canvasSize,
+  );
+  const layers = [newRef, ...project.canvas.layers];
 
-  let updated = withLayers(project, layers);
-  updated = withCanvasSize(updated, newSize.width, newSize.height);
-  updated = {
-    ...updated,
-    canvas: {
-      ...updated.canvas,
-      scaleFactor: appliedScale,
-    },
+  return {
+    project: touchProject(withLayers(project, layers)),
+    layerId: newRef.id,
+    openCropEditor: true,
   };
-
-  return touchProject(updated);
 }
 
 export async function importToReferenceLayerFromPath(
@@ -51,17 +63,15 @@ export async function importToReferenceLayerFromPath(
   imageProcessor: IImageProcessor,
   imagePath: string,
   layerName: string,
-  manualScale?: number,
+  targetLayerId?: string | null,
 ): Promise<ImportToReferenceLayerResult> {
   const imageData = await imageProcessor.loadImageFromPath(imagePath);
-  const result = imageProcessor.processImage(imageData, manualScale);
-  const updated = applyReferenceLayerToProject(
+  return applyImageToReferenceLayer(
     project,
-    result.grid,
+    targetLayerId ?? null,
+    imageData,
     layerName,
-    result.appliedScale,
   );
-  return { project: updated, detectedScale: result.detectedScale };
 }
 
 export async function importToReferenceLayerFromScreenCapture(
@@ -70,7 +80,7 @@ export async function importToReferenceLayerFromScreenCapture(
   imageProcessor: IImageProcessor,
   monitorId: number,
   layerName: string,
-  manualScale?: number,
+  targetLayerId?: string | null,
 ): Promise<ImportToReferenceLayerResult> {
   try {
     await captureService.hideApp();
@@ -80,7 +90,7 @@ export async function importToReferenceLayerFromScreenCapture(
       imageProcessor,
       imagePath,
       layerName,
-      manualScale,
+      targetLayerId,
     );
   } finally {
     await captureService.showApp();
@@ -93,7 +103,7 @@ export async function importToReferenceLayerFromWindowCapture(
   imageProcessor: IImageProcessor,
   windowId: number,
   layerName: string,
-  manualScale?: number,
+  targetLayerId?: string | null,
 ): Promise<ImportToReferenceLayerResult> {
   try {
     await captureService.hideApp();
@@ -103,10 +113,9 @@ export async function importToReferenceLayerFromWindowCapture(
       imageProcessor,
       imagePath,
       layerName,
-      manualScale,
+      targetLayerId,
     );
   } finally {
     await captureService.showApp();
   }
 }
-

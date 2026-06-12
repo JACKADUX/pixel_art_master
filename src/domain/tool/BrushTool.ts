@@ -1,22 +1,21 @@
-import { forEachStampPixel } from "./BrushStamp";
+import { paintBrushAt, paintBrushSegment } from "./BrushStroke";
 import type { ITool, Point, ToolContext } from "./ITool";
-
-function paintBrush(ctx: ToolContext, point: Point): void {
-  forEachStampPixel(point, ctx.settings.brushSize, ctx.settings.brushShape, (x, y) => {
-    ctx.grid.setPixel(x, y, ctx.color);
-  });
-}
+import { PixelPerfectStrokeSession } from "./PixelPerfectStroke";
 
 export class BrushTool implements ITool {
   readonly name = "画笔";
+  private readonly session = new PixelPerfectStrokeSession();
 
   onPointerDown(ctx: ToolContext, point: Point): void {
-    paintBrush(ctx, point);
+    this.session.reset();
+    paintBrushAt(ctx, point, this.session);
   }
 
-  onPointerMove(ctx: ToolContext, _from: Point, to: Point): void {
-    paintBrush(ctx, to);
+  onPointerMove(ctx: ToolContext, from: Point, to: Point): void {
+    paintBrushSegment(ctx, from, to, this.session);
   }
 
-  onPointerUp(): void {}
+  onPointerUp(): void {
+    this.session.reset();
+  }
 }

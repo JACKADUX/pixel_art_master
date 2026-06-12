@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAppStore } from "@/presentation/stores/appStore";
 import {
   fromHex,
   getAlpha,
@@ -6,7 +7,6 @@ import {
   withAlpha,
   type PixelColor,
 } from "@/domain/canvas/PixelColor";
-import type { ColorMode } from "@/domain/color/ColorMode";
 import {
   hslToPixelColor,
   oklabPolarToPixelColor,
@@ -22,7 +22,8 @@ interface UseColorPickerStateOptions {
 }
 
 export function useColorPickerState({ currentColor, onChange }: UseColorPickerStateOptions) {
-  const [mode, setMode] = useState<ColorMode>("hsl");
+  const mode = useAppStore((s) => s.colorPickerMode);
+  const setColorPickerMode = useAppStore((s) => s.setColorPickerMode);
   const [hsl, setHsl] = useState<HslColor>(() => pixelColorToHsl(currentColor));
   const [oklabPolar, setOklabPolar] = useState<OklabPolarColor>(() =>
     pixelColorToOklabPolar(currentColor),
@@ -177,7 +178,7 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
 
   return {
     mode,
-    setMode,
+    setMode: setColorPickerMode,
     hsl,
     oklabPolar,
     alpha,

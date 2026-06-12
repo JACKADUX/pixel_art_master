@@ -1,6 +1,7 @@
-import { Palette } from "@/domain/palette/Palette";
+import { encodeImageDataToPngBase64 } from "@/infrastructure/image/ImageDataCodec";
 import { createProjectFromImage } from "@/domain/project/Project";
 import type { Project } from "@/domain/project/Project";
+import { Palette } from "@/domain/palette/Palette";
 import type { IImageProcessor } from "../ports/IImageProcessor";
 
 export interface ImportResult {
@@ -16,10 +17,15 @@ export async function createCanvasFromImport(
 ): Promise<ImportResult> {
   const imageData = await imageProcessor.loadImageFromFile(file);
   const result = imageProcessor.processImage(imageData, manualScale);
+  const base64 = encodeImageDataToPngBase64(imageData);
   return {
     project: createProjectFromImage(
       projectName,
-      result.grid,
+      { width: result.grid.width, height: result.grid.height },
+      {
+        imageData: base64,
+        imageSize: { width: imageData.width, height: imageData.height },
+      },
       result.appliedScale,
       Palette.empty(),
     ),
@@ -35,10 +41,15 @@ export async function createCanvasFromImagePath(
 ): Promise<ImportResult> {
   const imageData = await imageProcessor.loadImageFromPath(path);
   const result = imageProcessor.processImage(imageData, manualScale);
+  const base64 = encodeImageDataToPngBase64(imageData);
   return {
     project: createProjectFromImage(
       projectName,
-      result.grid,
+      { width: result.grid.width, height: result.grid.height },
+      {
+        imageData: base64,
+        imageSize: { width: imageData.width, height: imageData.height },
+      },
       result.appliedScale,
       Palette.empty(),
     ),

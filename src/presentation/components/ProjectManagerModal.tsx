@@ -20,6 +20,7 @@ export function ProjectManagerModal() {
   const openProjectByPath = useAppStore((s) => s.openProjectByPath);
   const createBlankProject = useAppStore((s) => s.createBlankProject);
   const requestDeleteProject = useAppStore((s) => s.requestDeleteProject);
+  const renameProjectFromList = useAppStore((s) => s.renameProjectFromList);
   const cancelDeleteProject = useAppStore((s) => s.cancelDeleteProject);
   const confirmDeleteProject = useAppStore((s) => s.confirmDeleteProject);
 
@@ -104,6 +105,7 @@ export function ProjectManagerModal() {
                         summary={summary}
                         onOpen={(path) => void openProjectByPath(path)}
                         onDelete={requestDeleteProject}
+                        onRename={renameProjectFromList}
                       />
                     ))}
                   </div>

@@ -1,5 +1,9 @@
 export {
   ArrowDownTrayIcon,
+  ArrowPathIcon,
+  ArrowsPointingOutIcon,
+  ArrowUturnLeftIcon,
+  ArrowUturnRightIcon,
   ComputerDesktopIcon,
   DocumentDuplicateIcon,
   DocumentPlusIcon,

@@ -1,13 +1,20 @@
 import {
   BackspaceIcon,
+  CursorArrowRaysIcon,
   MinusIcon,
   PaintBrushIcon,
   Squares2X2Icon,
   StopIcon,
   SwatchIcon,
+  ViewfinderCircleIcon,
 } from "@heroicons/react/16/solid";
 import type { ComponentType } from "react";
-import type { BrushShape, ShapeMode, ToolType } from "@/domain/tool/ToolType";
+import type {
+  BrushShape,
+  SelectionMode,
+  ShapeMode,
+  ToolType,
+} from "@/domain/tool/ToolType";
 
 const TOOL_ICON_CLASS = "h-5 w-5";
 const SHAPE_ICON_CLASS = "h-4 w-4";
@@ -20,11 +27,33 @@ function EllipseIcon({ className }: { className?: string }) {
   );
 }
 
+function LassoIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" className={className} aria-hidden="true">
+      <path
+        d="M10 3c1.5 0 2.5 1.2 2.5 2.5S11.5 8 10 8H8l-3 3.5a2 2 0 1 1-2.8-2.8L6.5 6.5V5c0-1.1.9-2 2-2h1.5z"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MagicWandIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M9.5 1 8 4.5 4.5 6 8 7.5 9.5 11l1.5-3.5L14.5 6 11 4.5 9.5 1ZM2 12l1.5 1.5L2 15l1.5-1.5L5 15l-1.5-1.5L5 12 3.5 13.5 2 12Z" />
+    </svg>
+  );
+}
+
 const TOOL_ICONS = {
   brush: PaintBrushIcon,
   fill: SwatchIcon,
   eraser: BackspaceIcon,
   shape: Squares2X2Icon,
+  select: CursorArrowRaysIcon,
+  transform: ViewfinderCircleIcon,
 } satisfies Record<ToolType, ComponentType<{ className?: string }>>;
 
 function CircleIcon({ className }: { className?: string }) {
@@ -46,6 +75,13 @@ const SHAPE_ICONS = {
   ellipse: EllipseIcon,
 } satisfies Record<ShapeMode, ComponentType<{ className?: string }>>;
 
+const SELECTION_MODE_ICONS = {
+  rectangle: StopIcon,
+  ellipse: EllipseIcon,
+  lasso: LassoIcon,
+  magicWand: MagicWandIcon,
+} satisfies Record<SelectionMode, ComponentType<{ className?: string }>>;
+
 export function getToolIcon(type: ToolType, className = TOOL_ICON_CLASS) {
   const Icon = TOOL_ICONS[type];
   return <Icon className={className} />;
@@ -58,5 +94,10 @@ export function getShapeIcon(mode: ShapeMode, className = SHAPE_ICON_CLASS) {
 
 export function getBrushShapeIcon(shape: BrushShape, className = SHAPE_ICON_CLASS) {
   const Icon = BRUSH_SHAPE_ICONS[shape];
+  return <Icon className={className} />;
+}
+
+export function getSelectionModeIcon(mode: SelectionMode, className = SHAPE_ICON_CLASS) {
+  const Icon = SELECTION_MODE_ICONS[mode];
   return <Icon className={className} />;
 }

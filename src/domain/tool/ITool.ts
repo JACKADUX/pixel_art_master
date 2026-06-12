@@ -1,5 +1,7 @@
 import type { PixelGrid } from "../canvas/PixelGrid";
+import type { MaskedPixelGrid } from "../canvas/MaskedPixelGrid";
 import type { PixelColor } from "../canvas/PixelColor";
+import type { SelectionMask } from "../selection/SelectionMask";
 import type { ToolSettings } from "./ToolType";
 
 export interface Point {
@@ -7,10 +9,13 @@ export interface Point {
   y: number;
 }
 
+export type PixelSurface = PixelGrid | MaskedPixelGrid;
+
 export interface ToolContext {
-  grid: PixelGrid;
+  grid: PixelSurface;
   color: PixelColor;
   settings: ToolSettings;
+  selectionMask?: SelectionMask | null;
 }
 
 export interface ITool {

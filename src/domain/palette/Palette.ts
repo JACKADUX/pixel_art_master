@@ -42,6 +42,14 @@ export class Palette {
     return next;
   }
 
+  withAddedColors(colors: PixelColor[]): Palette {
+    const next = new Palette(this.toJSON());
+    for (const color of colors) {
+      next.addColor(color);
+    }
+    return next;
+  }
+
   withRemovedColors(hexes: string[]): Palette {
     const removeSet = new Set(hexes);
     return new Palette(this.colors.filter((c) => !removeSet.has(c.hex)));

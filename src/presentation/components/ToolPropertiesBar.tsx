@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
-import type { BrushShape, ShapeMode, ToolType } from "@/domain/tool/ToolType";
-import { getBrushShapeIcon, getShapeIcon } from "../icons/ToolIcons";
+import type {
+  BrushShape,
+  SelectionMode,
+  ShapeMode,
+  ToolType,
+  TransformMode,
+} from "@/domain/tool/ToolType";
+import { getBrushShapeIcon, getSelectionModeIcon, getShapeIcon } from "../icons/ToolIcons";
 import { useAppStore } from "../stores/appStore";
 import { BrushSizeInput } from "./BrushSizeInput";
 
@@ -9,12 +15,27 @@ const TOOL_LABELS: Record<ToolType, string> = {
   fill: "填充",
   eraser: "橡皮",
   shape: "形状",
+  select: "选区",
+  transform: "变换",
 };
 
 const SHAPES: { mode: ShapeMode; label: string }[] = [
   { mode: "rectangle", label: "矩形" },
   { mode: "line", label: "直线" },
   { mode: "ellipse", label: "椭圆" },
+];
+
+const SELECTION_MODES: { mode: SelectionMode; label: string }[] = [
+  { mode: "rectangle", label: "矩形选区" },
+  { mode: "ellipse", label: "椭圆选区" },
+  { mode: "lasso", label: "套索" },
+  { mode: "magicWand", label: "魔棒" },
+];
+
+const TRANSFORM_MODES: { mode: TransformMode; label: string }[] = [
+  { mode: "move", label: "移动" },
+  { mode: "scale", label: "缩放" },
+  { mode: "rotate", label: "旋转" },
 ];
 
 const BRUSH_SHAPES: { shape: BrushShape; label: string }[] = [
@@ -96,12 +117,23 @@ export function ToolPropertiesBar() {
       <span className="font-medium text-zinc-200">{TOOL_LABELS[activeTool]}</span>
 
       {activeTool === "brush" && (
-        <StampToolProperties
-          size={toolSettings.brushSize}
-          shape={toolSettings.brushShape}
-          onSizeChange={(brushSize) => setToolSettings({ brushSize })}
-          onShapeChange={(brushShape) => setToolSettings({ brushShape })}
-        />
+        <>
+          <StampToolProperties
+            size={toolSettings.brushSize}
+            shape={toolSettings.brushShape}
+            onSizeChange={(brushSize) => setToolSettings({ brushSize })}
+            onShapeChange={(brushShape) => setToolSettings({ brushShape })}
+          />
+          <label className="flex items-center gap-2 text-zinc-400">
+            <input
+              type="checkbox"
+              checked={toolSettings.brushPerfectPixel}
+              disabled={toolSettings.brushSize !== 1}
+              onChange={(e) => setToolSettings({ brushPerfectPixel: e.target.checked })}
+            />
+            完美像素
+          </label>
+        </>
       )}
 
       {activeTool === "eraser" && (
@@ -143,6 +175,76 @@ export function ToolPropertiesBar() {
 
       {activeTool === "fill" && (
         <span className="text-zinc-500">点击区域进行填充</span>
+      )}
+
+      {activeTool === "select" && (
+        <>
+          <label className="flex items-center gap-2 text-zinc-400">
+            模式
+            <span className="flex gap-1">
+              {SELECTION_MODES.map((item) => (
+                <SegmentedButton
+                  key={item.mode}
+                  active={toolSettings.selectionMode === item.mode}
+                  title={item.label}
+                  onClick={() => setToolSettings({ selectionMode: item.mode })}
+                >
+                  {getSelectionModeIcon(item.mode)}
+                </SegmentedButton>
+              ))}
+            </span>
+          </label>
+          {toolSettings.selectionMode === "magicWand" && (
+            <>
+              <label className="flex items-center gap-2 text-zinc-400">
+                容差
+                <input
+                  type="range"
+                  min={0}
+                  max={255}
+                  value={toolSettings.magicWandTolerance}
+                  onChange={(e) =>
+                    setToolSettings({ magicWandTolerance: Number(e.target.value) })
+                  }
+                  className="w-24"
+                />
+                <span className="w-6">{toolSettings.magicWandTolerance}</span>
+              </label>
+              <label className="flex items-center gap-2 text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={toolSettings.magicWandContiguous}
+                  onChange={(e) =>
+                    setToolSettings({ magicWandContiguous: e.target.checked })
+                  }
+                />
+                连续区域
+              </label>
+            </>
+          )}
+          <span className="text-zinc-500">Shift 加选 / Alt 减选</span>
+        </>
+      )}
+
+      {activeTool === "transform" && (
+        <>
+          <label className="flex items-center gap-2 text-zinc-400">
+            模式
+            <span className="flex gap-1">
+              {TRANSFORM_MODES.map((item) => (
+                <SegmentedButton
+                  key={item.mode}
+                  active={toolSettings.transformMode === item.mode}
+                  title={item.label}
+                  onClick={() => setToolSettings({ transformMode: item.mode })}
+                >
+                  {item.label.slice(0, 1)}
+                </SegmentedButton>
+              ))}
+            </span>
+          </label>
+          <span className="text-zinc-500">拖拽手柄变换选区内容</span>
+        </>
       )}
     </div>
   );

@@ -8,6 +8,14 @@ export function validateWorkspacePath(path: string): string {
   return trimmed;
 }
 
+export function validateProjectFilePath(path: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) {
+    throw new Error("项目文件路径不能为空");
+  }
+  return trimmed;
+}
+
 export function sanitizeProjectFileName(name: string): string {
   const sanitized = name.replace(/[<>:"/\\|?*]/g, "_").trim();
   return sanitized || "未命名项目";

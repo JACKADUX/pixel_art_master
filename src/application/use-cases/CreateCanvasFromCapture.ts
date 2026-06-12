@@ -1,3 +1,4 @@
+import { encodeImageDataToPngBase64 } from "@/infrastructure/image/ImageDataCodec";
 import { Palette } from "@/domain/palette/Palette";
 import { createProjectFromImage } from "@/domain/project/Project";
 import type { Project } from "@/domain/project/Project";
@@ -21,10 +22,15 @@ export async function createCanvasFromScreenCapture(
     const imagePath = await captureService.captureMonitor(monitorId);
     const imageData = await imageProcessor.loadImageFromPath(imagePath);
     const result = imageProcessor.processImage(imageData, manualScale);
+    const base64 = encodeImageDataToPngBase64(imageData);
     return {
       project: createProjectFromImage(
         projectName,
-        result.grid,
+        { width: result.grid.width, height: result.grid.height },
+        {
+          imageData: base64,
+          imageSize: { width: imageData.width, height: imageData.height },
+        },
         result.appliedScale,
         Palette.empty(),
       ),
@@ -47,10 +53,15 @@ export async function createCanvasFromWindowCapture(
     const imagePath = await captureService.captureWindow(windowId);
     const imageData = await imageProcessor.loadImageFromPath(imagePath);
     const result = imageProcessor.processImage(imageData, manualScale);
+    const base64 = encodeImageDataToPngBase64(imageData);
     return {
       project: createProjectFromImage(
         projectName,
-        result.grid,
+        { width: result.grid.width, height: result.grid.height },
+        {
+          imageData: base64,
+          imageSize: { width: imageData.width, height: imageData.height },
+        },
         result.appliedScale,
         Palette.empty(),
       ),

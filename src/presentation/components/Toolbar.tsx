@@ -16,6 +16,8 @@ const TOOLS: { type: ToolType; label: string }[] = [
   { type: "fill", label: "填充" },
   { type: "eraser", label: "橡皮" },
   { type: "shape", label: "形状" },
+  { type: "select", label: "选区" },
+  { type: "transform", label: "变换" },
 ];
 
 export function Toolbar() {

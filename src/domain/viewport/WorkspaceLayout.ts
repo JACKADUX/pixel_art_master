@@ -1,3 +1,6 @@
+import type { ReferenceLayer } from "@/domain/layer/Layer";
+import { getReferenceBounds } from "@/domain/layer/ReferenceLayerOperations";
+
 export const WORKSPACE_MARGIN_MIN = 800;
 
 export const WORKSPACE_CONTAINER_FALLBACK_WIDTH = 800;
@@ -13,6 +16,49 @@ export interface WorkspaceStageLayout {
 export interface ScrollPosition {
   scrollLeft: number;
   scrollTop: number;
+}
+
+export function computeReferenceAwareStageSize(
+  containerWidth: number,
+  containerHeight: number,
+  canvasDisplayWidth: number,
+  canvasDisplayHeight: number,
+  referenceLayers: ReferenceLayer[],
+  zoom: number,
+): WorkspaceStageLayout {
+  const margin = WORKSPACE_MARGIN_MIN;
+
+  let minX = 0;
+  let minY = 0;
+  let maxX = canvasDisplayWidth;
+  let maxY = canvasDisplayHeight;
+
+  for (const layer of referenceLayers) {
+    const bounds = getReferenceBounds(layer, zoom);
+    if (!bounds) continue;
+    minX = Math.min(minX, bounds.left);
+    minY = Math.min(minY, bounds.top);
+    maxX = Math.max(maxX, bounds.left + bounds.width);
+    maxY = Math.max(maxY, bounds.top + bounds.height);
+  }
+
+  const contentWidth = maxX - minX;
+  const contentHeight = maxY - minY;
+  const offsetX = minX < 0 ? -minX : 0;
+  const offsetY = minY < 0 ? -minY : 0;
+
+  const stageWidth = Math.max(containerWidth, contentWidth + margin * 2);
+  const stageHeight = Math.max(containerHeight, contentHeight + margin * 2);
+
+  const canvasLeft = offsetX + (stageWidth - contentWidth) / 2 - minX;
+  const canvasTop = offsetY + (stageHeight - contentHeight) / 2 - minY;
+
+  return {
+    stageWidth,
+    stageHeight,
+    canvasLeft,
+    canvasTop,
+  };
 }
 
 export function computeWorkspaceStageSize(

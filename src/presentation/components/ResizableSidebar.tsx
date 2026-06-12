@@ -1,24 +1,24 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, type ReactNode } from "react";
+import { useAppStore } from "@/presentation/stores/appStore";
 
 const DIVIDER_WIDTH_PX = 4;
 
 type ResizableSidebarProps = {
   children: ReactNode;
-  defaultWidth?: number;
   minWidth?: number;
   maxWidth?: number;
 };
 
 export function ResizableSidebar({
   children,
-  defaultWidth = 224,
   minWidth = 180,
   maxWidth = 400,
 }: ResizableSidebarProps) {
-  const [width, setWidth] = useState(defaultWidth);
+  const width = useAppStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useAppStore((s) => s.setSidebarWidth);
   const draggingRef = useRef(false);
   const startXRef = useRef(0);
-  const startWidthRef = useRef(defaultWidth);
+  const startWidthRef = useRef(width);
 
   const clampWidth = useCallback(
     (nextWidth: number) => {
@@ -54,9 +54,9 @@ export function ResizableSidebar({
       if (!draggingRef.current) return;
 
       const delta = startXRef.current - e.clientX;
-      setWidth(clampWidth(startWidthRef.current + delta));
+      setSidebarWidth(clampWidth(startWidthRef.current + delta));
     },
-    [clampWidth],
+    [clampWidth, setSidebarWidth],
   );
 
   const handlePointerUp = useCallback(
