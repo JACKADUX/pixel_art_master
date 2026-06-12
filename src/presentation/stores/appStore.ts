@@ -67,7 +67,7 @@ import {
 
 import { saveProject } from "@/application/use-cases/SaveProject";
 
-import { rgba, TRANSPARENT } from "@/domain/canvas/PixelColor";
+import { rgba, TRANSPARENT, type PixelColor } from "@/domain/canvas/PixelColor";
 
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 
@@ -89,6 +89,8 @@ import {
 
   createEmptyProject,
 
+  isUnsavedEmptyProject,
+
   getCanvasSize,
 
   getCompositeGrid as compositeProjectLayers,
@@ -109,15 +111,23 @@ import {
 
   DEFAULT_TOOL_SETTINGS,
 
+  clampStampSize,
+
   type ToolSettings,
 
   type ToolType,
 
 } from "@/domain/tool/ToolType";
 
-import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
+export type ColorSlot = "foreground" | "background";
+export type DrawingButton = "primary" | "secondary";
 
-import { extractPaletteFromGrids } from "@/infrastructure/image/PaletteExtractor";
+import {
+  addColorToPalette as addColorToPaletteUseCase,
+  removeColorsFromPalette as removeColorsFromPaletteUseCase,
+} from "@/application/use-cases/PaletteUseCases";
+
+import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
 
 import { downscaleImage, detectPixelScale } from "@/infrastructure/image/PixelDownscaler";
 
@@ -139,6 +149,7 @@ import {
   type ViewportSnapshot,
 } from "@/domain/viewport/NavigatorViewport";
 
+import { clampPanelPosition } from "@/domain/viewport/FloatingPanelBounds";
 import { resolveNavigatorResizeConstraints } from "@/domain/viewport/NavigatorPanelResize";
 
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -150,6 +161,12 @@ const NAVIGATOR_MIN_WIDTH = 100;
 const NAVIGATOR_MIN_HEIGHT = 80;
 const NAVIGATOR_DEFAULT_WIDTH = 160;
 const NAVIGATOR_DEFAULT_HEIGHT = 120;
+
+const COLOR_PICKER_FLOAT_WIDTH = 240;
+const COLOR_PICKER_FLOAT_HEADER_HEIGHT = 28;
+const COLOR_PICKER_FLOAT_BODY_HEIGHT = 460;
+const COLOR_PICKER_FLOAT_HEIGHT =
+  COLOR_PICKER_FLOAT_HEADER_HEIGHT + COLOR_PICKER_FLOAT_BODY_HEIGHT;
 
 function toNavigatorLayout(navigator: NavigatorState) {
   return {
@@ -173,6 +190,12 @@ export interface NavigatorState {
   previewPan: { x: number; y: number };
 }
 
+export interface FloatingColorPickerState {
+  visible: boolean;
+  position: { x: number; y: number };
+  activeSlot: ColorSlot;
+}
+
 interface AppState {
 
   project: Project | null;
@@ -181,7 +204,9 @@ interface AppState {
 
   toolSettings: ToolSettings;
 
-  currentColor: number;
+  foregroundColor: PixelColor;
+
+  backgroundColor: PixelColor;
 
   zoom: number;
 
@@ -192,6 +217,10 @@ interface AppState {
   drawStart: Point | null;
 
   lastPoint: Point | null;
+
+  drawingButton: DrawingButton | null;
+
+  drawingColor: PixelColor | null;
 
   manualScaleOverride: number | null;
 
@@ -227,6 +256,8 @@ interface AppState {
 
   navigator: NavigatorState;
 
+  floatingColorPicker: FloatingColorPickerState;
+
   viewportSnapshot: ViewportSnapshot | null;
 
   viewportContainer: HTMLDivElement | null;
@@ -236,6 +267,8 @@ interface AppState {
   init: () => Promise<void>;
 
   newProject: () => void;
+
+  createBlankProject: () => void;
 
   openProject: () => Promise<void>;
 
@@ -247,13 +280,28 @@ interface AppState {
 
   setToolSettings: (settings: Partial<ToolSettings>) => void;
 
-  setCurrentColor: (color: number) => void;
+  setForegroundColor: (color: PixelColor) => void;
+
+  setBackgroundColor: (color: PixelColor) => void;
+
+  setColorSlot: (slot: ColorSlot, color: PixelColor) => void;
 
   setZoom: (zoom: number) => void;
 
   toggleGrid: () => void;
 
   toggleNavigator: () => void;
+
+  detachColorPicker: (
+    slot: ColorSlot,
+    position: { x: number; y: number },
+  ) => void;
+
+  setFloatingColorPickerPosition: (x: number, y: number) => void;
+
+  setFloatingColorPickerSlot: (slot: ColorSlot) => void;
+
+  closeFloatingColorPicker: () => void;
 
   setNavigatorPosition: (x: number, y: number) => void;
 
@@ -300,17 +348,21 @@ interface AppState {
 
   importImage: () => Promise<void>;
 
-  pointerDown: (point: Point) => void;
+  pointerDown: (point: Point, button: DrawingButton) => void;
 
-  pointerMove: (point: Point) => void;
+  pointerMove: (point: Point, button: DrawingButton) => void;
 
-  pointerUp: (point: Point) => void;
+  pointerUp: (point: Point, button: DrawingButton) => void;
 
-  pickColorAt: (point: Point) => void;
+  pickColorAt: (point: Point, slot: ColorSlot) => void;
 
   setRightPanelTab: (tab: "palette" | "notes") => void;
 
   setPaletteViewMode: (mode: "grid" | "oklabMap") => void;
+
+  addColorToPalette: (color: PixelColor) => void;
+
+  removeColorsFromPalette: (hexes: string[]) => void;
 
   setActiveLayer: (layerId: string) => void;
 
@@ -382,24 +434,6 @@ async function promptSaveAs(defaultName: string): Promise<string | null> {
 
 
 
-function syncPalette(project: Project): Project {
-
-  const size = getCanvasSize(project);
-
-  const grids = project.canvas.layers.map((l) => getLayerGrid(l, size));
-
-  return {
-
-    ...project,
-
-    palette: extractPaletteFromGrids(...grids),
-
-  };
-
-}
-
-
-
 export const useAppStore = create<AppState>((set, get) => ({
 
   project: createEmptyProject(),
@@ -408,7 +442,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   toolSettings: { ...DEFAULT_TOOL_SETTINGS },
 
-  currentColor: rgba(255, 0, 0),
+  foregroundColor: rgba(255, 0, 0),
+
+  backgroundColor: TRANSPARENT,
 
   zoom: 8,
 
@@ -419,6 +455,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   drawStart: null,
 
   lastPoint: null,
+
+  drawingButton: null,
+
+  drawingColor: null,
 
   manualScaleOverride: null,
 
@@ -460,6 +500,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     previewPan: { x: 0, y: 0 },
   },
 
+  floatingColorPicker: {
+    visible: false,
+    position: { x: 16, y: 16 },
+    activeSlot: "foreground",
+  },
+
   viewportSnapshot: null,
 
   viewportContainer: null,
@@ -480,11 +526,29 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     }
 
+    const { project } = get();
+
+    if (project && isUnsavedEmptyProject(project)) {
+
+      get().openProjectManager();
+
+    }
+
   },
 
 
 
   newProject: () => {
+
+    get().createBlankProject();
+
+    get().openProjectManager();
+
+  },
+
+
+
+  createBlankProject: () => {
 
     set({
 
@@ -497,6 +561,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       editingNoteId: null,
 
       draftNote: "",
+
+      projectManagerOpen: false,
+
+      deleteConfirmTarget: null,
+
+      projectManagerError: null,
 
     });
 
@@ -529,6 +599,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       editingNoteId: null,
 
       draftNote: "",
+
+      projectManagerOpen: false,
+
+      deleteConfirmTarget: null,
+
+      projectManagerError: null,
 
     });
 
@@ -613,12 +689,25 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
   setToolSettings: (settings) =>
+    set((s) => {
+      const next = { ...s.toolSettings, ...settings };
+      if (settings.brushSize !== undefined) {
+        next.brushSize = clampStampSize(settings.brushSize);
+      }
+      if (settings.eraserSize !== undefined) {
+        next.eraserSize = clampStampSize(settings.eraserSize);
+      }
+      return { toolSettings: next };
+    }),
 
-    set((s) => ({ toolSettings: { ...s.toolSettings, ...settings } })),
 
 
+  setForegroundColor: (color) => set({ foregroundColor: color }),
 
-  setCurrentColor: (color) => set({ currentColor: color }),
+  setBackgroundColor: (color) => set({ backgroundColor: color }),
+
+  setColorSlot: (slot, color) =>
+    set(slot === "foreground" ? { foregroundColor: color } : { backgroundColor: color }),
 
 
 
@@ -704,38 +793,78 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  setNavigatorPosition: (x, y) =>
-
+  detachColorPicker: (slot, position) =>
     set((s) => {
-
       const container = s.viewportContainer;
-
-      const panelWidth = s.navigator.size.width;
-
-      const panelHeight = s.navigator.size.height + NAVIGATOR_HEADER_HEIGHT;
-
-      const maxX = container ? Math.max(0, container.clientWidth - panelWidth) : x;
-
-      const maxY = container ? Math.max(0, container.clientHeight - panelHeight) : y;
-
+      const clamped = clampPanelPosition(
+        position.x,
+        position.y,
+        COLOR_PICKER_FLOAT_WIDTH,
+        COLOR_PICKER_FLOAT_HEIGHT,
+        container?.clientWidth ?? null,
+        container?.clientHeight ?? null,
+      );
       return {
-
-        navigator: {
-
-          ...s.navigator,
-
-          position: {
-
-            x: Math.max(0, Math.min(maxX, x)),
-
-            y: Math.max(0, Math.min(maxY, y)),
-
-          },
-
+        floatingColorPicker: {
+          visible: true,
+          activeSlot: slot,
+          position: clamped,
         },
-
       };
+    }),
 
+  setFloatingColorPickerPosition: (x, y) =>
+    set((s) => {
+      const container = s.viewportContainer;
+      const position = clampPanelPosition(
+        x,
+        y,
+        COLOR_PICKER_FLOAT_WIDTH,
+        COLOR_PICKER_FLOAT_HEIGHT,
+        container?.clientWidth ?? null,
+        container?.clientHeight ?? null,
+      );
+      return {
+        floatingColorPicker: {
+          ...s.floatingColorPicker,
+          position,
+        },
+      };
+    }),
+
+  setFloatingColorPickerSlot: (slot) =>
+    set((s) => ({
+      floatingColorPicker: {
+        ...s.floatingColorPicker,
+        activeSlot: slot,
+      },
+    })),
+
+  closeFloatingColorPicker: () =>
+    set((s) => ({
+      floatingColorPicker: {
+        ...s.floatingColorPicker,
+        visible: false,
+      },
+    })),
+
+  setNavigatorPosition: (x, y) =>
+    set((s) => {
+      const container = s.viewportContainer;
+      const position = clampPanelPosition(
+        x,
+        y,
+        s.navigator.size.width,
+        s.navigator.size.height + NAVIGATOR_HEADER_HEIGHT,
+        container?.clientWidth ?? null,
+        container?.clientHeight ?? null,
+      );
+      return {
+        navigator: {
+          ...s.navigator,
+          position,
+        },
+      };
     }),
 
 
@@ -1124,8 +1253,6 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-    const grids = layers.map((l) => getLayerGrid(l, newSize));
-
     const updated = touchProject({
 
       ...withLayers(withCanvasSize(project, newSize.width, newSize.height), layers),
@@ -1143,8 +1270,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         layers,
 
       },
-
-      palette: extractPaletteFromGrids(...grids),
 
     });
 
@@ -1394,39 +1519,45 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  pointerDown: (point) => {
+  pointerDown: (point, button) => {
 
-    const { project, activeTool, currentColor, toolSettings } = get();
+    const { project, activeTool, foregroundColor, backgroundColor, toolSettings } = get();
 
     if (!project) return;
 
     const grid = getActiveLayerGridFromProject(project);
 
-    const color = activeTool === "eraser" ? TRANSPARENT : currentColor;
+    const selectedColor = button === "primary" ? foregroundColor : backgroundColor;
+    const color = activeTool === "eraser" ? TRANSPARENT : selectedColor;
 
     applyToolPointerDown(grid, activeTool, color, toolSettings, point);
 
     get().syncActiveLayer(grid);
 
-    set({ isDrawing: true, drawStart: point, lastPoint: point });
+    set({
+      isDrawing: true,
+      drawStart: point,
+      lastPoint: point,
+      drawingButton: button,
+      drawingColor: color,
+    });
 
   },
 
 
 
-  pointerMove: (point) => {
+  pointerMove: (point, button) => {
 
-    const { project, activeTool, currentColor, toolSettings, isDrawing, lastPoint } = get();
+    const { project, activeTool, toolSettings, isDrawing, lastPoint, drawingButton, drawingColor } =
+      get();
 
-    if (!project || !isDrawing || !lastPoint) return;
+    if (!project || !isDrawing || !lastPoint || drawingButton !== button || drawingColor === null) return;
 
     if (activeTool === "fill") return;
 
     const grid = getActiveLayerGridFromProject(project);
 
-    const color = activeTool === "eraser" ? TRANSPARENT : currentColor;
-
-    applyToolPointerMove(grid, activeTool, color, toolSettings, lastPoint, point);
+    applyToolPointerMove(grid, activeTool, drawingColor, toolSettings, lastPoint, point);
 
     get().syncActiveLayer(grid);
 
@@ -1436,31 +1567,36 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  pointerUp: (point) => {
+  pointerUp: (point, button) => {
 
-    const { project, activeTool, currentColor, toolSettings, isDrawing, drawStart } = get();
+    const { project, activeTool, toolSettings, isDrawing, drawStart, drawingButton, drawingColor } =
+      get();
 
-    if (!project || !isDrawing || !drawStart) return;
+    if (!project || !isDrawing || !drawStart || drawingButton !== button || drawingColor === null) return;
 
     if (activeTool === "shape") {
 
       const grid = getActiveLayerGridFromProject(project);
 
-      const color = currentColor;
-
-      applyToolPointerUp(grid, activeTool, color, toolSettings, drawStart, point);
+      applyToolPointerUp(grid, activeTool, drawingColor, toolSettings, drawStart, point);
 
       get().syncActiveLayer(grid);
 
     }
 
-    set({ isDrawing: false, drawStart: null, lastPoint: null });
+    set({
+      isDrawing: false,
+      drawStart: null,
+      lastPoint: null,
+      drawingButton: null,
+      drawingColor: null,
+    });
 
   },
 
 
 
-  pickColorAt: (point) => {
+  pickColorAt: (point, slot) => {
 
     const composite = get().getCompositeGrid();
 
@@ -1468,11 +1604,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const color = composite.getPixel(point.x, point.y);
 
-    if (((color >>> 24) & 0xff) > 0) {
-
-      set({ currentColor: color | 0xff000000 });
-
-    }
+    get().setColorSlot(slot, color);
 
   },
 
@@ -1481,6 +1613,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
 
   setPaletteViewMode: (mode) => set({ paletteViewMode: mode }),
+
+
+
+  addColorToPalette: (color) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    set({ project: addColorToPaletteUseCase(project, color) });
+
+  },
+
+
+
+  removeColorsFromPalette: (hexes) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    set({ project: removeColorsFromPaletteUseCase(project, hexes) });
+
+  },
 
 
 
@@ -1526,7 +1682,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (!project) return;
 
-    set({ project: syncPalette(addDrawingLayer(project)) });
+    set({ project: addDrawingLayer(project) });
 
   },
 
@@ -1540,7 +1696,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const updated = removeLayerFromProject(project, layerId);
 
-    if (updated) set({ project: syncPalette(updated) });
+    if (updated) set({ project: updated });
 
   },
 
@@ -1652,7 +1808,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const updated = syncActiveLayerPixels(project, grid);
 
-    set({ project: syncPalette(updated) });
+    set({ project: updated });
 
   },
 
@@ -1681,6 +1837,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
   closeProjectManager: () => {
+
+    const { project } = get();
+
+    if (project && isUnsavedEmptyProject(project)) return;
 
     set({
 

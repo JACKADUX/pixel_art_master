@@ -1,10 +1,13 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { isUnsavedEmptyProject } from "@/domain/project/Project";
 import { useAppStore } from "../stores/appStore";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { BlankProjectCard } from "./BlankProjectCard";
 import { ProjectCard } from "./ProjectCard";
 
 export function ProjectManagerModal() {
   const open = useAppStore((s) => s.projectManagerOpen);
+  const project = useAppStore((s) => s.project);
   const workspacePath = useAppStore((s) => s.projectsWorkspacePath);
   const summaries = useAppStore((s) => s.projectSummaries);
   const loading = useAppStore((s) => s.projectListLoading);
@@ -15,15 +18,26 @@ export function ProjectManagerModal() {
   const pickProjectsWorkspace = useAppStore((s) => s.pickProjectsWorkspace);
   const refreshProjectList = useAppStore((s) => s.refreshProjectList);
   const openProjectByPath = useAppStore((s) => s.openProjectByPath);
+  const createBlankProject = useAppStore((s) => s.createBlankProject);
   const requestDeleteProject = useAppStore((s) => s.requestDeleteProject);
   const cancelDeleteProject = useAppStore((s) => s.cancelDeleteProject);
   const confirmDeleteProject = useAppStore((s) => s.confirmDeleteProject);
+
+  const isStartPage = project !== null && isUnsavedEmptyProject(project);
+  const wasStartPageRef = useRef(isStartPage);
 
   useEffect(() => {
     if (open && workspacePath) {
       void refreshProjectList();
     }
   }, [open, workspacePath, refreshProjectList]);
+
+  useEffect(() => {
+    if (wasStartPageRef.current && !isStartPage && open) {
+      closeProjectManager();
+    }
+    wasStartPageRef.current = isStartPage;
+  }, [isStartPage, open, closeProjectManager]);
 
   if (!open) return null;
 
@@ -33,13 +47,15 @@ export function ProjectManagerModal() {
         <div className="flex max-h-[80vh] w-[90vw] max-w-4xl flex-col overflow-hidden rounded-lg border border-zinc-600 bg-zinc-900 shadow-xl">
           <div className="flex items-center justify-between border-b border-zinc-700 px-4 py-3">
             <h2 className="text-sm font-medium text-zinc-200">项目管理</h2>
-            <button
-              type="button"
-              onClick={closeProjectManager}
-              className="text-zinc-400 hover:text-zinc-200"
-            >
-              ✕
-            </button>
+            {!isStartPage && (
+              <button
+                type="button"
+                onClick={closeProjectManager}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
           {!workspacePath ? (
@@ -79,12 +95,9 @@ export function ProjectManagerModal() {
 
                 {loading ? (
                   <p className="py-10 text-center text-sm text-zinc-500">加载中…</p>
-                ) : summaries.length === 0 ? (
-                  <p className="py-10 text-center text-sm text-zinc-500">
-                    暂无项目，点击新建或导入开始创作
-                  </p>
                 ) : (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+                    <BlankProjectCard onCreate={createBlankProject} />
                     {summaries.map((summary) => (
                       <ProjectCard
                         key={summary.filePath}

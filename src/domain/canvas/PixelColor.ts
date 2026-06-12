@@ -2,6 +2,10 @@ export type PixelColor = number;
 
 export const TRANSPARENT: PixelColor = 0;
 
+function toHexByte(value: number): string {
+  return (value & 0xff).toString(16).padStart(2, "0");
+}
+
 export function rgba(r: number, g: number, b: number, a = 255): PixelColor {
   return (
     ((a & 0xff) << 24) |
@@ -13,28 +17,40 @@ export function rgba(r: number, g: number, b: number, a = 255): PixelColor {
 
 export function fromHex(hex: string): PixelColor {
   const normalized = hex.replace("#", "");
-  const value =
-    normalized.length === 3
+  const value = normalized.length === 3 || normalized.length === 4
       ? normalized
           .split("")
           .map((c) => c + c)
           .join("")
       : normalized;
+  if (value.length !== 6 && value.length !== 8) {
+    return TRANSPARENT;
+  }
   const r = parseInt(value.slice(0, 2), 16);
   const g = parseInt(value.slice(2, 4), 16);
   const b = parseInt(value.slice(4, 6), 16);
-  return rgba(r, g, b);
+  const a = value.length === 8 ? parseInt(value.slice(6, 8), 16) : 255;
+  return rgba(r, g, b, a);
 }
 
 export function toHex(color: PixelColor): string {
   const r = color & 0xff;
   const g = (color >> 8) & 0xff;
   const b = (color >> 16) & 0xff;
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  return `#${toHexByte(r)}${toHexByte(g)}${toHexByte(b)}`;
+}
+
+export function toHexAlpha(color: PixelColor): string {
+  return `${toHex(color)}${toHexByte(getAlpha(color))}`;
 }
 
 export function getAlpha(color: PixelColor): number {
   return (color >>> 24) & 0xff;
+}
+
+export function withAlpha(color: PixelColor, alpha: number): PixelColor {
+  const { r, g, b } = toRgbComponents(color);
+  return rgba(r, g, b, alpha);
 }
 
 export function colorsEqual(a: PixelColor, b: PixelColor): boolean {
@@ -53,5 +69,12 @@ export function toRgbComponents(color: PixelColor): { r: number; g: number; b: n
     r: color & 0xff,
     g: (color >> 8) & 0xff,
     b: (color >> 16) & 0xff,
+  };
+}
+
+export function toRgbaComponents(color: PixelColor): { r: number; g: number; b: number; a: number } {
+  return {
+    ...toRgbComponents(color),
+    a: getAlpha(color),
   };
 }

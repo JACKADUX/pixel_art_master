@@ -1,5 +1,5 @@
 import type { PixelColor } from "../canvas/PixelColor";
-import { fromHex, rgbKey, toHex } from "../canvas/PixelColor";
+import { fromHex, toHexAlpha } from "../canvas/PixelColor";
 
 export interface ColorEntry {
   color: PixelColor;
@@ -22,7 +22,7 @@ export class Palette {
   }
 
   addColor(color: PixelColor): void {
-    const hex = toHex(color);
+    const hex = toHexAlpha(color);
     if (!this.colors.some((c) => c.hex === hex)) {
       this.colors.push({ color, hex });
     }
@@ -34,6 +34,17 @@ export class Palette {
 
   removeColor(hex: string): void {
     this.colors = this.colors.filter((c) => c.hex !== hex);
+  }
+
+  withAddedColor(color: PixelColor): Palette {
+    const next = new Palette(this.toJSON());
+    next.addColor(color);
+    return next;
+  }
+
+  withRemovedColors(hexes: string[]): Palette {
+    const removeSet = new Set(hexes);
+    return new Palette(this.colors.filter((c) => !removeSet.has(c.hex)));
   }
 
   setColors(colors: ColorEntry[]): void {
@@ -52,10 +63,10 @@ export class Palette {
     const seen = new Set<string>();
     const entries: ColorEntry[] = [];
     for (const color of colors) {
-      const key = rgbKey(color);
+      const key = color.toString(16);
       if (!seen.has(key)) {
         seen.add(key);
-        entries.push({ color, hex: toHex(color) });
+        entries.push({ color, hex: toHexAlpha(color) });
       }
     }
     entries.sort((a, b) => a.hex.localeCompare(b.hex));

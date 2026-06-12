@@ -3,6 +3,7 @@ import { CanvasView } from "./presentation/components/CanvasView";
 import { RightPanel } from "./presentation/components/RightPanel";
 import { StatusBar } from "./presentation/components/StatusBar";
 import { Toolbar } from "./presentation/components/Toolbar";
+import { ToolPropertiesBar } from "./presentation/components/ToolPropertiesBar";
 import { MonitorPicker } from "./presentation/components/MonitorPicker";
 import { ProjectManagerModal } from "./presentation/components/ProjectManagerModal";
 import { TopBar } from "./presentation/components/TopBar";
@@ -27,7 +28,10 @@ function App() {
       <TopBar />
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[3.5rem_minmax(0,1fr)_auto] overflow-hidden">
         <Toolbar />
-        <CanvasView />
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+          <ToolPropertiesBar />
+          <CanvasView />
+        </div>
         <RightPanel />
       </div>
       <StatusBar />

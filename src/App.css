@@ -8,6 +8,44 @@ body,
   overflow: hidden;
 }
 
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-zinc-600) var(--color-zinc-800);
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--color-zinc-800);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-zinc-600);
+    border: 2px solid var(--color-zinc-800);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-zinc-500);
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background-color: var(--color-zinc-400);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: var(--color-zinc-800);
+  }
+}
+
 .prose-xs {
   font-size: 0.75rem;
   line-height: 1.4;

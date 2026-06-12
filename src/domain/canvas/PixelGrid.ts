@@ -1,7 +1,7 @@
 import type { CanvasSize } from "./CanvasSize";
 import { createCanvasSize, pixelCount } from "./CanvasSize";
 import type { PixelColor } from "./PixelColor";
-import { TRANSPARENT } from "./PixelColor";
+import { rgba, toRgbaComponents, TRANSPARENT } from "./PixelColor";
 
 export class PixelGrid {
   readonly width: number;
@@ -98,10 +98,36 @@ export class PixelGrid {
     }
     const result = base.clone();
     for (let i = 0; i < this.pixels.length; i++) {
-      const alpha = (this.pixels[i] >>> 24) & 0xff;
-      if (alpha > 0) {
-        result.pixels[i] = this.pixels[i];
+      const source = this.pixels[i];
+      const sourceAlpha = (source >>> 24) & 0xff;
+      if (sourceAlpha === 0) continue;
+      if (sourceAlpha === 255) {
+        result.pixels[i] = source;
+        continue;
       }
+
+      const destination = result.pixels[i];
+      const destinationAlpha = (destination >>> 24) & 0xff;
+      const sourceWeight = sourceAlpha / 255;
+      const destinationWeight = (destinationAlpha / 255) * (1 - sourceWeight);
+      const outputAlpha = sourceWeight + destinationWeight;
+      if (outputAlpha <= 0) continue;
+
+      const sourceComponents = toRgbaComponents(source);
+      const destinationComponents = toRgbaComponents(destination);
+      const r = Math.round(
+        (sourceComponents.r * sourceWeight + destinationComponents.r * destinationWeight) /
+          outputAlpha,
+      );
+      const g = Math.round(
+        (sourceComponents.g * sourceWeight + destinationComponents.g * destinationWeight) /
+          outputAlpha,
+      );
+      const b = Math.round(
+        (sourceComponents.b * sourceWeight + destinationComponents.b * destinationWeight) /
+          outputAlpha,
+      );
+      result.pixels[i] = rgba(r, g, b, Math.round(outputAlpha * 255));
     }
     return result;
   }

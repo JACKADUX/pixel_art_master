@@ -1,3 +1,4 @@
+import { Palette } from "@/domain/palette/Palette";
 import { createProjectFromImage } from "@/domain/project/Project";
 import type { Project } from "@/domain/project/Project";
 import type { ICaptureService } from "../ports/ICaptureService";
@@ -25,7 +26,7 @@ export async function createCanvasFromScreenCapture(
         projectName,
         result.grid,
         result.appliedScale,
-        imageProcessor.extractPalette(result.grid),
+        Palette.empty(),
       ),
       detectedScale: result.detectedScale,
     };
@@ -51,7 +52,7 @@ export async function createCanvasFromWindowCapture(
         projectName,
         result.grid,
         result.appliedScale,
-        imageProcessor.extractPalette(result.grid),
+        Palette.empty(),
       ),
       detectedScale: result.detectedScale,
     };

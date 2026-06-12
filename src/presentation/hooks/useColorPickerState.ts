@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fromHex, toHex, type PixelColor } from "@/domain/canvas/PixelColor";
+import {
+  fromHex,
+  getAlpha,
+  toHexAlpha,
+  withAlpha,
+  type PixelColor,
+} from "@/domain/canvas/PixelColor";
 import type { ColorMode } from "@/domain/color/ColorMode";
 import {
   hslToPixelColor,
@@ -21,7 +27,8 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
   const [oklabPolar, setOklabPolar] = useState<OklabPolarColor>(() =>
     pixelColorToOklabPolar(currentColor),
   );
-  const [hexInput, setHexInput] = useState(() => toHex(currentColor));
+  const [alpha, setAlphaState] = useState(() => getAlpha(currentColor));
+  const [hexInput, setHexInput] = useState(() => toHexAlpha(currentColor));
   const lastEmittedRef = useRef(currentColor);
   const oklabDragBaselineRef = useRef<OklabPolarColor | null>(null);
   const oklabPolarRef = useRef(oklabPolar);
@@ -32,14 +39,16 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
     lastEmittedRef.current = currentColor;
     setHsl(pixelColorToHsl(currentColor));
     setOklabPolar(pixelColorToOklabPolar(currentColor));
-    setHexInput(toHex(currentColor));
+    setAlphaState(getAlpha(currentColor));
+    setHexInput(toHexAlpha(currentColor));
   }, [currentColor]);
 
   const emitColor = useCallback(
     (color: PixelColor) => {
       lastEmittedRef.current = color;
       onChange(color);
-      setHexInput(toHex(color));
+      setAlphaState(getAlpha(color));
+      setHexInput(toHexAlpha(color));
       setHsl(pixelColorToHsl(color));
       setOklabPolar(pixelColorToOklabPolar(color));
     },
@@ -48,32 +57,33 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
 
   const emitOklabFromPolar = useCallback(
     (polar: OklabPolarColor) => {
-      const color = oklabPolarToPixelColor(polar);
+      const color = oklabPolarToPixelColor(polar, alpha);
       lastEmittedRef.current = color;
       onChange(color);
-      setHexInput(toHex(color));
+      setHexInput(toHexAlpha(color));
       setOklabPolar(polar);
       setHsl(pixelColorToHsl(color));
     },
-    [onChange],
+    [alpha, onChange],
   );
 
   const emitPlaneColor = useCallback(
     (color: PixelColor) => {
-      lastEmittedRef.current = color;
-      onChange(color);
-      setHexInput(toHex(color));
-      setHsl(pixelColorToHsl(color));
+      const colorWithAlpha = withAlpha(color, alpha);
+      lastEmittedRef.current = colorWithAlpha;
+      onChange(colorWithAlpha);
+      setHexInput(toHexAlpha(colorWithAlpha));
+      setHsl(pixelColorToHsl(colorWithAlpha));
     },
-    [onChange],
+    [alpha, onChange],
   );
 
   const updateFromHsl = useCallback(
     (next: HslColor) => {
       setHsl(next);
-      emitColor(hslToPixelColor(next));
+      emitColor(hslToPixelColor(next, alpha));
     },
-    [emitColor],
+    [alpha, emitColor],
   );
 
   const setHue = useCallback(
@@ -141,16 +151,24 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
 
   const commitOklabPlanePick = useCallback(
     (color: PixelColor) => {
-      lastEmittedRef.current = color;
+      lastEmittedRef.current = withAlpha(color, alpha);
       setOklabPolar(pixelColorToOklabPolar(color));
     },
-    [],
+    [alpha],
+  );
+
+  const setAlpha = useCallback(
+    (nextAlpha: number) => {
+      const color = withAlpha(currentColor, nextAlpha);
+      emitColor(color);
+    },
+    [currentColor, emitColor],
   );
 
   const commitHexInput = useCallback(() => {
     const normalized = hexInput.trim();
-    if (!/^#?[0-9a-fA-F]{3}$|^#?[0-9a-fA-F]{6}$/.test(normalized)) {
-      setHexInput(toHex(currentColor));
+    if (!/^#?(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(normalized)) {
+      setHexInput(toHexAlpha(currentColor));
       return;
     }
     const color = fromHex(normalized.startsWith("#") ? normalized : `#${normalized}`);
@@ -162,12 +180,14 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
     setMode,
     hsl,
     oklabPolar,
+    alpha,
     hexInput,
     setHexInput,
     commitHexInput,
     setHue,
     setSaturation,
     setLightness,
+    setAlpha,
     setHslPlane,
     beginOklabSliderDrag,
     endOklabSliderDrag,

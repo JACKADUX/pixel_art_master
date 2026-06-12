@@ -128,22 +128,22 @@ export function pixelColorToOklabPolar(color: PixelColor): OklabPolarColor {
   return oklabToPolar(pixelColorToOklab(color));
 }
 
-export function oklabPolarToPixelColor(polar: OklabPolarColor): PixelColor {
-  return oklabToPixelColor(polarToOklab(polar));
+export function oklabPolarToPixelColor(polar: OklabPolarColor, alpha = 255): PixelColor {
+  return oklabToPixelColor(polarToOklab(polar), alpha);
 }
 
-export function oklabPlaneColorAt(h: number, s: number, l: number): PixelColor {
-  return oklabPolarToPixelColor(createOklabPolar(h, s, l));
+export function oklabPlaneColorAt(h: number, s: number, l: number, alpha = 255): PixelColor {
+  return oklabPolarToPixelColor(createOklabPolar(h, s, l), alpha);
 }
 
-export function hslToPixelColor(hsl: HslColor): PixelColor {
+export function hslToPixelColor(hsl: HslColor, alpha = 255): PixelColor {
   const { r, g, b } = hslToRgb(hsl);
-  return rgba(r, g, b);
+  return rgba(r, g, b, alpha);
 }
 
-export function oklabToPixelColor(oklab: OklabColor): PixelColor {
+export function oklabToPixelColor(oklab: OklabColor, alpha = 255): PixelColor {
   const { r, g, b } = oklabToRgb(oklab);
-  return rgba(r, g, b);
+  return rgba(r, g, b, alpha);
 }
 
 export function rgbToHex(r: number, g: number, b: number): string {

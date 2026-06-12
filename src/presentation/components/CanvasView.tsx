@@ -19,9 +19,11 @@ import {
   isMiddleMousePressed,
 } from "@/domain/viewport/ViewportPan";
 import { renderPixelGrid1x } from "@/infrastructure/canvas/PixelGridCanvasRenderer";
-import { useAppStore } from "../stores/appStore";
+import { renderBrushStampPreview } from "@/infrastructure/canvas/BrushStampPreviewRenderer";
+import { clampStampSize } from "@/domain/tool/ToolType";
+import { useAppStore, type ColorSlot, type DrawingButton } from "../stores/appStore";
+import { FloatingColorPickerPanel } from "./color-picker/FloatingColorPickerPanel";
 import { NavigatorPanel } from "./NavigatorPanel";
-import { WelcomePanel } from "./WelcomePanel";
 
 interface ZoomAnchor {
   logicalPoint: CanvasPoint;
@@ -29,9 +31,24 @@ interface ZoomAnchor {
   clientY: number;
 }
 
+function buttonFromMouseButton(button: number): DrawingButton | null {
+  if (button === 0) return "primary";
+  if (button === 2) return "secondary";
+  return null;
+}
+
+function colorSlotFromDrawingButton(button: DrawingButton): ColorSlot {
+  return button === "primary" ? "foreground" : "background";
+}
+
+function isDrawingButtonPressed(buttons: number, button: DrawingButton): boolean {
+  return button === "primary" ? (buttons & 1) !== 0 : (buttons & 2) !== 0;
+}
+
 export function CanvasView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gridRef = useRef<HTMLCanvasElement>(null);
+  const previewRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isPanningRef = useRef(false);
   const lastPanRef = useRef({ x: 0, y: 0 });
@@ -44,11 +61,14 @@ export function CanvasView() {
   const zoom = useAppStore((s) => s.zoom);
   const zoomRef = useRef(zoom);
   const setZoom = useAppStore((s) => s.setZoom);
+  const setToolSettings = useAppStore((s) => s.setToolSettings);
   const activeTool = useAppStore((s) => s.activeTool);
+  const toolSettings = useAppStore((s) => s.toolSettings);
   const pointerDown = useAppStore((s) => s.pointerDown);
   const pointerMove = useAppStore((s) => s.pointerMove);
   const pointerUp = useAppStore((s) => s.pointerUp);
   const pickColorAt = useAppStore((s) => s.pickColorAt);
+  const drawingButton = useAppStore((s) => s.drawingButton);
   const getCompositeGrid = useAppStore((s) => s.getCompositeGrid);
   const isCapturing = useAppStore((s) => s.isCapturing);
   const setViewportContainer = useAppStore((s) => s.setViewportContainer);
@@ -56,15 +76,7 @@ export function CanvasView() {
 
   const [isPanning, setIsPanning] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-
-  const isEmptyProject = useMemo(() => {
-    if (!project) return false;
-    return project.canvas.layers.every((layer) =>
-      layer.pixels.every((p) => p === 0),
-    );
-  }, [project]);
-
-  const showWelcomePanel = isEmptyProject && !project?.filePath;
+  const [hoverPoint, setHoverPoint] = useState<CanvasPoint | null>(null);
 
   const composite = useMemo(() => {
     if (!project) return null;
@@ -169,6 +181,47 @@ export function CanvasView() {
     }
   }, [project, composite, displayWidth, displayHeight, zoom]);
 
+  const brushPreview = useMemo(() => {
+    if (activeTool !== "brush" && activeTool !== "eraser") return null;
+    if (activeTool === "brush") {
+      return {
+        size: toolSettings.brushSize,
+        shape: toolSettings.brushShape,
+      };
+    }
+    return {
+      size: toolSettings.eraserSize,
+      shape: toolSettings.eraserShape,
+    };
+  }, [activeTool, toolSettings]);
+
+  const renderBrushPreview = useCallback(() => {
+    const previewCanvas = previewRef.current;
+    if (!previewCanvas || !composite) return;
+
+    previewCanvas.width = displayWidth;
+    previewCanvas.height = displayHeight;
+    previewCanvas.style.width = `${displayWidth}px`;
+    previewCanvas.style.height = `${displayHeight}px`;
+
+    const ctx = previewCanvas.getContext("2d");
+    if (!ctx) return;
+
+    if (!brushPreview || !hoverPoint || isPanning) {
+      ctx.clearRect(0, 0, displayWidth, displayHeight);
+      return;
+    }
+
+    renderBrushStampPreview(
+      ctx,
+      hoverPoint,
+      brushPreview.size,
+      brushPreview.shape,
+      zoom,
+      { width: composite.width, height: composite.height },
+    );
+  }, [brushPreview, composite, displayWidth, displayHeight, hoverPoint, isPanning, zoom]);
+
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
@@ -176,6 +229,10 @@ export function CanvasView() {
   useLayoutEffect(() => {
     renderCanvas();
   }, [renderCanvas]);
+
+  useLayoutEffect(() => {
+    renderBrushPreview();
+  }, [renderBrushPreview]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -290,6 +347,20 @@ export function CanvasView() {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
+      if (e.ctrlKey) {
+        const { activeTool: tool, toolSettings: settings } = useAppStore.getState();
+        if (tool === "brush" || tool === "eraser") {
+          const delta = e.deltaY > 0 ? -1 : 1;
+          const sizeKey = tool === "brush" ? "brushSize" : "eraserSize";
+          const currentSize = settings[sizeKey];
+          const newSize = clampStampSize(currentSize + delta);
+          if (newSize !== currentSize) {
+            setToolSettings({ [sizeKey]: newSize });
+          }
+          return;
+        }
+      }
+
       const currentStageLayout = stageLayoutRef.current;
       if (!currentStageLayout) return;
 
@@ -318,11 +389,12 @@ export function CanvasView() {
 
     container.addEventListener("wheel", handleWheel, { passive: false });
     return () => container.removeEventListener("wheel", handleWheel);
-  }, [project, setZoom]);
+  }, [project, setZoom, setToolSettings]);
 
   const startPanning = useCallback((clientX: number, clientY: number) => {
     isPanningRef.current = true;
     setIsPanning(true);
+    setHoverPoint(null);
     lastPanRef.current = { x: clientX, y: clientY };
   }, []);
 
@@ -366,24 +438,37 @@ export function CanvasView() {
       startPanning(e.clientX, e.clientY);
       return;
     }
-    if (e.button !== 0) return;
+    const button = buttonFromMouseButton(e.button);
+    if (!button) return;
+    e.preventDefault();
     const point = toPixel(e);
     if (e.altKey) {
-      pickColorAt(point);
+      pickColorAt(point, colorSlotFromDrawingButton(button));
       return;
     }
-    pointerDown(point);
+    pointerDown(point, button);
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanningRef.current) return;
-    if (e.buttons !== 1) return;
-    pointerMove(toPixel(e));
+    const point = toPixel(e);
+    setHoverPoint(point);
+    const button = drawingButton;
+    if (!button || !isDrawingButtonPressed(e.buttons, button)) return;
+    pointerMove(point, button);
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isPanningRef.current || e.button !== 0) return;
-    pointerUp(toPixel(e));
+    if (isPanningRef.current) return;
+    const button = buttonFromMouseButton(e.button);
+    if (!button) return;
+    pointerUp(toPixel(e), button);
+  };
+
+  const handleMouseLeave = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    setHoverPoint(null);
+    if (!drawingButton) return;
+    pointerUp(toPixel(e), drawingButton);
   };
 
   useEffect(() => {
@@ -453,7 +538,7 @@ export function CanvasView() {
             }}
           >
             <div
-              className={`absolute${showWelcomePanel ? " pointer-events-none" : ""}`}
+              className="absolute"
               style={{
                 left: stageLayout.canvasLeft,
                 top: stageLayout.canvasTop,
@@ -468,10 +553,16 @@ export function CanvasView() {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onAuxClick={handleAuxClick}
-                onMouseLeave={(e) => handleMouseUp(e)}
+                onContextMenu={(e) => e.preventDefault()}
+                onMouseLeave={handleMouseLeave}
               />
               <canvas
                 ref={gridRef}
+                className="pointer-events-none absolute left-0 top-0"
+                style={{ imageRendering: "pixelated" }}
+              />
+              <canvas
+                ref={previewRef}
                 className="pointer-events-none absolute left-0 top-0"
                 style={{ imageRendering: "pixelated" }}
               />
@@ -480,13 +571,13 @@ export function CanvasView() {
         )}
         <div className="sr-only">当前工具: {activeTool}</div>
       </div>
-      {showWelcomePanel && !isCapturing && <WelcomePanel />}
       {isCapturing && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-zinc-900/70">
           <p className="text-sm text-zinc-300">正在截图...</p>
         </div>
       )}
       <NavigatorPanel />
+      <FloatingColorPickerPanel />
     </div>
   );
 }

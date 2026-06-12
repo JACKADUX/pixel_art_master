@@ -1,4 +1,4 @@
-import { toHex, type PixelColor } from "@/domain/canvas/PixelColor";
+import { toHexAlpha, withAlpha, type PixelColor } from "@/domain/canvas/PixelColor";
 import type { ColorMode } from "@/domain/color/ColorMode";
 import { hslToRgb, oklabToRgb, rgbToHex } from "@/domain/color/ColorConverter";
 import { createHsl } from "@/domain/color/HslColor";
@@ -69,18 +69,34 @@ const MODES: { id: ColorMode; label: string }[] = [
   { id: "oklab", label: "OKLab" },
 ];
 
+function buildAlphaGradient(color: PixelColor): string {
+  return `
+    linear-gradient(to right, ${toHexAlpha(withAlpha(color, 0))}, ${toHexAlpha(withAlpha(color, 255))}),
+    repeating-conic-gradient(#3f3f46 0% 25%, #18181b 0% 50%) 50% / 8px 8px
+  `;
+}
+
+function buildTransparentPreview(color: PixelColor): string {
+  return `
+    linear-gradient(${toHexAlpha(color)}, ${toHexAlpha(color)}),
+    repeating-conic-gradient(#3f3f46 0% 25%, #18181b 0% 50%) 50% / 8px 8px
+  `;
+}
+
 export function ColorPickerPanel({ currentColor, onChange }: ColorPickerPanelProps) {
   const {
     mode,
     setMode,
     hsl,
     oklabPolar,
+    alpha,
     hexInput,
     setHexInput,
     commitHexInput,
     setHue,
     setSaturation,
     setLightness,
+    setAlpha,
     setHslPlane,
     beginOklabSliderDrag,
     endOklabSliderDrag,
@@ -96,7 +112,7 @@ export function ColorPickerPanel({ currentColor, onChange }: ColorPickerPanelPro
       <div className="flex items-center gap-2">
         <div
           className="h-10 w-10 shrink-0 rounded border border-zinc-600"
-          style={{ backgroundColor: toHex(currentColor) }}
+          style={{ background: buildTransparentPreview(currentColor) }}
         />
         <input
           type="text"
@@ -213,6 +229,15 @@ export function ColorPickerPanel({ currentColor, onChange }: ColorPickerPanelPro
           />
         </>
       )}
+      <ColorChannelSlider
+        label="A"
+        value={alpha}
+        min={0}
+        max={255}
+        displayValue={`${Math.round((alpha / 255) * 100)}%`}
+        gradient={buildAlphaGradient(currentColor)}
+        onChange={setAlpha}
+      />
     </div>
   );
 }

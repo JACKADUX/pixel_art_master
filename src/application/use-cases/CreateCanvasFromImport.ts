@@ -1,3 +1,4 @@
+import { Palette } from "@/domain/palette/Palette";
 import { createProjectFromImage } from "@/domain/project/Project";
 import type { Project } from "@/domain/project/Project";
 import type { IImageProcessor } from "../ports/IImageProcessor";
@@ -20,7 +21,7 @@ export async function createCanvasFromImport(
       projectName,
       result.grid,
       result.appliedScale,
-      imageProcessor.extractPalette(result.grid),
+      Palette.empty(),
     ),
     detectedScale: result.detectedScale,
   };
@@ -39,7 +40,7 @@ export async function createCanvasFromImagePath(
       projectName,
       result.grid,
       result.appliedScale,
-      imageProcessor.extractPalette(result.grid),
+      Palette.empty(),
     ),
     detectedScale: result.detectedScale,
   };

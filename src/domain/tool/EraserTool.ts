@@ -1,14 +1,11 @@
 import { TRANSPARENT } from "../canvas/PixelColor";
+import { forEachStampPixel } from "./BrushStamp";
 import type { ITool, Point, ToolContext } from "./ITool";
 
 function erase(ctx: ToolContext, point: Point): void {
-  const size = ctx.settings.brushSize;
-  const half = Math.floor(size / 2);
-  for (let dy = -half; dy < size - half; dy++) {
-    for (let dx = -half; dx < size - half; dx++) {
-      ctx.grid.setPixel(point.x + dx, point.y + dy, TRANSPARENT);
-    }
-  }
+  forEachStampPixel(point, ctx.settings.eraserSize, ctx.settings.eraserShape, (x, y) => {
+    ctx.grid.setPixel(x, y, TRANSPARENT);
+  });
 }
 
 export class EraserTool implements ITool {
