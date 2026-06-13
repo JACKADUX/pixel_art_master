@@ -9,6 +9,8 @@ export {
   DocumentPlusIcon,
   FolderOpenIcon,
   MapPinIcon,
+  PauseIcon,
   PhotoIcon,
+  PlayIcon,
   RectangleStackIcon,
 } from "@heroicons/react/24/outline";

@@ -17,6 +17,13 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** 饱和度低于此阈值视为无彩色，RGB 往返后无法可靠还原色相。 */
+const ACHROMATIC_SATURATION_THRESHOLD = 1;
+
+function isAchromaticSaturation(s: number): boolean {
+  return s <= ACHROMATIC_SATURATION_THRESHOLD;
+}
+
 export function rgbToHsl(r: number, g: number, b: number): HslColor {
   const rn = r / 255;
   const gn = g / 255;
@@ -119,6 +126,15 @@ export function pixelColorToHsl(color: PixelColor): HslColor {
   return rgbToHsl(r, g, b);
 }
 
+/** 无彩色（s=0）时 RGB→HSL 无法还原色相，保留 UI 上一次的 h。 */
+export function pixelColorToHslPreservingHue(color: PixelColor, previous: HslColor): HslColor {
+  const derived = pixelColorToHsl(color);
+  if (isAchromaticSaturation(derived.s)) {
+    return createHsl(previous.h, derived.s, derived.l);
+  }
+  return derived;
+}
+
 export function pixelColorToOklab(color: PixelColor): OklabColor {
   const { r, g, b } = toRgbComponents(color);
   return rgbToOklab(r, g, b);
@@ -126,6 +142,18 @@ export function pixelColorToOklab(color: PixelColor): OklabColor {
 
 export function pixelColorToOklabPolar(color: PixelColor): OklabPolarColor {
   return oklabToPolar(pixelColorToOklab(color));
+}
+
+/** 无彩色（s=0）时 RGB→OKLab 极坐标无法还原色相，保留 UI 上一次的 h。 */
+export function pixelColorToOklabPolarPreservingHue(
+  color: PixelColor,
+  previous: OklabPolarColor,
+): OklabPolarColor {
+  const derived = pixelColorToOklabPolar(color);
+  if (isAchromaticSaturation(derived.s)) {
+    return createOklabPolar(previous.h, derived.s, derived.l);
+  }
+  return derived;
 }
 
 export function oklabPolarToPixelColor(polar: OklabPolarColor, alpha = 255): PixelColor {

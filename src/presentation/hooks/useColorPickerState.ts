@@ -11,7 +11,9 @@ import {
   hslToPixelColor,
   oklabPolarToPixelColor,
   pixelColorToHsl,
+  pixelColorToHslPreservingHue,
   pixelColorToOklabPolar,
+  pixelColorToOklabPolarPreservingHue,
 } from "@/domain/color/ColorConverter";
 import { createHsl, type HslColor } from "@/domain/color/HslColor";
 import { createOklabPolar, type OklabPolarColor } from "@/domain/color/OklabPolarColor";
@@ -50,8 +52,8 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
       onChange(color);
       setAlphaState(getAlpha(color));
       setHexInput(toHexAlpha(color));
-      setHsl(pixelColorToHsl(color));
-      setOklabPolar(pixelColorToOklabPolar(color));
+      setHsl((prev) => pixelColorToHslPreservingHue(color, prev));
+      setOklabPolar((prev) => pixelColorToOklabPolarPreservingHue(color, prev));
     },
     [onChange],
   );
@@ -63,7 +65,7 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
       onChange(color);
       setHexInput(toHexAlpha(color));
       setOklabPolar(polar);
-      setHsl(pixelColorToHsl(color));
+      setHsl((prev) => pixelColorToHslPreservingHue(color, prev));
     },
     [alpha, onChange],
   );
@@ -74,7 +76,7 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
       lastEmittedRef.current = colorWithAlpha;
       onChange(colorWithAlpha);
       setHexInput(toHexAlpha(colorWithAlpha));
-      setHsl(pixelColorToHsl(colorWithAlpha));
+      setHsl((prev) => pixelColorToHslPreservingHue(colorWithAlpha, prev));
     },
     [alpha, onChange],
   );
@@ -153,7 +155,7 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
   const commitOklabPlanePick = useCallback(
     (color: PixelColor) => {
       lastEmittedRef.current = withAlpha(color, alpha);
-      setOklabPolar(pixelColorToOklabPolar(color));
+      setOklabPolar((prev) => pixelColorToOklabPolarPreservingHue(color, prev));
     },
     [alpha],
   );

@@ -6,6 +6,7 @@ import {
   ArrowUturnRightIcon,
 } from "../icons/ActionIcons";
 import { SHORTCUT_LABELS } from "../config/menuConfig";
+import { PomodoroTimer } from "./PomodoroTimer";
 import { toast } from "../stores/toastStore";
 import { useAppStore } from "../stores/appStore";
 
@@ -118,27 +119,30 @@ export function StatusBar() {
         Oklab 明度 {canvasDisplayMode === "oklabLightness" ? "开" : "关"}
       </button>
 
-      <div className="ml-auto flex items-center gap-0.5">
-        <StatusBarIconButton
-          title={`撤销 (${SHORTCUT_LABELS.undo})`}
-          disabled={!canUndo}
-          onClick={undo}
-        >
-          <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
-        </StatusBarIconButton>
-        <StatusBarIconButton
-          title={`重做 (${SHORTCUT_LABELS.redo})`}
-          disabled={!canRedo}
-          onClick={redo}
-        >
-          <ArrowUturnRightIcon className="h-3.5 w-3.5" />
-        </StatusBarIconButton>
-        <StatusBarIconButton
-          title={`保存 (${SHORTCUT_LABELS.saveCurrentProject})`}
-          onClick={handleSave}
-        >
-          <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-        </StatusBarIconButton>
+      <div className="ml-auto flex items-center gap-3">
+        <PomodoroTimer />
+        <div className="flex items-center gap-0.5 border-l border-zinc-700 pl-2">
+          <StatusBarIconButton
+            title={`撤销 (${SHORTCUT_LABELS.undo})`}
+            disabled={!canUndo}
+            onClick={undo}
+          >
+            <ArrowUturnLeftIcon className="h-3.5 w-3.5" />
+          </StatusBarIconButton>
+          <StatusBarIconButton
+            title={`重做 (${SHORTCUT_LABELS.redo})`}
+            disabled={!canRedo}
+            onClick={redo}
+          >
+            <ArrowUturnRightIcon className="h-3.5 w-3.5" />
+          </StatusBarIconButton>
+          <StatusBarIconButton
+            title={`保存 (${SHORTCUT_LABELS.saveCurrentProject})`}
+            onClick={handleSave}
+          >
+            <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+          </StatusBarIconButton>
+        </div>
       </div>
     </footer>
   );
