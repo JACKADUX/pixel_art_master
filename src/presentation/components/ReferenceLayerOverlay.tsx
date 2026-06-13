@@ -6,9 +6,14 @@ import { buildReferenceColorPalette } from "@/domain/layer/ReferenceLayerPalette
 
 import type { ReferenceLayer } from "@/domain/layer/Layer";
 
-import { renderReferenceLayer } from "@/infrastructure/canvas/ReferenceLayerRenderer";
+import { renderReferenceLayer, renderReferenceLayerGrid } from "@/infrastructure/canvas/ReferenceLayerRenderer";
 
 import { getReferenceImage } from "@/infrastructure/canvas/ReferenceImageCache";
+
+import {
+  blitWithDisplayMode,
+  OklabDisplayGlRenderer,
+} from "@/infrastructure/canvas/OklabDisplayGlRenderer";
 
 import { ensureReferenceLayerPixelCache } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 
@@ -21,19 +26,13 @@ import { ReferenceLayerColorStrip } from "./ReferenceLayerColorStrip";
 
 
 interface ReferenceLayerOverlayProps {
-
   layer: ReferenceLayer;
-
   stackIndex: number;
-
   canvasLeft: number;
-
   canvasTop: number;
-
   zoom: number;
-
   isActive: boolean;
-
+  onContextMenuRequest?: (layerId: string, clientX: number, clientY: number) => void;
 }
 
 
@@ -43,24 +42,21 @@ function colorSlotFromMouseButton(button: number): ColorSlot {
 }
 
 export function ReferenceLayerOverlay({
-
   layer,
-
   stackIndex,
-
   canvasLeft,
-
   canvasTop,
-
   zoom,
-
   isActive,
-
+  onContextMenuRequest,
 }: ReferenceLayerOverlayProps) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const oklabRendererRef = useRef<OklabDisplayGlRenderer | null>(null);
+  const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const moveReferenceLayer = useAppStore((s) => s.moveReferenceLayer);
+  const canvasDisplayMode = useAppStore((s) => s.canvasDisplayMode);
 
   const pickColorAt = useAppStore((s) => s.pickColorAt);
 
@@ -88,7 +84,15 @@ export function ReferenceLayerOverlay({
   const displayHeight = layer.crop ? layer.crop.height * zoom : 0;
   const imageAcceptsPointer = isActive || altHeld;
 
-
+  useEffect(() => {
+    oklabRendererRef.current = new OklabDisplayGlRenderer();
+    glCanvasRef.current = document.createElement("canvas");
+    return () => {
+      oklabRendererRef.current?.dispose();
+      oklabRendererRef.current = null;
+      glCanvasRef.current = null;
+    };
+  }, []);
 
   const render = useCallback(async () => {
 
@@ -117,8 +121,47 @@ export function ReferenceLayerOverlay({
     try {
 
       const image = await getReferenceImage(layer.id, layer.imageData);
+      const crop = layer.crop;
 
-      renderReferenceLayer(ctx, image, layer.crop, zoom, layer.grid);
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, displayWidth, displayHeight);
+
+      const renderer = oklabRendererRef.current;
+      const glCanvas = glCanvasRef.current;
+
+      if (canvasDisplayMode === "oklabLightness" && renderer && glCanvas) {
+        const cropCanvas = document.createElement("canvas");
+        cropCanvas.width = crop.width;
+        cropCanvas.height = crop.height;
+        const cropCtx = cropCanvas.getContext("2d");
+        if (cropCtx) {
+          cropCtx.imageSmoothingEnabled = false;
+          cropCtx.drawImage(
+            image,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+            0,
+            0,
+            crop.width,
+            crop.height,
+          );
+          blitWithDisplayMode(
+            renderer,
+            glCanvas,
+            cropCanvas,
+            displayWidth,
+            displayHeight,
+            canvasDisplayMode,
+          );
+          ctx.drawImage(glCanvas, 0, 0, displayWidth, displayHeight);
+          renderReferenceLayerGrid(ctx, crop, zoom, layer.grid);
+          return;
+        }
+      }
+
+      renderReferenceLayer(ctx, image, crop, zoom, layer.grid);
 
     } catch {
 
@@ -126,7 +169,7 @@ export function ReferenceLayerOverlay({
 
     }
 
-  }, [layer, zoom, displayWidth, displayHeight]);
+  }, [layer, zoom, displayWidth, displayHeight, canvasDisplayMode]);
 
 
 
@@ -341,7 +384,13 @@ export function ReferenceLayerOverlay({
         }}
         onMouseDown={imageAcceptsPointer ? handleMouseDown : undefined}
         onContextMenu={(e) => {
-          if (altHeld) e.preventDefault();
+          if (altHeld) {
+            e.preventDefault();
+            return;
+          }
+          e.preventDefault();
+          e.stopPropagation();
+          onContextMenuRequest?.(layer.id, e.clientX, e.clientY);
         }}
       />
 

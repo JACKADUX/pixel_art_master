@@ -1,6 +1,16 @@
 import type { CropRect, ReferenceGridConfig } from "@/domain/layer/Layer";
 import { renderCanvasGrid } from "./CanvasGridRenderer";
 
+export function renderReferenceLayerGrid(
+  ctx: CanvasRenderingContext2D,
+  crop: CropRect,
+  zoom: number,
+  grid: ReferenceGridConfig,
+): void {
+  if (!grid.visible) return;
+  renderCanvasGrid(ctx, crop.width, crop.height, zoom, grid.primary, grid.secondary);
+}
+
 export function renderReferenceLayer(
   ctx: CanvasRenderingContext2D,
   image: HTMLImageElement,
@@ -26,14 +36,5 @@ export function renderReferenceLayer(
     displayHeight,
   );
 
-  if (grid.visible) {
-    renderCanvasGrid(
-      ctx,
-      crop.width,
-      crop.height,
-      zoom,
-      grid.primary,
-      grid.secondary,
-    );
-  }
+  renderReferenceLayerGrid(ctx, crop, zoom, grid);
 }

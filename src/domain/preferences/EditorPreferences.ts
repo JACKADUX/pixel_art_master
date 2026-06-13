@@ -1,5 +1,11 @@
 import { rgba, TRANSPARENT, type PixelColor } from "@/domain/canvas/PixelColor";
+import type { CanvasDisplayMode } from "@/domain/color/CanvasDisplayMode";
 import type { ColorMode } from "@/domain/color/ColorMode";
+import {
+  COLOR_PICKER_LAYOUT_ORIENTATIONS,
+  COLOR_PICKER_VERTICAL_WIDTH,
+  type ColorPickerLayoutOrientation,
+} from "@/domain/color/ColorPickerLayout";
 import {
   clampStampSize,
   clampMagicWandTolerance,
@@ -33,6 +39,7 @@ export interface NavigatorPanelLayout {
 export interface FloatingColorPickerLayout {
   visible: boolean;
   position: PanelPosition;
+  panelWidth: number;
   panelHeight: number;
   activeSlot: EditorColorSlot;
 }
@@ -46,10 +53,13 @@ export interface EditorPreferences {
   rightPanelTab: "palette" | "notes";
   paletteViewMode: "grid" | "oklabMap";
   colorPickerMode: ColorMode;
+  colorPickerLayoutOrientation: ColorPickerLayoutOrientation;
   sidebarWidth: number;
   splitPaneRatio: number;
   navigatorLayout: NavigatorPanelLayout;
   floatingColorPickerLayout: FloatingColorPickerLayout;
+  mousePositionOverlayVisible: boolean;
+  canvasDisplayMode: CanvasDisplayMode;
 }
 
 export const EDITOR_PREFERENCES_VERSION = 1;
@@ -70,6 +80,8 @@ const MIN_NAVIGATOR_WIDTH = 100;
 const MIN_NAVIGATOR_HEIGHT = 80;
 const MIN_COLOR_PICKER_HEIGHT = 280;
 const MAX_COLOR_PICKER_HEIGHT = 720;
+const MIN_COLOR_PICKER_WIDTH = 200;
+const MAX_COLOR_PICKER_WIDTH = 800;
 
 const TOOL_TYPES: ToolType[] = ["brush", "fill", "eraser", "shape", "select", "transform"];
 const BRUSH_SHAPES: BrushShape[] = ["square", "circle"];
@@ -80,6 +92,7 @@ const COLOR_MODES: ColorMode[] = ["hsl", "oklab"];
 const COLOR_SLOTS: EditorColorSlot[] = ["foreground", "background"];
 const PANEL_TABS = ["palette", "notes"] as const;
 const PALETTE_VIEW_MODES = ["grid", "oklabMap"] as const;
+const CANVAS_DISPLAY_MODES = ["normal", "oklabLightness"] as const;
 
 export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   activeTool: "brush",
@@ -90,6 +103,7 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   rightPanelTab: "palette",
   paletteViewMode: "grid",
   colorPickerMode: "hsl",
+  colorPickerLayoutOrientation: "vertical",
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
   splitPaneRatio: DEFAULT_SPLIT_PANE_RATIO,
   navigatorLayout: {
@@ -100,9 +114,12 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   floatingColorPickerLayout: {
     visible: false,
     position: { x: 16, y: 16 },
+    panelWidth: COLOR_PICKER_VERTICAL_WIDTH,
     panelHeight: DEFAULT_COLOR_PICKER_PANEL_HEIGHT,
     activeSlot: "foreground",
   },
+  mousePositionOverlayVisible: false,
+  canvasDisplayMode: "normal",
 };
 
 export interface EditorPreferencesSource {
@@ -114,6 +131,7 @@ export interface EditorPreferencesSource {
   rightPanelTab: "palette" | "notes";
   paletteViewMode: "grid" | "oklabMap";
   colorPickerMode: ColorMode;
+  colorPickerLayoutOrientation: ColorPickerLayoutOrientation;
   sidebarWidth: number;
   splitPaneRatio: number;
   navigator: {
@@ -124,9 +142,12 @@ export interface EditorPreferencesSource {
   floatingColorPicker: {
     visible: boolean;
     position: PanelPosition;
+    panelWidth: number;
     panelHeight: number;
     activeSlot: EditorColorSlot;
   };
+  mousePositionOverlayVisible: boolean;
+  canvasDisplayMode: CanvasDisplayMode;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -230,6 +251,12 @@ function parseFloatingColorPickerLayout(value: unknown): FloatingColorPickerLayo
   return {
     visible: typeof value.visible === "boolean" ? value.visible : defaults.visible,
     position: parsePosition(value.position, defaults.position),
+    panelWidth: clampNumber(
+      value.panelWidth,
+      MIN_COLOR_PICKER_WIDTH,
+      MAX_COLOR_PICKER_WIDTH,
+      defaults.panelWidth,
+    ),
     panelHeight: clampNumber(
       value.panelHeight,
       MIN_COLOR_PICKER_HEIGHT,
@@ -258,6 +285,16 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
   const colorPickerMode = COLOR_MODES.includes(raw.colorPickerMode as ColorMode)
     ? (raw.colorPickerMode as ColorMode)
     : defaults.colorPickerMode;
+  const colorPickerLayoutOrientation = COLOR_PICKER_LAYOUT_ORIENTATIONS.includes(
+    raw.colorPickerLayoutOrientation as ColorPickerLayoutOrientation,
+  )
+    ? (raw.colorPickerLayoutOrientation as ColorPickerLayoutOrientation)
+    : defaults.colorPickerLayoutOrientation;
+  const canvasDisplayMode = CANVAS_DISPLAY_MODES.includes(
+    raw.canvasDisplayMode as CanvasDisplayMode,
+  )
+    ? (raw.canvasDisplayMode as CanvasDisplayMode)
+    : defaults.canvasDisplayMode;
 
   return {
     activeTool,
@@ -268,6 +305,7 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
     rightPanelTab,
     paletteViewMode,
     colorPickerMode,
+    colorPickerLayoutOrientation,
     sidebarWidth: clampNumber(
       raw.sidebarWidth,
       MIN_SIDEBAR_WIDTH,
@@ -284,6 +322,11 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
     floatingColorPickerLayout: parseFloatingColorPickerLayout(
       raw.floatingColorPickerLayout ?? raw.floatingColorPicker,
     ),
+    mousePositionOverlayVisible:
+      typeof raw.mousePositionOverlayVisible === "boolean"
+        ? raw.mousePositionOverlayVisible
+        : defaults.mousePositionOverlayVisible,
+    canvasDisplayMode,
   };
 }
 
@@ -297,6 +340,7 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
     rightPanelTab: source.rightPanelTab,
     paletteViewMode: source.paletteViewMode,
     colorPickerMode: source.colorPickerMode,
+    colorPickerLayoutOrientation: source.colorPickerLayoutOrientation,
     sidebarWidth: clampNumber(
       source.sidebarWidth,
       MIN_SIDEBAR_WIDTH,
@@ -317,8 +361,11 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
     floatingColorPickerLayout: {
       visible: source.floatingColorPicker.visible,
       position: { ...source.floatingColorPicker.position },
+      panelWidth: source.floatingColorPicker.panelWidth,
       panelHeight: source.floatingColorPicker.panelHeight,
       activeSlot: source.floatingColorPicker.activeSlot,
     },
+    mousePositionOverlayVisible: source.mousePositionOverlayVisible,
+    canvasDisplayMode: source.canvasDisplayMode,
   };
 }

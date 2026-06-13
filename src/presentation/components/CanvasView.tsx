@@ -21,15 +21,40 @@ import {
 import { renderTransparencyCheckerboard } from "@/infrastructure/canvas/CanvasBackgroundRenderer";
 import { renderCanvasGrid } from "@/infrastructure/canvas/CanvasGridRenderer";
 import { renderPixelGrid1x } from "@/infrastructure/canvas/PixelGridCanvasRenderer";
+import {
+  blitWithDisplayMode,
+  OklabDisplayGlRenderer,
+} from "@/infrastructure/canvas/OklabDisplayGlRenderer";
 import { renderBrushStampPreview } from "@/infrastructure/canvas/BrushStampPreviewRenderer";
+import { renderBrushLinePreview } from "@/infrastructure/canvas/BrushLinePreviewRenderer";
 import {
   renderSelectionOverlay,
   renderTransformHandles,
 } from "@/infrastructure/canvas/SelectionOverlayRenderer";
+import { isDrawingToolType } from "@/domain/tool/ToolRegistry";
 import { clampStampSize } from "@/domain/tool/ToolType";
 import type { ReferenceLayer } from "@/domain/layer/Layer";
+import { findTopReferenceLayerAtCanvasPoint } from "@/domain/layer/ReferenceLayerPalette";
+import {
+  getOverlayPixelCoordinates,
+  resolveMousePositionOverlayTarget,
+} from "@/domain/grid/MousePositionOverlayTarget";
 import { getReferenceStackIndex } from "@/domain/layer/LayerStack";
+import {
+  computeGridRelativeLabelScreenPosition,
+  computeSecondaryGridCellScreenBounds,
+  normalizeDragRect,
+} from "@/domain/viewport/OverlayLabelLayout";
+import { buildReferenceLayerContextMenuItems } from "../config/referenceLayerContextMenu";
 import { useAppStore, type ColorSlot, type DrawingButton } from "../stores/appStore";
+import { useBrushSizeHint } from "../hooks/useBrushSizeHint";
+import { useMousePositionOverlay } from "../hooks/useMousePositionOverlay";
+import { releaseKeyboardFocus, isTextEntryElement } from "../utils/editableFocus";
+import { CanvasBoundsLabel } from "./CanvasBoundsLabel";
+import { CanvasBrushSizeHint } from "./CanvasBrushSizeHint";
+import { CanvasMousePositionHint } from "./CanvasMousePositionHint";
+import { CanvasMousePositionGridHighlight } from "./CanvasMousePositionGridHighlight";
+import { ContextMenu } from "./ContextMenu";
 import { FloatingColorPickerPanel } from "./color-picker/FloatingColorPickerPanel";
 import { NavigatorPanel } from "./NavigatorPanel";
 import { ReferenceCropModal } from "./ReferenceCropModal";
@@ -55,12 +80,28 @@ function isDrawingButtonPressed(buttons: number, button: DrawingButton): boolean
   return button === "primary" ? (buttons & 1) !== 0 : (buttons & 2) !== 0;
 }
 
+function clientToPixel(
+  clientX: number,
+  clientY: number,
+  canvas: HTMLCanvasElement,
+  zoom: number,
+): CanvasPoint {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: Math.floor((clientX - rect.left) / zoom),
+    y: Math.floor((clientY - rect.top) / zoom),
+  };
+}
+
 export function CanvasView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gridRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const oklabRendererRef = useRef<OklabDisplayGlRenderer | null>(null);
+  const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isPanningRef = useRef(false);
+  const mousePositionOverlaySuppressedRef = useRef(false);
   const lastPanRef = useRef({ x: 0, y: 0 });
   const zoomAnchorRef = useRef<ZoomAnchor | null>(null);
   const centeredProjectIdRef = useRef<string | null>(null);
@@ -74,7 +115,9 @@ export function CanvasView() {
   const setToolSettings = useAppStore((s) => s.setToolSettings);
   const activeTool = useAppStore((s) => s.activeTool);
   const toolSettings = useAppStore((s) => s.toolSettings);
+  const foregroundColor = useAppStore((s) => s.foregroundColor);
   const selection = useAppStore((s) => s.selection);
+  const selectionDrag = useAppStore((s) => s.selectionDrag);
   const selectionPreviewRect = useAppStore((s) => s.selectionPreviewRect);
   const lassoPoints = useAppStore((s) => s.lassoPoints);
   const pointerDown = useAppStore((s) => s.pointerDown);
@@ -82,16 +125,42 @@ export function CanvasView() {
   const pointerUp = useAppStore((s) => s.pointerUp);
   const pickColorAt = useAppStore((s) => s.pickColorAt);
   const drawingButton = useAppStore((s) => s.drawingButton);
+  const isDrawing = useAppStore((s) => s.isDrawing);
+  const drawStart = useAppStore((s) => s.drawStart);
+  const lastPoint = useAppStore((s) => s.lastPoint);
+  const brushLineAnchor = useAppStore((s) => s.brushLineAnchor);
   const getCompositeGrid = useAppStore((s) => s.getCompositeGrid);
   const isCapturing = useAppStore((s) => s.isCapturing);
   const setViewportContainer = useAppStore((s) => s.setViewportContainer);
   const syncViewportSnapshot = useAppStore((s) => s.syncViewportSnapshot);
+  const mousePositionOverlayVisible = useAppStore((s) => s.mousePositionOverlayVisible);
+  const canvasDisplayMode = useAppStore((s) => s.canvasDisplayMode);
+  const setActiveReferenceLayer = useAppStore((s) => s.setActiveReferenceLayer);
+  const openCropEditor = useAppStore((s) => s.openCropEditor);
+  const toggleReferenceGrid = useAppStore((s) => s.toggleReferenceGrid);
+  const importImageToReferenceLayer = useAppStore((s) => s.importImageToReferenceLayer);
 
   const [isPanning, setIsPanning] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [hoverPoint, setHoverPoint] = useState<CanvasPoint | null>(null);
+  const [referenceContextMenu, setReferenceContextMenu] = useState<{
+    layerId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [shiftKeyHeld, setShiftKeyHeld] = useState(false);
+  const [spaceKeyHeld, setSpaceKeyHeld] = useState(false);
+  const spaceKeyHeldRef = useRef(false);
   const [marchPhase, setMarchPhase] = useState(0);
   const marchFrameRef = useRef<number | null>(null);
+
+  const { hint: brushSizeHint, show: showBrushSizeHint, handleMouseMove: handleBrushHintMouseMove } =
+    useBrushSizeHint();
+  const {
+    overlay: mousePositionOverlay,
+    update: updateMousePositionOverlay,
+    clear: clearMousePositionOverlay,
+  } = useMousePositionOverlay();
 
   const composite = useMemo(() => {
     if (!project) return null;
@@ -100,6 +169,39 @@ export function CanvasView() {
 
   const displayWidth = composite ? composite.width * zoom : 0;
   const displayHeight = composite ? composite.height * zoom : 0;
+
+  const boundsLabelRect = useMemo(() => {
+    if (
+      activeTool === "select" &&
+      selectionDrag?.mode === "create" &&
+      toolSettings.selectionMode !== "lasso" &&
+      toolSettings.selectionMode !== "magicWand" &&
+      selectionPreviewRect &&
+      selectionPreviewRect.width > 0 &&
+      selectionPreviewRect.height > 0
+    ) {
+      return selectionPreviewRect;
+    }
+    if (
+      activeTool === "shape" &&
+      isDrawing &&
+      drawStart &&
+      lastPoint &&
+      toolSettings.shapeMode !== "line"
+    ) {
+      return normalizeDragRect(drawStart, lastPoint);
+    }
+    return null;
+  }, [
+    activeTool,
+    drawStart,
+    isDrawing,
+    lastPoint,
+    selectionDrag,
+    selectionPreviewRect,
+    toolSettings.selectionMode,
+    toolSettings.shapeMode,
+  ]);
 
   const layoutContainerWidth =
     containerSize.width > 0
@@ -110,7 +212,7 @@ export function CanvasView() {
       ? containerSize.height
       : WORKSPACE_CONTAINER_FALLBACK_HEIGHT;
 
-  const activeLayerId = project?.canvas.activeLayerId;
+  const activeReferenceLayerId = project?.canvas.activeReferenceLayerId;
 
   const referenceLayers = useMemo(() => {
     if (!project) return [];
@@ -118,6 +220,42 @@ export function CanvasView() {
       (l): l is ReferenceLayer => l.type === "reference",
     );
   }, [project]);
+
+  const closeReferenceContextMenu = useCallback(() => {
+    setReferenceContextMenu(null);
+  }, []);
+
+  const openReferenceContextMenu = useCallback(
+    (layerId: string, clientX: number, clientY: number) => {
+      setActiveReferenceLayer(layerId);
+      setReferenceContextMenu({ layerId, x: clientX, y: clientY });
+    },
+    [setActiveReferenceLayer],
+  );
+
+  const referenceContextMenuLayer = useMemo(() => {
+    if (!referenceContextMenu || !project) return null;
+    const layer = project.canvas.layers.find(
+      (l) => l.id === referenceContextMenu.layerId && l.type === "reference",
+    );
+    return layer?.type === "reference" ? layer : null;
+  }, [referenceContextMenu, project]);
+
+  const referenceContextMenuItems = useMemo(() => {
+    if (!referenceContextMenuLayer) return [];
+    return buildReferenceLayerContextMenuItems(referenceContextMenuLayer, {
+      openCropEditor,
+      toggleReferenceGrid,
+      importImageToReferenceLayer: (layerId) => {
+        void importImageToReferenceLayer(layerId);
+      },
+    });
+  }, [
+    referenceContextMenuLayer,
+    openCropEditor,
+    toggleReferenceGrid,
+    importImageToReferenceLayer,
+  ]);
 
   const overlayZIndex = 100;
 
@@ -166,26 +304,65 @@ export function CanvasView() {
     offscreen.height = composite.height;
     const offCtx = offscreen.getContext("2d");
     if (!offCtx) return;
-    renderPixelGrid1x(offCtx, composite);
-    ctx.drawImage(offscreen, 0, 0, displayWidth, displayHeight);
+
+    const renderer = oklabRendererRef.current;
+    const glCanvas = glCanvasRef.current;
+
+    if (canvasDisplayMode === "oklabLightness" && renderer && glCanvas) {
+      const imageData = new ImageData(composite.toRgba(), composite.width, composite.height);
+      blitWithDisplayMode(
+        renderer,
+        glCanvas,
+        imageData,
+        composite.width,
+        composite.height,
+        canvasDisplayMode,
+      );
+      ctx.drawImage(glCanvas, 0, 0, displayWidth, displayHeight);
+    } else {
+      renderPixelGrid1x(offCtx, composite);
+      ctx.drawImage(offscreen, 0, 0, displayWidth, displayHeight);
+    }
 
     if (selection?.floating) {
       const { pixels, offset } = selection.floating;
-      const floatCanvas = document.createElement("canvas");
-      floatCanvas.width = pixels.width;
-      floatCanvas.height = pixels.height;
-      const floatCtx = floatCanvas.getContext("2d");
-      if (floatCtx) {
-        const imageData = floatCtx.createImageData(pixels.width, pixels.height);
-        imageData.data.set(pixels.toRgba());
-        floatCtx.putImageData(imageData, 0, 0);
+      const floatDisplayWidth = pixels.width * zoom;
+      const floatDisplayHeight = pixels.height * zoom;
+
+      if (canvasDisplayMode === "oklabLightness" && renderer && glCanvas) {
+        const floatImageData = new ImageData(pixels.toRgba(), pixels.width, pixels.height);
+        blitWithDisplayMode(
+          renderer,
+          glCanvas,
+          floatImageData,
+          floatDisplayWidth,
+          floatDisplayHeight,
+          canvasDisplayMode,
+        );
         ctx.drawImage(
-          floatCanvas,
+          glCanvas,
           offset.x * zoom,
           offset.y * zoom,
-          pixels.width * zoom,
-          pixels.height * zoom,
+          floatDisplayWidth,
+          floatDisplayHeight,
         );
+      } else {
+        const floatCanvas = document.createElement("canvas");
+        floatCanvas.width = pixels.width;
+        floatCanvas.height = pixels.height;
+        const floatCtx = floatCanvas.getContext("2d");
+        if (floatCtx) {
+          const imageData = floatCtx.createImageData(pixels.width, pixels.height);
+          imageData.data.set(pixels.toRgba());
+          floatCtx.putImageData(imageData, 0, 0);
+          ctx.drawImage(
+            floatCanvas,
+            offset.x * zoom,
+            offset.y * zoom,
+            floatDisplayWidth,
+            floatDisplayHeight,
+          );
+        }
       }
     }
 
@@ -210,7 +387,7 @@ export function CanvasView() {
       const gridCtx = gridCanvas.getContext("2d");
       gridCtx?.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
     }
-  }, [project, composite, displayWidth, displayHeight, zoom, selection]);
+  }, [project, composite, displayWidth, displayHeight, zoom, selection, canvasDisplayMode]);
 
   const brushPreview = useMemo(() => {
     if (activeTool !== "brush" && activeTool !== "eraser") return null;
@@ -241,7 +418,7 @@ export function CanvasView() {
     ctx.clearRect(0, 0, displayWidth, displayHeight);
 
     renderSelectionOverlay(ctx, {
-      selection,
+      selection: selectionDrag?.layerPan ? null : selection,
       previewRect: selectionPreviewRect,
       lassoPoints,
       phase: marchPhase,
@@ -250,38 +427,151 @@ export function CanvasView() {
       canvasHeight: composite.height,
     });
 
-    if (activeTool === "transform" && selection) {
+    if (activeTool === "transform" && selection && !selectionDrag?.layerPan) {
       renderTransformHandles(ctx, { selection, zoom, phase: marchPhase });
     }
 
     if (brushPreview && hoverPoint && !isPanning) {
+      if (
+        activeTool === "brush" &&
+        shiftKeyHeld &&
+        brushLineAnchor &&
+        (brushLineAnchor.x !== hoverPoint.x || brushLineAnchor.y !== hoverPoint.y)
+      ) {
+        renderBrushLinePreview(
+          ctx,
+          brushLineAnchor,
+          hoverPoint,
+          { brushSize: brushPreview.size, brushShape: brushPreview.shape },
+          foregroundColor,
+          zoom,
+          { width: composite.width, height: composite.height },
+        );
+      }
+
       renderBrushStampPreview(
         ctx,
         hoverPoint,
         brushPreview.size,
         brushPreview.shape,
+        activeTool === "brush" ? foregroundColor : null,
         zoom,
         { width: composite.width, height: composite.height },
       );
     }
   }, [
     activeTool,
+    brushLineAnchor,
     brushPreview,
     composite,
     displayWidth,
     displayHeight,
+    foregroundColor,
     hoverPoint,
     isPanning,
     lassoPoints,
     marchPhase,
     selection,
+    selectionDrag,
     selectionPreviewRect,
+    shiftKeyHeld,
     zoom,
   ]);
 
+  const preventSpaceScroll = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
+    if (isTextEntryElement(document.activeElement)) return;
+    if (e.code !== "Space") return;
+    e.preventDefault();
+  }, []);
+
   useEffect(() => {
-    const tick = () => {
-      setMarchPhase((p) => (p + 1) % 16);
+    const container = containerRef.current;
+    if (!container) return;
+
+    container.addEventListener("keydown", preventSpaceScroll, true);
+    return () => container.removeEventListener("keydown", preventSpaceScroll, true);
+  }, [project, preventSpaceScroll]);
+
+  useEffect(() => {
+    spaceKeyHeldRef.current = spaceKeyHeld;
+  }, [spaceKeyHeld]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTextEntryElement(document.activeElement)) return;
+
+      if (e.key === "Shift") setShiftKeyHeld(true);
+      if (e.code !== "Space") return;
+
+      e.preventDefault();
+      if (e.repeat) return;
+
+      setSpaceKeyHeld(true);
+
+      const {
+        selectionDrag: drag,
+        activeTool: tool,
+        drawingButton: button,
+      } = useAppStore.getState();
+      if (tool !== "select" || !drag || drag.mode !== "create" || button === null) {
+        return;
+      }
+
+      pointerMove(drag.current, button, {
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        spaceKey: true,
+      });
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (isTextEntryElement(document.activeElement)) return;
+
+      if (e.key === "Shift") setShiftKeyHeld(false);
+      if (e.code !== "Space") return;
+
+      e.preventDefault();
+      setSpaceKeyHeld(false);
+
+      const {
+        selectionDrag: drag,
+        activeTool: tool,
+        drawingButton: button,
+      } = useAppStore.getState();
+      if (tool !== "select" || !drag?.deferredCreate || button === null) {
+        return;
+      }
+
+      pointerMove(drag.current, button, {
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        spaceKey: false,
+      });
+    };
+    const handleBlur = () => {
+      setShiftKeyHeld(false);
+      setSpaceKeyHeld(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
+    window.addEventListener("blur", handleBlur);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keyup", handleKeyUp, true);
+      window.removeEventListener("blur", handleBlur);
+    };
+  }, [pointerMove]);
+
+  useEffect(() => {
+    const MARCH_PERIOD = 16;
+    const MARCH_STEP_MS = 120;
+    let lastStep = performance.now();
+
+    const tick = (now: number) => {
+      if (now - lastStep >= MARCH_STEP_MS) {
+        lastStep = now;
+        setMarchPhase((p) => (p + 1) % MARCH_PERIOD);
+      }
       marchFrameRef.current = requestAnimationFrame(tick);
     };
     marchFrameRef.current = requestAnimationFrame(tick);
@@ -295,6 +585,16 @@ export function CanvasView() {
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+
+  useEffect(() => {
+    oklabRendererRef.current = new OklabDisplayGlRenderer();
+    glCanvasRef.current = document.createElement("canvas");
+    return () => {
+      oklabRendererRef.current?.dispose();
+      oklabRendererRef.current = null;
+      glCanvasRef.current = null;
+    };
+  }, []);
 
   useLayoutEffect(() => {
     renderCanvas();
@@ -393,6 +693,7 @@ export function CanvasView() {
     if (!anchor || !container || !canvas || !stageLayout) return;
 
     zoomAnchorRef.current = null;
+    mousePositionOverlaySuppressedRef.current = false;
 
     const containerRect = container.getBoundingClientRect();
     const { scrollLeft, scrollTop } = computeScrollPositionForZoomAtPoint(
@@ -426,6 +727,7 @@ export function CanvasView() {
           const newSize = clampStampSize(currentSize + delta);
           if (newSize !== currentSize) {
             setToolSettings({ [sizeKey]: newSize });
+            showBrushSizeHint(newSize, e.clientX, e.clientY);
           }
           return;
         }
@@ -454,19 +756,35 @@ export function CanvasView() {
         clientX: e.clientX,
         clientY: e.clientY,
       };
+      mousePositionOverlaySuppressedRef.current = true;
+      clearMousePositionOverlay();
       setZoom(newZoom);
     };
 
     container.addEventListener("wheel", handleWheel, { passive: false });
     return () => container.removeEventListener("wheel", handleWheel);
-  }, [project, setZoom, setToolSettings]);
+  }, [project, setZoom, setToolSettings, showBrushSizeHint, clearMousePositionOverlay]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleMove = () => {
+      handleBrushHintMouseMove();
+    };
+
+    container.addEventListener("mousemove", handleMove);
+    return () => container.removeEventListener("mousemove", handleMove);
+  }, [handleBrushHintMouseMove]);
 
   const startPanning = useCallback((clientX: number, clientY: number) => {
     isPanningRef.current = true;
+    mousePositionOverlaySuppressedRef.current = true;
     setIsPanning(true);
     setHoverPoint(null);
+    clearMousePositionOverlay();
     lastPanRef.current = { x: clientX, y: clientY };
-  }, []);
+  }, [clearMousePositionOverlay]);
 
   const applyPanMove = useCallback(
     (clientX: number, clientY: number) => {
@@ -487,19 +805,31 @@ export function CanvasView() {
 
   const stopPanning = useCallback(() => {
     isPanningRef.current = false;
+    mousePositionOverlaySuppressedRef.current = false;
     setIsPanning(false);
   }, []);
 
   const toPixel = useCallback(
-    (e: React.MouseEvent<HTMLCanvasElement>): { x: number; y: number } => {
+    (e: React.MouseEvent<HTMLCanvasElement>): CanvasPoint => {
       const canvas = canvasRef.current;
       if (!canvas) return { x: 0, y: 0 };
-      const rect = canvas.getBoundingClientRect();
-      const x = Math.floor((e.clientX - rect.left) / zoom);
-      const y = Math.floor((e.clientY - rect.top) / zoom);
-      return { x, y };
+      return clientToPixel(e.clientX, e.clientY, canvas, zoom);
     },
     [zoom],
+  );
+
+  const handleCanvasContextMenu = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      e.preventDefault();
+      if (e.altKey || !project) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const point = clientToPixel(e.clientX, e.clientY, canvas, zoom);
+      const refLayer = findTopReferenceLayerAtCanvasPoint(project.canvas.layers, point);
+      if (!refLayer) return;
+      openReferenceContextMenu(refLayer.id, e.clientX, e.clientY);
+    },
+    [project, zoom, openReferenceContextMenu],
   );
 
   const updateHoverFromClient = useCallback(
@@ -534,7 +864,93 @@ export function CanvasView() {
     return () => container.removeEventListener("mousemove", handleMove);
   }, [activeTool, updateHoverFromClient]);
 
+  useEffect(() => {
+    if (!mousePositionOverlayVisible) {
+      clearMousePositionOverlay();
+      return;
+    }
+
+    const container = containerRef.current;
+    if (!container || !project || !composite) {
+      clearMousePositionOverlay();
+      return;
+    }
+
+    const secondarySize = project.grid.secondary;
+
+    const handleMove = (e: MouseEvent) => {
+      if (isPanningRef.current || mousePositionOverlaySuppressedRef.current) return;
+
+      const canvas = canvasRef.current;
+      if (!canvas) {
+        clearMousePositionOverlay();
+        return;
+      }
+
+      const point = clientToPixel(e.clientX, e.clientY, canvas, zoom);
+      const target = resolveMousePositionOverlayTarget(
+        point,
+        referenceLayers,
+        secondarySize,
+        composite,
+      );
+      if (!target) {
+        clearMousePositionOverlay();
+        return;
+      }
+
+      const canvasRect = canvas.getBoundingClientRect();
+      const labelPosition = computeGridRelativeLabelScreenPosition(
+        canvasRect,
+        target.canvasCellOrigin,
+        target.secondarySize,
+        zoom,
+      );
+      const cellBounds = computeSecondaryGridCellScreenBounds(
+        canvasRect,
+        target.canvasCellOrigin,
+        target.secondarySize,
+        zoom,
+      );
+      const pixelCoords = getOverlayPixelCoordinates(target);
+
+      updateMousePositionOverlay(
+        labelPosition.left,
+        labelPosition.top,
+        cellBounds,
+        pixelCoords.x,
+        pixelCoords.y,
+        target.secondarySize,
+      );
+    };
+
+    const handleLeave = () => {
+      clearMousePositionOverlay();
+    };
+
+    container.addEventListener("mousemove", handleMove);
+    container.addEventListener("mouseleave", handleLeave);
+    return () => {
+      container.removeEventListener("mousemove", handleMove);
+      container.removeEventListener("mouseleave", handleLeave);
+    };
+  }, [
+    mousePositionOverlayVisible,
+    project,
+    composite,
+    referenceLayers,
+    zoom,
+    updateMousePositionOverlay,
+    clearMousePositionOverlay,
+  ]);
+
+  const focusCanvasKeyboard = useCallback(() => {
+    releaseKeyboardFocus();
+    containerRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    focusCanvasKeyboard();
     if (isMiddleMouseButton(e.button)) {
       e.preventDefault();
       startPanning(e.clientX, e.clientY);
@@ -544,7 +960,11 @@ export function CanvasView() {
     if (!button) return;
     e.preventDefault();
     const point = toPixel(e);
-    const modifiers = { shiftKey: e.shiftKey, altKey: e.altKey };
+    const modifiers = {
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      spaceKey: spaceKeyHeldRef.current,
+    };
     if (e.altKey) {
       pickColorAt(point, colorSlotFromDrawingButton(button));
       return;
@@ -557,7 +977,11 @@ export function CanvasView() {
     const point = toPixel(e);
     updateHoverFromClient(e.clientX, e.clientY);
     const button = drawingButton;
-    const modifiers = { shiftKey: e.shiftKey, altKey: e.altKey };
+    const modifiers = {
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      spaceKey: spaceKeyHeldRef.current,
+    };
     if (activeTool === "select" || activeTool === "transform") {
       if (button !== null && isDrawingButtonPressed(e.buttons, button)) {
         pointerMove(point, button, modifiers);
@@ -574,17 +998,101 @@ export function CanvasView() {
     if (isPanningRef.current) return;
     const button = buttonFromMouseButton(e.button);
     if (!button) return;
-    pointerUp(toPixel(e), button, { shiftKey: e.shiftKey, altKey: e.altKey });
+    pointerUp(toPixel(e), button, {
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      spaceKey: spaceKeyHeldRef.current,
+    });
   };
 
   const handleMouseLeave = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setHoverPoint(null);
+    if (selectionDrag || isDrawing) return;
     if (!drawingButton && activeTool !== "select" && activeTool !== "transform") return;
     pointerUp(toPixel(e), drawingButton ?? "primary", {
       shiftKey: e.shiftKey,
       altKey: e.altKey,
+      spaceKey: spaceKeyHeldRef.current,
     });
   };
+
+  const documentPointerTracking =
+    drawingButton !== null &&
+    ((selectionDrag !== null &&
+      (activeTool === "select" || activeTool === "transform")) ||
+      (isDrawing && isDrawingToolType(activeTool)));
+
+  useEffect(() => {
+    if (!documentPointerTracking) return;
+
+    const handleDocumentMouseMove = (e: MouseEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const {
+        drawingButton: button,
+        activeTool: tool,
+        selectionDrag: drag,
+        isDrawing: drawing,
+      } = useAppStore.getState();
+      if (button === null) return;
+
+      const isSelectTransform =
+        (tool === "select" || tool === "transform") && drag !== null;
+      const isActiveDrawingTool = drawing && isDrawingToolType(tool);
+      if (!isSelectTransform && !isActiveDrawingTool) return;
+
+      const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
+      const modifiers = {
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        spaceKey: spaceKeyHeldRef.current,
+      };
+
+      if (isDrawingButtonPressed(e.buttons, button)) {
+        pointerMove(point, button, modifiers);
+      } else if (e.buttons !== 0 && isSelectTransform) {
+        pointerMove(point, "primary", modifiers);
+      }
+    };
+
+    const handleDocumentMouseUp = (e: MouseEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const button = buttonFromMouseButton(e.button);
+      if (!button) return;
+
+      const {
+        drawingButton: activeButton,
+        selectionDrag: drag,
+        isDrawing: drawing,
+        activeTool: tool,
+      } = useAppStore.getState();
+
+      const isSelectTransform =
+        (tool === "select" || tool === "transform") && drag !== null;
+      const isActiveDrawingTool = drawing && isDrawingToolType(tool);
+      if (!isSelectTransform && !isActiveDrawingTool) return;
+
+      const expectedButton = activeButton ?? "primary";
+      if (button !== expectedButton) return;
+
+      const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
+      pointerUp(point, button, {
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+        spaceKey: spaceKeyHeldRef.current,
+      });
+    };
+
+    document.addEventListener("mousemove", handleDocumentMouseMove);
+    document.addEventListener("mouseup", handleDocumentMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleDocumentMouseMove);
+      document.removeEventListener("mouseup", handleDocumentMouseUp);
+    };
+  }, [documentPointerTracking, pointerMove, pointerUp]);
 
   useEffect(() => {
     if (!isPanning) return;
@@ -613,6 +1121,7 @@ export function CanvasView() {
   }, [isPanning, applyPanMove, stopPanning]);
 
   const handleContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    focusCanvasKeyboard();
     if (!isMiddleMouseButton(e.button)) return;
     e.preventDefault();
     startPanning(e.clientX, e.clientY);
@@ -636,10 +1145,12 @@ export function CanvasView() {
     <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div
         ref={containerRef}
-        className={`relative min-h-0 min-w-0 flex-1 overflow-auto bg-zinc-800${
+        tabIndex={-1}
+        className={`relative min-h-0 min-w-0 flex-1 overflow-auto bg-zinc-800 outline-none${
           isPanning ? " cursor-grabbing" : ""
         }`}
         onMouseDown={handleContainerMouseDown}
+        onKeyDown={preventSpaceScroll}
         onAuxClick={handleAuxClick}
         onMouseUp={stopPanning}
         onMouseLeave={() => {
@@ -672,7 +1183,7 @@ export function CanvasView() {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onAuxClick={handleAuxClick}
-                onContextMenu={(e) => e.preventDefault()}
+                onContextMenu={handleCanvasContextMenu}
                 onMouseLeave={handleMouseLeave}
               />
               <canvas
@@ -691,7 +1202,8 @@ export function CanvasView() {
                   canvasLeft={stageLayout.canvasLeft}
                   canvasTop={stageLayout.canvasTop}
                   zoom={zoom}
-                  isActive={layer.id === activeLayerId}
+                  isActive={layer.id === activeReferenceLayerId}
+                  onContextMenuRequest={openReferenceContextMenu}
                 />
               );
             })}
@@ -711,6 +1223,9 @@ export function CanvasView() {
                 className="block"
                 style={{ imageRendering: "pixelated" }}
               />
+              {boundsLabelRect && (
+                <CanvasBoundsLabel rect={boundsLabelRect} zoom={zoom} />
+              )}
             </div>
           </div>
         )}
@@ -721,9 +1236,23 @@ export function CanvasView() {
           <p className="text-sm text-zinc-300">正在截图...</p>
         </div>
       )}
+      {brushSizeHint && <CanvasBrushSizeHint hint={brushSizeHint} />}
+      {mousePositionOverlay && (
+        <>
+          <CanvasMousePositionGridHighlight hint={mousePositionOverlay} />
+          <CanvasMousePositionHint hint={mousePositionOverlay} />
+        </>
+      )}
       <NavigatorPanel />
       <FloatingColorPickerPanel />
       <ReferenceCropModal />
+      {referenceContextMenu && referenceContextMenuItems.length > 0 && (
+        <ContextMenu
+          position={{ x: referenceContextMenu.x, y: referenceContextMenu.y }}
+          items={referenceContextMenuItems}
+          onClose={closeReferenceContextMenu}
+        />
+      )}
     </div>
   );
 }

@@ -6,10 +6,9 @@ import { cloneFloatingSelection } from "@/domain/selection/FloatingSelection";
 import type { SelectionState } from "@/domain/selection/SelectionState";
 import { createSelectionState, withFloating } from "@/domain/selection/SelectionState";
 import { createEmptyMask } from "@/domain/selection/SelectionMask";
-import {
-  clearMaskedPixels,
-  extractMaskedRegionAsGrid,
-} from "@/domain/selection/SelectionMaskOperations";
+import { extractMaskedRegionAsGrid } from "@/domain/selection/SelectionMaskOperations";
+
+const PASTE_NUDGE = 8;
 
 export function floatingToPixelGrid(floating: FloatingSelection): PixelGrid {
   return floating.pixels.clone();
@@ -62,18 +61,10 @@ export async function copySelectionToClipboard(
     pixels: region,
     offset: { x: bounds.x, y: bounds.y },
     originInLayer: { x: bounds.x, y: bounds.y },
+    source: "layer",
   };
 
   return copyFloatingToClipboard(clipboard, floating);
-}
-
-export function cutSelectionPixels(
-  grid: PixelGrid,
-  state: SelectionState,
-): SelectionState {
-  if (state.floating) return state;
-  clearMaskedPixels(grid, state.mask);
-  return state;
 }
 
 export function createSelectionFromFloating(
@@ -102,6 +93,20 @@ export function imageDataToPixelGrid(imageData: ImageData): PixelGrid {
   return PG.fromRgba(imageData.width, imageData.height, imageData.data);
 }
 
+function nudgePasteOffset(
+  offset: { x: number; y: number },
+  canvasWidth: number,
+  canvasHeight: number,
+  pixelsWidth: number,
+  pixelsHeight: number,
+): { x: number; y: number } {
+  let x = offset.x + PASTE_NUDGE;
+  let y = offset.y + PASTE_NUDGE;
+  if (x + pixelsWidth > canvasWidth) x = Math.max(0, offset.x - PASTE_NUDGE);
+  if (y + pixelsHeight > canvasHeight) y = Math.max(0, offset.y - PASTE_NUDGE);
+  return { x, y };
+}
+
 export async function pasteFromClipboard(
   clipboard: IClipboardService,
   canvasWidth: number,
@@ -109,27 +114,35 @@ export async function pasteFromClipboard(
   internalClipboard: FloatingSelection | null,
 ): Promise<SelectionState | null> {
   if (internalClipboard) {
-    return createSelectionFromFloating(
-      {
-        ...cloneFloatingSelection(internalClipboard),
-        offset: { ...internalClipboard.offset },
-      },
+    const nudgedOffset = nudgePasteOffset(
+      internalClipboard.offset,
       canvasWidth,
       canvasHeight,
+      internalClipboard.pixels.width,
+      internalClipboard.pixels.height,
     );
+    const floating: FloatingSelection = {
+      ...cloneFloatingSelection(internalClipboard),
+      offset: nudgedOffset,
+      originInLayer: { ...nudgedOffset },
+      source: "paste",
+    };
+    return createSelectionFromFloating(floating, canvasWidth, canvasHeight);
   }
 
   const imageData = await clipboard.readImage();
   if (!imageData) return null;
 
   const pixels = imageDataToPixelGrid(imageData);
+  const offset = {
+    x: Math.floor((canvasWidth - pixels.width) / 2),
+    y: Math.floor((canvasHeight - pixels.height) / 2),
+  };
   const floating: FloatingSelection = {
     pixels,
-    offset: {
-      x: Math.floor((canvasWidth - pixels.width) / 2),
-      y: Math.floor((canvasHeight - pixels.height) / 2),
-    },
-    originInLayer: { x: 0, y: 0 },
+    offset,
+    originInLayer: { ...offset },
+    source: "paste",
   };
 
   return createSelectionFromFloating(floating, canvasWidth, canvasHeight);

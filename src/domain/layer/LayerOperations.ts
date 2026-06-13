@@ -106,12 +106,58 @@ export function resolveActiveLayerAfterRemoval(
   removedId: string,
   currentActiveId: string,
 ): string {
-  if (currentActiveId !== removedId) return currentActiveId;
-  const removedIndex = layers.findIndex((l) => l.id === removedId);
-  const remaining = layers.filter((l) => l.id !== removedId);
+  return resolveActiveLayerOfTypeAfterRemoval(
+    layers,
+    removedId,
+    currentActiveId,
+    "drawing",
+  );
+}
+
+export function resolveActiveReferenceLayerAfterRemoval(
+  layers: Layer[],
+  removedId: string,
+  currentActiveId: string | null,
+): string | null {
+  if (!currentActiveId) return null;
+  return resolveActiveLayerOfTypeAfterRemoval(
+    layers,
+    removedId,
+    currentActiveId,
+    "reference",
+  );
+}
+
+function resolveActiveLayerOfTypeAfterRemoval(
+  layers: Layer[],
+  removedId: string,
+  currentActiveId: string,
+  type: LayerType,
+): string {
+  if (currentActiveId !== removedId) {
+    const current = layers.find((layer) => layer.id === currentActiveId);
+    if (current?.type === type) return currentActiveId;
+  }
+
+  const remaining = layers.filter((layer) => layer.type === type && layer.id !== removedId);
   if (remaining.length === 0) return currentActiveId;
-  const nextIndex = Math.min(removedIndex, remaining.length - 1);
-  return remaining[nextIndex].id;
+
+  const removedIndex = layers.findIndex((layer) => layer.id === removedId);
+  for (let index = removedIndex; index >= 0; index -= 1) {
+    const candidate = layers[index];
+    if (candidate?.type === type && candidate.id !== removedId) {
+      return candidate.id;
+    }
+  }
+
+  for (let index = removedIndex + 1; index < layers.length; index += 1) {
+    const candidate = layers[index];
+    if (candidate?.type === type && candidate.id !== removedId) {
+      return candidate.id;
+    }
+  }
+
+  return remaining[0].id;
 }
 
 export function getFirstReferenceLayer(

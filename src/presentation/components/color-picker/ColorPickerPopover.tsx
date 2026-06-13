@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowsPointingOutIcon } from "@heroicons/react/24/outline";
 import { toHexAlpha, type PixelColor } from "@/domain/canvas/PixelColor";
+import {
+  COLOR_PICKER_HEADER_HEIGHT,
+  getDefaultColorPickerPanelWidth,
+  getEstimatedColorPickerPanelHeight,
+} from "@/domain/color/ColorPickerLayout";
 import { useAppStore, type ColorSlot } from "@/presentation/stores/appStore";
+import { ColorPickerHeader } from "./ColorPickerHeader";
 import { ColorPickerPanel } from "./ColorPickerPanel";
 
 interface ColorPickerPopoverProps {
@@ -14,11 +19,28 @@ interface ColorPickerPopoverProps {
   onClose: () => void;
 }
 
-const PANEL_WIDTH = 240;
-const PANEL_HEIGHT = 460;
-const HEADER_HEIGHT = 28;
 const GAP = 8;
-const TOTAL_HEIGHT = PANEL_HEIGHT + HEADER_HEIGHT;
+
+function clampPopoverPosition(
+  left: number,
+  top: number,
+  width: number,
+  height: number,
+): { left: number; top: number } {
+  let nextLeft = left;
+  let nextTop = top;
+
+  if (nextLeft + width > window.innerWidth - GAP) {
+    nextLeft = Math.max(GAP, window.innerWidth - width - GAP);
+  }
+  if (nextTop + height > window.innerHeight - GAP) {
+    nextTop = Math.max(GAP, window.innerHeight - height - GAP);
+  }
+  if (nextTop < GAP) nextTop = GAP;
+  if (nextLeft < GAP) nextLeft = GAP;
+
+  return { left: nextLeft, top: nextTop };
+}
 
 function buildTransparentSwatch(color: PixelColor): string {
   return `
@@ -36,34 +58,54 @@ export function ColorPickerPopover({
   onClose,
 }: ColorPickerPopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const hasPositionedRef = useRef(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const detachColorPicker = useAppStore((s) => s.detachColorPicker);
   const viewportContainer = useAppStore((s) => s.viewportContainer);
+  const orientation = useAppStore((s) => s.colorPickerLayoutOrientation);
+  const panelWidth = getDefaultColorPickerPanelWidth(orientation);
 
-  const updatePosition = useCallback(() => {
+  const anchorToPosition = useCallback(() => {
     const anchor = anchorRef.current;
     if (!anchor) return;
 
     const rect = anchor.getBoundingClientRect();
+    const estimatedHeight =
+      getEstimatedColorPickerPanelHeight(orientation) + COLOR_PICKER_HEADER_HEIGHT;
     let left = rect.right + GAP;
     let top = rect.top;
 
-    if (left + PANEL_WIDTH > window.innerWidth - GAP) {
-      left = rect.left - PANEL_WIDTH - GAP;
+    if (left + panelWidth > window.innerWidth - GAP) {
+      left = rect.left - panelWidth - GAP;
     }
-    if (top + TOTAL_HEIGHT > window.innerHeight - GAP) {
-      top = window.innerHeight - TOTAL_HEIGHT - GAP;
-    }
-    if (top < GAP) top = GAP;
-    if (left < GAP) left = GAP;
 
-    setPosition({ top, left });
-  }, [anchorRef]);
+    setPosition(clampPopoverPosition(left, top, panelWidth, estimatedHeight));
+  }, [anchorRef, orientation, panelWidth]);
+
+  const clampCurrentPosition = useCallback(() => {
+    const panel = panelRef.current;
+    const width = panel?.offsetWidth ?? panelWidth;
+    const height =
+      panel?.offsetHeight ??
+      getEstimatedColorPickerPanelHeight(orientation) + COLOR_PICKER_HEADER_HEIGHT;
+    setPosition((prev) => clampPopoverPosition(prev.left, prev.top, width, height));
+  }, [orientation, panelWidth]);
 
   useLayoutEffect(() => {
-    if (!open) return;
-    updatePosition();
-  }, [open, updatePosition]);
+    if (!open) {
+      hasPositionedRef.current = false;
+      return;
+    }
+    if (!hasPositionedRef.current) {
+      anchorToPosition();
+      hasPositionedRef.current = true;
+    }
+  }, [open, anchorToPosition]);
+
+  useLayoutEffect(() => {
+    if (!open || !hasPositionedRef.current) return;
+    clampCurrentPosition();
+  }, [open, orientation, clampCurrentPosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -81,16 +123,16 @@ export function ColorPickerPopover({
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", clampCurrentPosition);
+    window.addEventListener("scroll", clampCurrentPosition, true);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", clampCurrentPosition);
+      window.removeEventListener("scroll", clampCurrentPosition, true);
     };
-  }, [anchorRef, onClose, open, updatePosition]);
+  }, [anchorRef, clampCurrentPosition, onClose, open]);
 
   const handleDetach = () => {
     const panel = panelRef.current;
@@ -104,7 +146,7 @@ export function ColorPickerPopover({
           x: panelRect.left - containerRect.left,
           y: panelRect.top - containerRect.top,
         },
-        panelRect.height,
+        { width: panelRect.width, height: panelRect.height },
       );
     } else {
       detachColorPicker(activeSlot, { x: 16, y: 16 });
@@ -120,24 +162,14 @@ export function ColorPickerPopover({
       role="dialog"
       aria-label="色彩选择器"
       className="fixed z-50 flex flex-col overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl"
-      style={{ top: position.top, left: position.left, width: PANEL_WIDTH }}
+      style={{ top: position.top, left: position.left, width: panelWidth }}
     >
-      <div className="flex items-center justify-between border-b border-zinc-700 bg-zinc-800 px-2 text-xs text-zinc-300"
-        style={{ height: HEADER_HEIGHT }}
-      >
-        <span>色彩选择器</span>
-        <button
-          type="button"
-          title="悬浮"
-          aria-label="切换为悬浮窗口"
-          onClick={handleDetach}
-          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-zinc-400 transition hover:bg-zinc-700 hover:text-zinc-100"
-        >
-          <ArrowsPointingOutIcon className="h-3.5 w-3.5" />
-          <span>悬浮</span>
-        </button>
-      </div>
-      <ColorPickerPanel currentColor={currentColor} onChange={onChange} />
+      <ColorPickerHeader variant="popover" onDetach={handleDetach} />
+      <ColorPickerPanel
+        currentColor={currentColor}
+        onChange={onChange}
+        orientation={orientation}
+      />
     </div>,
     document.body,
   );

@@ -12,7 +12,8 @@ import {
   resizeAllLayers,
 } from "../layer/LayerOperations";
 import { createCanvasSize } from "../canvas/CanvasSize";
-import { isDrawingLayer } from "../layer/LayerTypeGuards";
+import { isDrawingLayer, isReferenceLayer } from "../layer/LayerTypeGuards";
+import type { ReferenceLayer } from "../layer/Layer";
 import {
   setReferenceImage,
 } from "../layer/ReferenceLayerOperations";
@@ -31,6 +32,7 @@ export interface ProjectCanvas {
   scaleFactor: number;
   layers: Layer[];
   activeLayerId: string;
+  activeReferenceLayerId: string | null;
 }
 
 export interface Project {
@@ -77,6 +79,7 @@ export function createEmptyProject(name?: string): Project {
   const height = 64;
   const layers = createDefaultLayers(width, height);
   const drawingLayer = layers.find((l) => l.type === "drawing")!;
+  const referenceLayer = layers.find((l) => l.type === "reference")!;
 
   return {
     id: crypto.randomUUID(),
@@ -90,6 +93,7 @@ export function createEmptyProject(name?: string): Project {
       scaleFactor: 1,
       layers,
       activeLayerId: drawingLayer.id,
+      activeReferenceLayerId: referenceLayer.id,
     },
     palette: Palette.empty(),
     notes: [],
@@ -141,6 +145,7 @@ export function createProjectFromImage(
       scaleFactor,
       layers: [reference, drawing],
       activeLayerId: drawing.id,
+      activeReferenceLayerId: reference.id,
     },
     palette,
     notes: [],
@@ -174,6 +179,7 @@ export function createProjectFromPixelGrid(
       scaleFactor,
       layers: [reference, drawing],
       activeLayerId: drawing.id,
+      activeReferenceLayerId: reference.id,
     },
     palette,
     notes: [],
@@ -191,10 +197,17 @@ export function getLayerById(project: Project, layerId: string): Layer | undefin
 
 export function getActiveLayer(project: Project): Layer {
   const active = getLayerById(project, project.canvas.activeLayerId);
-  if (active) return active;
+  if (active && isDrawingLayer(active)) return active;
   const drawing = project.canvas.layers.find((l) => l.type === "drawing");
   if (drawing) return drawing;
   return project.canvas.layers[0];
+}
+
+export function getActiveReferenceLayer(project: Project): ReferenceLayer | null {
+  const { activeReferenceLayerId, layers } = project.canvas;
+  if (!activeReferenceLayerId) return null;
+  const active = layers.find((l) => l.id === activeReferenceLayerId);
+  return active && isReferenceLayer(active) ? active : null;
 }
 
 export function getActiveLayerGrid(project: Project): PixelGrid {
@@ -220,6 +233,16 @@ export function withActiveLayerId(project: Project, layerId: string): Project {
   return {
     ...project,
     canvas: { ...project.canvas, activeLayerId: layerId },
+  };
+}
+
+export function withActiveReferenceLayerId(
+  project: Project,
+  layerId: string | null,
+): Project {
+  return {
+    ...project,
+    canvas: { ...project.canvas, activeReferenceLayerId: layerId },
   };
 }
 
@@ -271,7 +294,19 @@ export function addDrawingLayerToProject(project: Project, name?: string): Proje
 
 export function addReferenceLayerToProject(project: Project, name?: string): Project {
   const layers = addReferenceLayerOp(project.canvas.layers, name);
-  return touchProject(withLayers(project, layers));
+  const newLayer = layers.find(
+    (layer) =>
+      layer.type === "reference" &&
+      !project.canvas.layers.some((existing) => existing.id === layer.id),
+  );
+  return touchProject({
+    ...withLayers(project, layers),
+    canvas: {
+      ...project.canvas,
+      layers,
+      activeReferenceLayerId: newLayer?.id ?? project.canvas.activeReferenceLayerId,
+    },
+  });
 }
 
 export function touchProject(project: Project): Project {

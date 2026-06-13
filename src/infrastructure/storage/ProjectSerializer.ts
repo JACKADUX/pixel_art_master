@@ -49,6 +49,7 @@ interface SerializedCanvasV3 {
   height: number;
   scaleFactor: number;
   activeLayerId: string;
+  activeReferenceLayerId?: string | null;
   layers: SerializedLayerV3[];
 }
 
@@ -224,8 +225,24 @@ function migrateV1ToV2Layers(data: SerializedProjectV1): SerializedLayerV2[] {
 }
 
 function resolveActiveLayerId(layers: Layer[], preferredId: string): string {
-  if (layers.some((l) => l.id === preferredId)) return preferredId;
-  return layers.find((l) => l.type === "drawing")?.id ?? layers[0]?.id ?? preferredId;
+  const preferred = layers.find((layer) => layer.id === preferredId);
+  if (preferred?.type === "drawing") return preferredId;
+  return layers.find((layer) => layer.type === "drawing")?.id ?? preferredId;
+}
+
+function resolveActiveReferenceLayerId(
+  layers: Layer[],
+  preferredId: string | null | undefined,
+  legacyActiveLayerId?: string,
+): string | null {
+  if (preferredId && layers.some((layer) => layer.id === preferredId && layer.type === "reference")) {
+    return preferredId;
+  }
+
+  const legacy = layers.find((layer) => layer.id === legacyActiveLayerId);
+  if (legacy?.type === "reference") return legacy.id;
+
+  return layers.find((layer) => layer.type === "reference")?.id ?? null;
 }
 
 function buildProjectFromLayers(
@@ -239,6 +256,7 @@ function buildProjectFromLayers(
     canvasHeight: number;
     scaleFactor: number;
     activeLayerId: string;
+    activeReferenceLayerId?: string | null;
     palette: Palette;
     notes: Note[];
     grid: GridConfig;
@@ -258,6 +276,11 @@ function buildProjectFromLayers(
       scaleFactor: meta.scaleFactor,
       layers: normalizedLayers,
       activeLayerId: resolveActiveLayerId(normalizedLayers, meta.activeLayerId),
+      activeReferenceLayerId: resolveActiveReferenceLayerId(
+        normalizedLayers,
+        meta.activeReferenceLayerId,
+        meta.activeLayerId,
+      ),
     },
     palette: meta.palette,
     notes: meta.notes,
@@ -277,6 +300,7 @@ export function serializeProject(project: Project): string {
       height: project.canvas.height,
       scaleFactor: project.canvas.scaleFactor,
       activeLayerId: project.canvas.activeLayerId,
+      activeReferenceLayerId: project.canvas.activeReferenceLayerId,
       layers: project.canvas.layers.map((l) =>
         serializeLayerV3(l, project.canvas.width, project.canvas.height),
       ),
@@ -331,6 +355,7 @@ export function deserializeProject(json: string, filePath: string): Project {
         canvasHeight: v3.canvas.height,
         scaleFactor: v3.canvas.scaleFactor,
         activeLayerId: v3.canvas.activeLayerId,
+        activeReferenceLayerId: v3.canvas.activeReferenceLayerId,
         palette: Palette.fromJSON(v3.palette),
         notes: v3.notes ?? [],
         grid: grid,
@@ -340,11 +365,12 @@ export function deserializeProject(json: string, filePath: string): Project {
   }
 
   let v2Canvas: SerializedCanvasV2;
-  let meta: Omit<Parameters<typeof buildProjectFromLayers>[0], "canvasWidth" | "canvasHeight" | "scaleFactor" | "activeLayerId"> & {
+  let meta: Omit<Parameters<typeof buildProjectFromLayers>[0], "canvasWidth" | "canvasHeight" | "scaleFactor" | "activeLayerId" | "activeReferenceLayerId"> & {
     canvasWidth: number;
     canvasHeight: number;
     scaleFactor: number;
     activeLayerId: string;
+    activeReferenceLayerId?: string | null;
   };
 
   if (!data.version || data.version === 1) {

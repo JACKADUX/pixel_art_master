@@ -1,6 +1,6 @@
 import { useAppStore } from "../stores/appStore";
 
-import { LayersPanel } from "./LayersPanel";
+import { LayersSection } from "./LayersSection";
 
 import { NotesPanel } from "./NotesPanel";
 
@@ -15,7 +15,7 @@ export function RightPanel() {
 
   return (
     <ResizableSidebar>
-      <aside className="flex h-full min-h-0 flex-1 flex-col border-l border-zinc-700 bg-zinc-900">
+      <aside className="flex h-full min-h-0 min-w-0 flex-1 flex-col border-l border-zinc-700 bg-zinc-900">
         <VerticalSplitPane
         top={
           <>
@@ -43,13 +43,13 @@ export function RightPanel() {
                 笔记
               </button>
             </div>
-            <div className="flex min-h-0 flex-1 overflow-hidden">
+            <div className="flex min-h-0 min-w-0 w-full flex-1 overflow-hidden">
               {rightPanelTab === "palette" && <PalettePanel />}
               {rightPanelTab === "notes" && <NotesPanel />}
             </div>
           </>
         }
-        bottom={<LayersPanel />}
+        bottom={<LayersSection />}
         />
       </aside>
     </ResizableSidebar>

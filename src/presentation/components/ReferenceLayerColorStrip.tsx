@@ -43,6 +43,7 @@ export function ReferenceLayerColorStrip({
               onClick={() => onSelect("foreground", entry.color)}
               onContextMenu={(e) => {
                 e.preventDefault();
+                e.stopPropagation();
                 onSelect("background", entry.color);
               }}
               className={`h-3.5 w-3.5 shrink-0 rounded-sm border transition hover:ring-1 hover:ring-zinc-500/50 ${

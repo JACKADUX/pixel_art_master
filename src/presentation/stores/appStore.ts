@@ -6,6 +6,8 @@ import {
 
   applyToolPointerUp,
 
+  applyBrushStraightLine,
+
 } from "@/application/use-cases/DrawStroke";
 
 import {
@@ -16,7 +18,9 @@ import {
 
 import {
   clearSelectionPixels,
+  createFloatingFromCut,
   deselectSelection,
+  getEffectiveSelectionMask,
   invertSelection,
   nudgeSelection,
   selectAll,
@@ -25,7 +29,6 @@ import {
 
 import {
   copySelectionToClipboard,
-  cutSelectionPixels,
   pasteFromClipboard,
 } from "@/application/use-cases/ClipboardUseCases";
 
@@ -43,7 +46,7 @@ import {
   clampMagicWandTolerance,
 } from "@/domain/tool/ToolType";
 
-import { webClipboardService } from "@/infrastructure/clipboard/WebClipboardService";
+import { clipboardService } from "@/infrastructure/clipboard/createClipboardService";
 
 import {
   cancelActiveFloating,
@@ -53,6 +56,7 @@ import {
   handleSelectPointerUp,
   handleTransformPointerDown,
   handleTransformPointerMove,
+  handleTransformPointerUp,
   flipFloatingHorizontal,
   flipFloatingVertical,
   rotateFloatingSelection90,
@@ -88,6 +92,7 @@ import {
   reorderLayerInProject,
 
   setActiveLayer,
+  setActiveReferenceLayer,
 
   setReferenceCrop as setReferenceCropInProject,
 
@@ -134,7 +139,14 @@ import {
 import { saveProject } from "@/application/use-cases/SaveProject";
 import { resizeCanvas } from "@/application/use-cases/ResizeCanvas";
 
+import type { CanvasDisplayMode } from "@/domain/color/CanvasDisplayMode";
 import type { ColorMode } from "@/domain/color/ColorMode";
+import {
+  COLOR_PICKER_VERTICAL_WIDTH,
+  getDefaultColorPickerPanelWidth,
+  getEstimatedColorPickerPanelHeight,
+  type ColorPickerLayoutOrientation,
+} from "@/domain/color/ColorPickerLayout";
 import { rgba, TRANSPARENT, type PixelColor } from "@/domain/canvas/PixelColor";
 import {
   DEFAULT_COLOR_PICKER_PANEL_HEIGHT,
@@ -152,6 +164,7 @@ import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 import {
 
   getActiveLayer,
+  getActiveReferenceLayer,
 
   createEmptyProject,
 
@@ -232,7 +245,6 @@ const NAVIGATOR_MIN_HEIGHT = 80;
 const NAVIGATOR_DEFAULT_WIDTH = DEFAULT_NAVIGATOR_WIDTH;
 const NAVIGATOR_DEFAULT_HEIGHT = DEFAULT_NAVIGATOR_HEIGHT;
 
-const COLOR_PICKER_FLOAT_WIDTH = 240;
 const COLOR_PICKER_FLOAT_DEFAULT_HEIGHT = DEFAULT_COLOR_PICKER_PANEL_HEIGHT;
 
 const SIDEBAR_MIN_WIDTH = 180;
@@ -269,6 +281,7 @@ export interface FloatingColorPickerState {
   visible: boolean;
   position: { x: number; y: number };
   activeSlot: ColorSlot;
+  panelWidth: number;
   panelHeight: number;
 }
 
@@ -298,15 +311,21 @@ interface AppState {
 
   drawingColor: PixelColor | null;
 
+  brushLineAnchor: Point | null;
+
   manualScaleOverride: number | null;
 
   detectedScale: number;
 
   rightPanelTab: "palette" | "notes";
 
+  layersPanelTab: "drawing" | "reference";
+
   paletteViewMode: "grid" | "oklabMap";
 
   colorPickerMode: ColorMode;
+
+  colorPickerLayoutOrientation: ColorPickerLayoutOrientation;
 
   sidebarWidth: number;
 
@@ -337,6 +356,10 @@ interface AppState {
   projectManagerError: string | null;
 
   navigator: NavigatorState;
+
+  mousePositionOverlayVisible: boolean;
+
+  canvasDisplayMode: CanvasDisplayMode;
 
   floatingColorPicker: FloatingColorPickerState;
 
@@ -372,9 +395,9 @@ interface AppState {
 
   openProject: () => Promise<void>;
 
-  saveCurrentProject: () => Promise<void>;
+  saveCurrentProject: () => Promise<boolean>;
 
-  saveProjectAs: () => Promise<void>;
+  saveProjectAs: () => Promise<boolean>;
 
   setActiveTool: (tool: ToolType) => void;
 
@@ -392,15 +415,19 @@ interface AppState {
 
   toggleNavigator: () => void;
 
+  toggleMousePositionOverlay: () => void;
+
+  toggleCanvasDisplayMode: () => void;
+
   detachColorPicker: (
     slot: ColorSlot,
     position: { x: number; y: number },
-    panelHeight?: number,
+    panelSize?: { width: number; height: number },
   ) => void;
 
   setFloatingColorPickerPosition: (x: number, y: number) => void;
 
-  setFloatingColorPickerPanelHeight: (height: number) => void;
+  setFloatingColorPickerPanelSize: (width: number, height: number) => void;
 
   setFloatingColorPickerSlot: (slot: ColorSlot) => void;
 
@@ -454,19 +481,19 @@ interface AppState {
   pointerDown: (
     point: Point,
     button: DrawingButton,
-    modifiers?: { shiftKey: boolean; altKey: boolean },
+    modifiers?: { shiftKey: boolean; altKey: boolean; spaceKey: boolean },
   ) => void;
 
   pointerMove: (
     point: Point,
     button: DrawingButton,
-    modifiers?: { shiftKey: boolean; altKey: boolean },
+    modifiers?: { shiftKey: boolean; altKey: boolean; spaceKey: boolean },
   ) => void;
 
   pointerUp: (
     point: Point,
     button: DrawingButton,
-    modifiers?: { shiftKey: boolean; altKey: boolean },
+    modifiers?: { shiftKey: boolean; altKey: boolean; spaceKey: boolean },
   ) => void;
 
   undo: () => void;
@@ -507,9 +534,13 @@ interface AppState {
 
   setRightPanelTab: (tab: "palette" | "notes") => void;
 
+  setLayersPanelTab: (tab: "drawing" | "reference") => void;
+
   setPaletteViewMode: (mode: "grid" | "oklabMap") => void;
 
   setColorPickerMode: (mode: ColorMode) => void;
+
+  setColorPickerLayoutOrientation: (orientation: ColorPickerLayoutOrientation) => void;
 
   setSidebarWidth: (width: number) => void;
 
@@ -522,6 +553,8 @@ interface AppState {
   importReferenceLayerColors: (scope: ReferenceColorImportScope) => Promise<void>;
 
   setActiveLayer: (layerId: string) => void;
+
+  setActiveReferenceLayer: (layerId: string) => void;
 
   toggleLayerVisibility: (layerId: string) => void;
 
@@ -639,15 +672,21 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   drawingColor: null,
 
+  brushLineAnchor: null,
+
   manualScaleOverride: null,
 
   detectedScale: 1,
 
   rightPanelTab: "palette",
 
+  layersPanelTab: "drawing",
+
   paletteViewMode: "grid",
 
   colorPickerMode: "hsl",
+
+  colorPickerLayoutOrientation: "vertical",
 
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
 
@@ -685,10 +724,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     previewPan: { x: 0, y: 0 },
   },
 
+  mousePositionOverlayVisible: false,
+
+  canvasDisplayMode: "normal",
+
   floatingColorPicker: {
     visible: false,
     position: { x: 16, y: 16 },
     activeSlot: "foreground",
+    panelWidth: COLOR_PICKER_VERTICAL_WIDTH,
     panelHeight: COLOR_PICKER_FLOAT_DEFAULT_HEIGHT,
   },
 
@@ -746,6 +790,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         colorPickerMode: prefs.colorPickerMode,
 
+        colorPickerLayoutOrientation: prefs.colorPickerLayoutOrientation,
+
         sidebarWidth: prefs.sidebarWidth,
 
         splitPaneRatio: prefs.splitPaneRatio,
@@ -774,11 +820,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
           position: prefs.floatingColorPickerLayout.position,
 
+          panelWidth: prefs.floatingColorPickerLayout.panelWidth,
+
           panelHeight: prefs.floatingColorPickerLayout.panelHeight,
 
           activeSlot: prefs.floatingColorPickerLayout.activeSlot,
 
         },
+
+        mousePositionOverlayVisible: prefs.mousePositionOverlayVisible,
+
+        canvasDisplayMode: prefs.canvasDisplayMode,
 
       });
 
@@ -889,6 +941,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       selectionPreviewRect: null,
 
+      internalClipboard: null,
+
+      brushLineAnchor: null,
+
     });
 
   },
@@ -939,6 +995,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       selectionPreviewRect: null,
 
+      brushLineAnchor: null,
+
     });
 
   },
@@ -949,13 +1007,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const { project } = get();
 
-    if (!project) return;
+    if (!project) return false;
 
     if (project.filePath) {
 
       const saved = await saveProject(projectRepository, project, project.filePath);
 
       set({ project: saved });
+
+      return true;
 
     } else if (projectsWorkspaceStore.getPath()) {
 
@@ -965,9 +1025,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         if (!targetPath) {
 
-          await get().saveProjectAs();
-
-          return;
+          return get().saveProjectAs();
 
         }
 
@@ -975,15 +1033,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         set({ project: saved });
 
+        return true;
+
       } catch {
 
-        await get().saveProjectAs();
+        return get().saveProjectAs();
 
       }
 
     } else {
 
-      await get().saveProjectAs();
+      return get().saveProjectAs();
 
     }
 
@@ -995,7 +1055,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const { project } = get();
 
-    if (!project) return;
+    if (!project) return false;
 
     const defaultPath = await resolveDefaultSavePath(projectsWorkspaceStore, project.name);
 
@@ -1007,11 +1067,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     });
 
-    if (!selected) return;
+    if (!selected) return false;
 
     const saved = await saveProject(projectRepository, project, selected);
 
     set({ project: saved });
+
+    return true;
 
   },
 
@@ -1028,7 +1090,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ selection: committedSelection });
       }
     }
-    set({ activeTool: tool });
+    set({ activeTool: tool, brushLineAnchor: tool === "brush" ? get().brushLineAnchor : null });
   },
 
 
@@ -1076,6 +1138,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
 
 
+
+  toggleMousePositionOverlay: () =>
+    set((s) => ({ mousePositionOverlayVisible: !s.mousePositionOverlayVisible })),
+
+  toggleCanvasDisplayMode: () =>
+    set((s) => ({
+      canvasDisplayMode: s.canvasDisplayMode === "oklabLightness" ? "normal" : "oklabLightness",
+    })),
 
   toggleNavigator: () =>
 
@@ -1141,14 +1211,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  detachColorPicker: (slot, position, panelHeight) =>
+  detachColorPicker: (slot, position, panelSize) =>
     set((s) => {
       const container = s.viewportContainer;
-      const height = panelHeight ?? COLOR_PICKER_FLOAT_DEFAULT_HEIGHT;
+      const width =
+        panelSize?.width ??
+        getDefaultColorPickerPanelWidth(s.colorPickerLayoutOrientation);
+      const height =
+        panelSize?.height ??
+        getEstimatedColorPickerPanelHeight(s.colorPickerLayoutOrientation);
       const clamped = clampPanelPosition(
         position.x,
         position.y,
-        COLOR_PICKER_FLOAT_WIDTH,
+        width,
         height,
         container?.clientWidth ?? null,
         container?.clientHeight ?? null,
@@ -1158,6 +1233,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           visible: true,
           activeSlot: slot,
           position: clamped,
+          panelWidth: width,
           panelHeight: height,
         },
       };
@@ -1169,7 +1245,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const position = clampPanelPosition(
         x,
         y,
-        COLOR_PICKER_FLOAT_WIDTH,
+        s.floatingColorPicker.panelWidth,
         s.floatingColorPicker.panelHeight,
         container?.clientWidth ?? null,
         container?.clientHeight ?? null,
@@ -1182,13 +1258,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
-  setFloatingColorPickerPanelHeight: (height) =>
+  setFloatingColorPickerPanelSize: (width, height) =>
     set((s) => {
       const container = s.viewportContainer;
       const position = clampPanelPosition(
         s.floatingColorPicker.position.x,
         s.floatingColorPicker.position.y,
-        COLOR_PICKER_FLOAT_WIDTH,
+        width,
         height,
         container?.clientWidth ?? null,
         container?.clientHeight ?? null,
@@ -1196,6 +1272,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         floatingColorPicker: {
           ...s.floatingColorPicker,
+          panelWidth: width,
           panelHeight: height,
           position,
         },
@@ -1789,7 +1866,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  pointerDown: (point, button, modifiers = { shiftKey: false, altKey: false }) => {
+  pointerDown: (point, button, modifiers = { shiftKey: false, altKey: false, spaceKey: false }) => {
 
     const {
       project,
@@ -1799,6 +1876,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       toolSettings,
       selection,
       historyStack,
+      brushLineAnchor,
     } = get();
 
     if (!project) return;
@@ -1840,6 +1918,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         point,
         selection,
         historyStack,
+        transformMode: toolSettings.transformMode,
       });
       if (result.grid) get().syncActiveLayer(result.grid);
       set({
@@ -1853,13 +1932,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
+    const selectionMask =
+      selection && !isSelectionEmpty(selection) ? selection.mask : null;
+
+    if (activeTool === "brush" && modifiers.shiftKey && brushLineAnchor) {
+      pushHistory(historyStack, project, selection);
+      const selectedColor = button === "primary" ? foregroundColor : backgroundColor;
+      applyBrushStraightLine(
+        grid,
+        selectedColor,
+        toolSettings,
+        brushLineAnchor,
+        point,
+        selectionMask,
+      );
+      get().syncActiveLayer(grid);
+      set({ brushLineAnchor: point });
+      return;
+    }
+
     pushHistory(historyStack, project, selection);
 
     const selectedColor = button === "primary" ? foregroundColor : backgroundColor;
     const color = activeTool === "eraser" ? TRANSPARENT : selectedColor;
-
-    const selectionMask =
-      selection && !isSelectionEmpty(selection) ? selection.mask : null;
 
     if (!isDrawingToolType(activeTool)) return;
 
@@ -1886,7 +1981,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  pointerMove: (point, button, modifiers = { shiftKey: false, altKey: false }) => {
+  pointerMove: (point, button, modifiers = { shiftKey: false, altKey: false, spaceKey: false }) => {
 
     const {
       project,
@@ -1917,6 +2012,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectionDrag,
         lassoPoints,
         grid,
+        modifiers,
+        historyStack: get().historyStack,
       });
       if (result.grid) get().syncActiveLayer(result.grid);
       set({
@@ -1924,6 +2021,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectionDrag: result.selectionDrag,
         lassoPoints: result.lassoPoints,
         selectionPreviewRect: result.selectionPreviewRect,
+        lastPoint: point,
       });
       return;
     }
@@ -1935,6 +2033,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         selectionDrag,
         grid,
         shiftKey: modifiers.shiftKey,
+        altKey: modifiers.altKey,
       });
       set({
         selection: result.selection,
@@ -1947,8 +2046,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (activeTool === "fill") return;
 
-    const selectionMask =
-      selection && !isSelectionEmpty(selection) ? selection.mask : null;
+    const selectionMask = getEffectiveSelectionMask(selection);
 
     if (!isDrawingToolType(activeTool)) return;
 
@@ -1970,7 +2068,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 
 
-  pointerUp: (point, button, modifiers = { shiftKey: false, altKey: false }) => {
+  pointerUp: (point, button, modifiers = { shiftKey: false, altKey: false, spaceKey: false }) => {
 
     const {
       project,
@@ -1978,6 +2076,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       toolSettings,
       isDrawing,
       drawStart,
+      lastPoint,
       drawingButton,
       drawingColor,
       selection,
@@ -2005,6 +2104,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         historyStack,
         grid,
       });
+      if (result.grid) get().syncActiveLayer(result.grid);
       set({
         selection: result.selection,
         selectionDrag: result.selectionDrag,
@@ -2019,14 +2119,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     if (activeTool === "transform" && selectionDrag) {
+      const result = handleTransformPointerUp({
+        grid,
+        selection,
+        selectionDrag,
+      });
+      if (result.grid) get().syncActiveLayer(result.grid);
       set({
-        selectionDrag: null,
+        selection: result.selection,
+        selectionDrag: result.selectionDrag,
         isDrawing: false,
         drawingButton: null,
         drawStart: null,
         lastPoint: null,
       });
-      get().syncActiveLayer(grid);
       return;
     }
 
@@ -2059,6 +2165,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       lastPoint: null,
       drawingButton: null,
       drawingColor: null,
+      ...(activeTool === "brush" && lastPoint ? { brushLineAnchor: lastPoint } : {}),
     });
 
   },
@@ -2092,6 +2199,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
+      brushLineAnchor: null,
     });
   },
 
@@ -2106,6 +2214,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
+      brushLineAnchor: null,
     });
   },
 
@@ -2125,6 +2234,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   deselectCanvas: () => {
+    const { project, selection } = get();
+    if (selection?.floating && project) {
+      const grid = getActiveLayerGridFromProject(project);
+      if (grid) {
+        const { grid: committedGrid } = commitActiveFloating({ grid, selection });
+        get().syncActiveLayer(committedGrid);
+      }
+    }
     set({
       selection: deselectSelection(),
       selectionDrag: null,
@@ -2134,8 +2251,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   invertCanvasSelection: () => {
-    const { selection } = get();
-    if (!selection) return;
+    const { project, selection, historyStack } = get();
+    if (!project || !selection) return;
+    pushHistory(historyStack, project, selection);
     set({ selection: invertSelection(selection) });
   },
 
@@ -2145,7 +2263,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const grid = getActiveLayerGridFromProject(project);
     if (!grid) return;
     const copied = await copySelectionToClipboard(
-      webClipboardService,
+      clipboardService,
       grid,
       selection,
       internalClipboard,
@@ -2160,16 +2278,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!grid) return;
     pushHistory(historyStack, project, selection);
     const copied = await copySelectionToClipboard(
-      webClipboardService,
+      clipboardService,
       grid,
       selection,
       internalClipboard,
     );
-    cutSelectionPixels(grid, selection);
-    get().syncActiveLayer(grid);
+    const floated = createFloatingFromCut(grid, selection);
+    if (!floated) return;
+    get().syncActiveLayer(floated.grid);
     set({
       internalClipboard: copied ?? internalClipboard,
-      selection: deselectSelection(),
+      selection: floated.selection,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+      activeTool: "select",
     });
   },
 
@@ -2177,8 +2300,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { project, internalClipboard, historyStack, selection } = get();
     if (!project) return;
     pushHistory(historyStack, project, selection);
+    if (selection?.floating) {
+      const grid = getActiveLayerGridFromProject(project);
+      if (grid) {
+        const { grid: committedGrid, selection: committedSelection } =
+          commitActiveFloating({ grid, selection });
+        get().syncActiveLayer(committedGrid);
+        set({ selection: committedSelection });
+      }
+    }
     const pasted = await pasteFromClipboard(
-      webClipboardService,
+      clipboardService,
       project.canvas.width,
       project.canvas.height,
       internalClipboard,
@@ -2222,10 +2354,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     const grid = getActiveLayerGridFromProject(project);
     if (!grid) return;
+    const source = selection.floating.source;
     const { grid: restoredGrid, selection: restoredSelection } =
       cancelActiveFloating({ grid, selection });
     get().syncActiveLayer(restoredGrid);
-    set({ selection: restoredSelection, selectionDrag: null });
+    if (source === "paste") {
+      set({ selection: null, selectionDrag: null });
+    } else {
+      set({ selection: restoredSelection, selectionDrag: null });
+    }
   },
 
   nudgeSelectionBy: (dx, dy) => {
@@ -2258,25 +2395,68 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   flipSelectionHorizontal: () => {
     const { project, selection, historyStack } = get();
-    if (!project || !selection?.floating) return;
+    if (!project || !selection || isSelectionEmpty(selection)) return;
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
     pushHistory(historyStack, project, selection);
-    set({ selection: flipFloatingHorizontal(selection) });
+    let state = selection;
+    if (!state.floating) {
+      state = beginMoveSelection(grid, state);
+      get().syncActiveLayer(grid);
+    }
+    set({ selection: flipFloatingHorizontal(state) });
   },
 
   flipSelectionVertical: () => {
     const { project, selection, historyStack } = get();
-    if (!project || !selection?.floating) return;
+    if (!project || !selection || isSelectionEmpty(selection)) return;
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
     pushHistory(historyStack, project, selection);
-    set({ selection: flipFloatingVertical(selection) });
+    let state = selection;
+    if (!state.floating) {
+      state = beginMoveSelection(grid, state);
+      get().syncActiveLayer(grid);
+    }
+    set({ selection: flipFloatingVertical(state) });
   },
 
 
 
   setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
 
+  setLayersPanelTab: (tab) => set({ layersPanelTab: tab }),
+
   setPaletteViewMode: (mode) => set({ paletteViewMode: mode }),
 
   setColorPickerMode: (mode) => set({ colorPickerMode: mode }),
+
+  setColorPickerLayoutOrientation: (orientation) =>
+    set((s) => {
+      const container = s.viewportContainer;
+      const panelWidth = getDefaultColorPickerPanelWidth(orientation);
+      const panelHeight = getEstimatedColorPickerPanelHeight(orientation);
+      const position = s.floatingColorPicker.visible
+        ? clampPanelPosition(
+            s.floatingColorPicker.position.x,
+            s.floatingColorPicker.position.y,
+            panelWidth,
+            panelHeight,
+            container?.clientWidth ?? null,
+            container?.clientHeight ?? null,
+          )
+        : s.floatingColorPicker.position;
+
+      return {
+        colorPickerLayoutOrientation: orientation,
+        floatingColorPicker: {
+          ...s.floatingColorPicker,
+          panelWidth,
+          panelHeight,
+          position,
+        },
+      };
+    }),
 
   setSidebarWidth: (width) => {
     const viewportMax = Math.floor(window.innerWidth * 0.45);
@@ -2322,9 +2502,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     if (!project) return;
 
-    const activeLayer = getActiveLayer(project);
+    const activeLayer = getActiveReferenceLayer(project);
 
-    if (!isReferenceLayer(activeLayer) || !activeLayer.imageData) return;
+    if (!activeLayer || !activeLayer.imageData) return;
 
     const loadPixels = async (
       layer: typeof activeLayer,
@@ -2364,7 +2544,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
+      brushLineAnchor: null,
     });
+
+  },
+
+
+
+  setActiveReferenceLayer: (layerId) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    set({ project: setActiveReferenceLayer(project, layerId) });
 
   },
 

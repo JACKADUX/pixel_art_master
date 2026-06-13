@@ -1,5 +1,22 @@
+import { collectCircleStampOffsets } from "@/domain/geometry/EllipseFill";
 import type { BrushShape } from "./ToolType";
 import type { Point } from "./ITool";
+
+const circleStampCache = new Map<number, ReadonlyArray<readonly [number, number]>>();
+
+function forEachCachedCircleStampPixel(
+  size: number,
+  callback: (dx: number, dy: number) => void,
+): void {
+  let offsets = circleStampCache.get(size);
+  if (!offsets) {
+    offsets = collectCircleStampOffsets(size);
+    circleStampCache.set(size, offsets);
+  }
+  for (const [dx, dy] of offsets) {
+    callback(dx, dy);
+  }
+}
 
 export function forEachStampPixel(
   center: Point,
@@ -7,12 +24,16 @@ export function forEachStampPixel(
   shape: BrushShape,
   callback: (x: number, y: number) => void,
 ): void {
-  const half = Math.floor(size / 2);
-  const radiusSq = ((size - 1) / 2) ** 2;
+  if (shape === "circle") {
+    forEachCachedCircleStampPixel(size, (dx, dy) => {
+      callback(center.x + dx, center.y + dy);
+    });
+    return;
+  }
 
+  const half = Math.floor(size / 2);
   for (let dy = -half; dy < size - half; dy++) {
     for (let dx = -half; dx < size - half; dx++) {
-      if (shape === "circle" && dx * dx + dy * dy > radiusSq) continue;
       callback(center.x + dx, center.y + dy);
     }
   }

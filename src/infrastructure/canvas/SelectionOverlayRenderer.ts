@@ -4,7 +4,6 @@ import { isMaskSelected } from "@/domain/selection/SelectionMask";
 import type { SelectionRect } from "@/domain/selection/SelectionRect";
 import type { SelectionState } from "@/domain/selection/SelectionState";
 import { getEffectiveBounds } from "@/domain/selection/SelectionState";
-import type { FloatingSelection } from "@/domain/selection/FloatingSelection";
 
 const MARCH_COLOR = "#ffffff";
 const MARCH_SHADOW = "#000000";
@@ -33,7 +32,8 @@ export function renderSelectionOverlay(
   }
 
   if (selection?.floating) {
-    renderFloatingMarchingAnts(ctx, selection.floating, phase, zoom);
+    renderMaskFill(ctx, selection.mask, zoom);
+    renderMaskMarchingAnts(ctx, selection.mask, phase, zoom);
   }
 
   if (previewRect && previewRect.width > 0 && previewRect.height > 0) {
@@ -89,26 +89,6 @@ function renderMaskMarchingAnts(
       if (hasRight) drawMarchLine(ctx, px + zoom, py, px + zoom, py + zoom, offset, dash);
     }
   }
-}
-
-function renderFloatingMarchingAnts(
-  ctx: CanvasRenderingContext2D,
-  floating: FloatingSelection,
-  phase: number,
-  zoom: number,
-): void {
-  const { pixels, offset } = floating;
-  const dash = 4;
-  const offsetDash = phase % (dash * 2);
-  const x0 = offset.x * zoom;
-  const y0 = offset.y * zoom;
-  const w = pixels.width * zoom;
-  const h = pixels.height * zoom;
-
-  drawMarchLine(ctx, x0, y0, x0 + w, y0, offsetDash, dash);
-  drawMarchLine(ctx, x0, y0 + h, x0 + w, y0 + h, offsetDash, dash);
-  drawMarchLine(ctx, x0, y0, x0, y0 + h, offsetDash, dash);
-  drawMarchLine(ctx, x0 + w, y0, x0 + w, y0 + h, offsetDash, dash);
 }
 
 function renderPreviewRect(

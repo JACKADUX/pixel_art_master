@@ -8,9 +8,9 @@ interface OklabSelectionPlaneProps {
   markerL: number;
   onPickColor: (color: PixelColor) => void;
   onPickEnd: (color: PixelColor) => void;
+  className?: string;
+  style?: React.CSSProperties;
 }
-
-const PLANE_HEIGHT = 112;
 
 export function OklabSelectionPlane({
   hue,
@@ -18,6 +18,8 @@ export function OklabSelectionPlane({
   markerL,
   onPickColor,
   onPickEnd,
+  className = "relative w-full shrink-0 cursor-crosshair overflow-hidden rounded border border-zinc-700 touch-none",
+  style,
 }: OklabSelectionPlaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -64,7 +66,8 @@ export function OklabSelectionPlane({
 
     const update = () => {
       const width = container.clientWidth;
-      renderPlane(hue, width, PLANE_HEIGHT);
+      const height = container.clientHeight;
+      renderPlane(hue, width, height);
     };
 
     update();
@@ -145,7 +148,8 @@ export function OklabSelectionPlane({
   return (
     <div
       ref={containerRef}
-      className="relative h-28 w-full cursor-crosshair overflow-hidden rounded border border-zinc-700 touch-none"
+      className={className}
+      style={style}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

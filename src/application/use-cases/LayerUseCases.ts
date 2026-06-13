@@ -1,5 +1,5 @@
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
-import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
+import { isDrawingLayer, isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 import {
   addReferenceLayerToProject,
   addDrawingLayerToProject,
@@ -8,6 +8,7 @@ import {
   getLayerById,
   touchProject,
   withActiveLayerId,
+  withActiveReferenceLayerId,
   withLayers,
   type Project,
 } from "@/domain/project/Project";
@@ -18,6 +19,7 @@ import {
   renameLayer,
   reorderLayer,
   resolveActiveLayerAfterRemoval,
+  resolveActiveReferenceLayerAfterRemoval,
   syncLayerPixels,
   toggleLayerVisibility,
 } from "@/domain/layer/LayerOperations";
@@ -27,8 +29,15 @@ import { updateReferenceLayerCropInProject } from "./UpdateReferenceLayerCrop";
 import type { CropRect, LayerPosition } from "@/domain/layer/Layer";
 
 export function setActiveLayer(project: Project, layerId: string): Project {
-  if (!getLayerById(project, layerId)) return project;
+  const layer = getLayerById(project, layerId);
+  if (!layer || !isDrawingLayer(layer)) return project;
   return touchProject(withActiveLayerId(project, layerId));
+}
+
+export function setActiveReferenceLayer(project: Project, layerId: string): Project {
+  const layer = getLayerById(project, layerId);
+  if (!layer || !isReferenceLayer(layer)) return project;
+  return touchProject(withActiveReferenceLayerId(project, layerId));
 }
 
 export function toggleLayerVisibilityInProject(
@@ -63,15 +72,27 @@ export function removeLayerFromProject(
   if (!canRemoveLayer(project.canvas.layers, layerId)) return null;
 
   const layers = removeLayer(project.canvas.layers, layerId);
-  const activeLayerId = resolveActiveLayerAfterRemoval(
-    project.canvas.layers,
-    layerId,
-    project.canvas.activeLayerId,
-  );
+  const target = getLayerById(project, layerId);
+  let activeLayerId = project.canvas.activeLayerId;
+  let activeReferenceLayerId = project.canvas.activeReferenceLayerId;
+
+  if (target?.type === "drawing") {
+    activeLayerId = resolveActiveLayerAfterRemoval(
+      project.canvas.layers,
+      layerId,
+      project.canvas.activeLayerId,
+    );
+  } else if (target?.type === "reference") {
+    activeReferenceLayerId = resolveActiveReferenceLayerAfterRemoval(
+      project.canvas.layers,
+      layerId,
+      project.canvas.activeReferenceLayerId,
+    );
+  }
 
   return touchProject({
     ...withLayers(project, layers),
-    canvas: { ...project.canvas, layers, activeLayerId },
+    canvas: { ...project.canvas, layers, activeLayerId, activeReferenceLayerId },
   });
 }
 

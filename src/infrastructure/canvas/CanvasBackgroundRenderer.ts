@@ -1,5 +1,6 @@
-const CHECKER_LIGHT = "#3f3f46";
-const CHECKER_DARK = "#18181b";
+const CHECKER_LIGHT = "#c0c0c0";
+const CHECKER_DARK = "#808080";
+const CHECKER_SIZE = 16;
 
 export function renderTransparencyCheckerboard(
   ctx: CanvasRenderingContext2D,
@@ -10,19 +11,30 @@ export function renderTransparencyCheckerboard(
   const displayWidth = logicalWidth * zoom;
   const displayHeight = logicalHeight * zoom;
 
-  const pattern = document.createElement("canvas");
-  pattern.width = logicalWidth;
-  pattern.height = logicalHeight;
-  const patternCtx = pattern.getContext("2d");
-  if (!patternCtx) return;
+  const tileCanvas = document.createElement("canvas");
+  tileCanvas.width = CHECKER_SIZE * 2;
+  tileCanvas.height = CHECKER_SIZE * 2;
+  const tileCtx = tileCanvas.getContext("2d");
+  if (!tileCtx) return;
 
-  for (let y = 0; y < logicalHeight; y++) {
-    for (let x = 0; x < logicalWidth; x++) {
-      patternCtx.fillStyle = (x + y) % 2 === 0 ? CHECKER_LIGHT : CHECKER_DARK;
-      patternCtx.fillRect(x, y, 1, 1);
-    }
-  }
+  tileCtx.fillStyle = CHECKER_LIGHT;
+  tileCtx.fillRect(0, 0, tileCanvas.width, tileCanvas.height);
+  tileCtx.fillStyle = CHECKER_DARK;
+  tileCtx.fillRect(0, 0, CHECKER_SIZE, CHECKER_SIZE);
+  tileCtx.fillRect(CHECKER_SIZE, CHECKER_SIZE, CHECKER_SIZE, CHECKER_SIZE);
+
+  const logicalCanvas = document.createElement("canvas");
+  logicalCanvas.width = logicalWidth;
+  logicalCanvas.height = logicalHeight;
+  const logicalCtx = logicalCanvas.getContext("2d");
+  if (!logicalCtx) return;
+
+  const pattern = logicalCtx.createPattern(tileCanvas, "repeat");
+  if (!pattern) return;
+
+  logicalCtx.fillStyle = pattern;
+  logicalCtx.fillRect(0, 0, logicalWidth, logicalHeight);
 
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(pattern, 0, 0, displayWidth, displayHeight);
+  ctx.drawImage(logicalCanvas, 0, 0, displayWidth, displayHeight);
 }

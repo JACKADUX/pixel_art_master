@@ -1,7 +1,12 @@
 import { forEachStampPixel } from "./BrushStamp";
-import { forEachLineSegmentPixel } from "./LineRasterization";
+import {
+  forEachContinuousLinePixel,
+  forEachContinuousLinePixelWithBrushFix,
+  forEachLineSegmentPixel,
+} from "./LineRasterization";
 import type { PixelPerfectStrokeSession } from "./PixelPerfectStroke";
 import type { Point, ToolContext } from "./ITool";
+import type { ToolSettings } from "./ToolType";
 
 function stampBrushAt(ctx: ToolContext, point: Point): void {
   forEachStampPixel(point, ctx.settings.brushSize, ctx.settings.brushShape, (x, y) => {
@@ -42,5 +47,34 @@ export function paintBrushSegment(
     } else {
       stampBrushAt(ctx, point);
     }
+  });
+}
+
+export function paintBrushStraightLine(
+  ctx: ToolContext,
+  from: Point,
+  to: Point,
+  session: PixelPerfectStrokeSession | null,
+): void {
+  if (session) {
+    session.reset();
+  }
+  paintBrushAt(ctx, from, session);
+  paintBrushSegment(ctx, from, to, session);
+}
+
+export function forEachBrushLinePreviewCenter(
+  from: Point,
+  to: Point,
+  settings: Pick<ToolSettings, "brushSize" | "brushShape">,
+  callback: (point: Point) => void,
+): void {
+  const useBrushFix = settings.brushSize > 1;
+  const walk = useBrushFix
+    ? forEachContinuousLinePixelWithBrushFix
+    : forEachContinuousLinePixel;
+
+  walk(from.x, from.y, to.x, to.y, (x, y) => {
+    callback({ x, y });
   });
 }

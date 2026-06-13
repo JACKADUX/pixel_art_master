@@ -6,6 +6,7 @@ import { Toolbar } from "./presentation/components/Toolbar";
 import { ToolPropertiesBar } from "./presentation/components/ToolPropertiesBar";
 import { ProjectManagerModal } from "./presentation/components/ProjectManagerModal";
 import { CanvasSizeModal } from "./presentation/components/CanvasSizeModal";
+import { ToastContainer } from "./presentation/components/ToastContainer";
 import { TopBar } from "./presentation/components/TopBar";
 import { useAppShortcuts } from "./presentation/hooks/useAppShortcuts";
 import { useAppStore } from "./presentation/stores/appStore";
@@ -33,6 +34,7 @@ function App() {
       <StatusBar />
       <ProjectManagerModal />
       <CanvasSizeModal />
+      <ToastContainer />
     </div>
   );
 }

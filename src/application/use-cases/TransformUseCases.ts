@@ -1,4 +1,11 @@
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import type { Point } from "@/domain/tool/ITool";
+import type { FloatingSelection } from "@/domain/selection/FloatingSelection";
+import {
+  computeResizeRectFromHandle,
+  type CanvasRect,
+  type ResizeHandle,
+} from "@/domain/selection/ResizeTransform";
 import {
   flipGridHorizontal,
   flipGridVertical,
@@ -9,16 +16,14 @@ import {
 } from "@/domain/selection/PixelTransform";
 import type { SelectionState } from "@/domain/selection/SelectionState";
 import { withFloating } from "@/domain/selection/SelectionState";
-import { extractMaskedPixels } from "@/domain/selection/SelectionMaskOperations";
+import { syncMaskWithFloating } from "@/domain/selection/FloatingSelectionLifecycle";
+import { beginMoveSelection } from "./SelectionUseCases";
 
 export function ensureFloatingForTransform(
   grid: PixelGrid,
   state: SelectionState,
 ): SelectionState {
-  if (state.floating) return state;
-  const floating = extractMaskedPixels(grid, state.mask, true);
-  if (!floating) return state;
-  return withFloating(state, floating);
+  return beginMoveSelection(grid, state);
 }
 
 export function scaleFloatingSelection(
@@ -32,14 +37,16 @@ export function scaleFloatingSelection(
   const scaled = scaleGrid(state.floating.pixels, scaleX, scaleY, anchor);
   const offset = state.floating.offset;
 
-  return withFloating(state, {
-    ...state.floating,
-    pixels: scaled,
-    offset: {
-      x: Math.round(offset.x - (scaled.width - state.floating.pixels.width) / 2),
-      y: Math.round(offset.y - (scaled.height - state.floating.pixels.height) / 2),
-    },
-  });
+  return syncMaskWithFloating(
+    withFloating(state, {
+      ...state.floating,
+      pixels: scaled,
+      offset: {
+        x: Math.round(offset.x - (scaled.width - state.floating.pixels.width) / 2),
+        y: Math.round(offset.y - (scaled.height - state.floating.pixels.height) / 2),
+      },
+    }),
+  );
 }
 
 export function rotateFloatingSelection(
@@ -53,14 +60,16 @@ export function rotateFloatingSelection(
   const oldW = state.floating.pixels.width;
   const oldH = state.floating.pixels.height;
 
-  return withFloating(state, {
-    ...state.floating,
-    pixels: rotated,
-    offset: {
-      x: Math.round(offset.x - (rotated.width - oldW) / 2),
-      y: Math.round(offset.y - (rotated.height - oldH) / 2),
-    },
-  });
+  return syncMaskWithFloating(
+    withFloating(state, {
+      ...state.floating,
+      pixels: rotated,
+      offset: {
+        x: Math.round(offset.x - (rotated.width - oldW) / 2),
+        y: Math.round(offset.y - (rotated.height - oldH) / 2),
+      },
+    }),
+  );
 }
 
 export function rotateFloatingSelection90(
@@ -74,28 +83,73 @@ export function rotateFloatingSelection90(
   const oldW = state.floating.pixels.width;
   const oldH = state.floating.pixels.height;
 
-  return withFloating(state, {
-    ...state.floating,
-    pixels: rotated,
-    offset: {
-      x: Math.round(offset.x - (rotated.width - oldW) / 2),
-      y: Math.round(offset.y - (rotated.height - oldH) / 2),
-    },
-  });
+  return syncMaskWithFloating(
+    withFloating(state, {
+      ...state.floating,
+      pixels: rotated,
+      offset: {
+        x: Math.round(offset.x - (rotated.width - oldW) / 2),
+        y: Math.round(offset.y - (rotated.height - oldH) / 2),
+      },
+    }),
+  );
 }
 
 export function flipFloatingHorizontal(state: SelectionState): SelectionState {
   if (!state.floating) return state;
-  return withFloating(state, {
-    ...state.floating,
-    pixels: flipGridHorizontal(state.floating.pixels),
-  });
+  return syncMaskWithFloating(
+    withFloating(state, {
+      ...state.floating,
+      pixels: flipGridHorizontal(state.floating.pixels),
+    }),
+  );
 }
 
 export function flipFloatingVertical(state: SelectionState): SelectionState {
   if (!state.floating) return state;
-  return withFloating(state, {
-    ...state.floating,
-    pixels: flipGridVertical(state.floating.pixels),
-  });
+  return syncMaskWithFloating(
+    withFloating(state, {
+      ...state.floating,
+      pixels: flipGridVertical(state.floating.pixels),
+    }),
+  );
+}
+
+function floatingToCanvasRect(floating: FloatingSelection): CanvasRect {
+  return {
+    x: floating.offset.x,
+    y: floating.offset.y,
+    width: floating.pixels.width,
+    height: floating.pixels.height,
+  };
+}
+
+export function resizeFloatingSelectionByHandle(
+  state: SelectionState,
+  handle: ResizeHandle,
+  pointer: Point,
+  initialFloating: FloatingSelection,
+  modifiers: { shiftKey: boolean; altKey: boolean },
+): SelectionState {
+  if (!state.floating) return state;
+
+  const initialRect = floatingToCanvasRect(initialFloating);
+  const targetRect = computeResizeRectFromHandle(
+    handle,
+    initialRect,
+    pointer,
+    modifiers,
+  );
+
+  const scaleX = targetRect.width / initialFloating.pixels.width;
+  const scaleY = targetRect.height / initialFloating.pixels.height;
+  const scaled = scaleGrid(initialFloating.pixels, scaleX, scaleY, "topLeft");
+
+  return syncMaskWithFloating(
+    withFloating(state, {
+      ...initialFloating,
+      pixels: scaled,
+      offset: { x: targetRect.x, y: targetRect.y },
+    }),
+  );
 }

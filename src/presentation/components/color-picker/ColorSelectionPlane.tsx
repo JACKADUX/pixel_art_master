@@ -9,6 +9,8 @@ interface ColorSelectionPlaneProps {
   yMax: number;
   background: string;
   onChange: (x: number, y: number) => void;
+  className?: string;
+  style?: React.CSSProperties;
 }
 
 export function ColorSelectionPlane({
@@ -20,6 +22,8 @@ export function ColorSelectionPlane({
   yMax,
   background,
   onChange,
+  className = "relative w-full shrink-0 cursor-crosshair overflow-hidden rounded border border-zinc-700 touch-none",
+  style,
 }: ColorSelectionPlaneProps) {
   const planeRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -60,8 +64,8 @@ export function ColorSelectionPlane({
   return (
     <div
       ref={planeRef}
-      className="relative h-28 w-full cursor-crosshair overflow-hidden rounded border border-zinc-700 touch-none"
-      style={{ background }}
+      className={className}
+      style={{ background, ...style }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

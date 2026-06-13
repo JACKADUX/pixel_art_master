@@ -1,10 +1,17 @@
-import { collectStampBoundaryPolygon } from "@/domain/tool/BrushStamp";
+import type { PixelColor } from "@/domain/canvas/PixelColor";
+import { getAlpha, toRgbaComponents } from "@/domain/canvas/PixelColor";
+import { collectStampBoundaryPolygon, forEachStampPixel } from "@/domain/tool/BrushStamp";
 import type { BrushShape } from "@/domain/tool/ToolType";
 import type { Point } from "@/domain/tool/ITool";
 
 interface GridBounds {
   width: number;
   height: number;
+}
+
+function pixelColorToCss(color: PixelColor): string {
+  const { r, g, b, a } = toRgbaComponents(color);
+  return `rgba(${r}, ${g}, ${b}, ${a / 255})`;
 }
 
 function strokeContrastPath(ctx: CanvasRenderingContext2D, draw: () => void): void {
@@ -32,18 +39,48 @@ function drawBoundaryPolygon(
   ctx.closePath();
 }
 
-export function renderBrushStampPreview(
+function renderFilledStamp(
+  ctx: CanvasRenderingContext2D,
+  center: Point,
+  size: number,
+  shape: BrushShape,
+  color: PixelColor,
+  zoom: number,
+): void {
+  ctx.fillStyle = pixelColorToCss(color);
+  forEachStampPixel(center, size, shape, (x, y) => {
+    ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+  });
+}
+
+function renderOutlineStamp(
   ctx: CanvasRenderingContext2D,
   center: Point,
   size: number,
   shape: BrushShape,
   zoom: number,
-  _bounds: GridBounds,
 ): void {
-  ctx.imageSmoothingEnabled = false;
-
   const polygon = collectStampBoundaryPolygon(center, size, shape);
   if (polygon.length === 0) return;
 
   strokeContrastPath(ctx, () => drawBoundaryPolygon(ctx, polygon, zoom));
+}
+
+export function renderBrushStampPreview(
+  ctx: CanvasRenderingContext2D,
+  center: Point,
+  size: number,
+  shape: BrushShape,
+  color: PixelColor | null,
+  zoom: number,
+  _bounds: GridBounds,
+): void {
+  ctx.imageSmoothingEnabled = false;
+
+  if (color && getAlpha(color) > 0) {
+    renderFilledStamp(ctx, center, size, shape, color, zoom);
+    return;
+  }
+
+  renderOutlineStamp(ctx, center, size, shape, zoom);
 }

@@ -1,4 +1,4 @@
-import { TRANSPARENT } from "../canvas/PixelColor";
+import { getAlpha, TRANSPARENT } from "../canvas/PixelColor";
 import { PixelGrid } from "../canvas/PixelGrid";
 import type { Point } from "../tool/ITool";
 import type { FloatingSelection } from "./FloatingSelection";
@@ -102,6 +102,18 @@ export function selectAllMask(canvasWidth: number, canvasHeight: number): Select
   return mask;
 }
 
+export function createMaskFromOpaquePixels(grid: PixelGrid): SelectionMask {
+  const mask = createEmptyMask(grid.width, grid.height);
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      if (getAlpha(grid.getPixel(x, y)) > 0) {
+        setMaskPixel(mask, x, y, true);
+      }
+    }
+  }
+  return mask;
+}
+
 export function shiftMask(mask: SelectionMask, dx: number, dy: number): SelectionMask {
   const result = createEmptyMask(mask.width, mask.height);
   for (let y = 0; y < mask.height; y++) {
@@ -139,6 +151,7 @@ export function extractMaskedPixels(
     pixels,
     offset: { x: bounds.x, y: bounds.y },
     originInLayer: { x: bounds.x, y: bounds.y },
+    source: "layer",
   };
 }
 
@@ -150,10 +163,12 @@ export function blitFloatingToGrid(
   const { pixels, offset } = floating;
   for (let y = 0; y < pixels.height; y++) {
     for (let x = 0; x < pixels.width; x++) {
+      const color = pixels.getPixel(x, y);
+      if (getAlpha(color) === 0) continue;
       const canvasX = offset.x + x;
       const canvasY = offset.y + y;
       if (mask && !isMaskSelected(mask, canvasX, canvasY)) continue;
-      grid.setPixel(canvasX, canvasY, pixels.getPixel(x, y));
+      grid.setPixel(canvasX, canvasY, color);
     }
   }
 }
@@ -175,7 +190,9 @@ export function restoreFloatingToOrigin(
   const { pixels, originInLayer } = floating;
   for (let y = 0; y < pixels.height; y++) {
     for (let x = 0; x < pixels.width; x++) {
-      grid.setPixel(originInLayer.x + x, originInLayer.y + y, pixels.getPixel(x, y));
+      const color = pixels.getPixel(x, y);
+      if (getAlpha(color) === 0) continue;
+      grid.setPixel(originInLayer.x + x, originInLayer.y + y, color);
     }
   }
 }

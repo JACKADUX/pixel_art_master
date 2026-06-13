@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { PixelGrid } from "@/domain/canvas/PixelGrid";
+import { rgba } from "@/domain/canvas/PixelColor";
 import {
   combineMasks,
+  createMaskFromOpaquePixels,
   createRectMask,
   invertMask,
 } from "@/domain/selection/SelectionMaskOperations";
@@ -27,5 +30,15 @@ describe("SelectionMaskOperations", () => {
     const inverted = invertMask(mask);
     expect(isMaskSelected(inverted, 0, 0)).toBe(false);
     expect(isMaskSelected(inverted, 1, 1)).toBe(true);
+  });
+
+  it("creates masks from opaque pixels", () => {
+    const grid = PixelGrid.createEmpty(4, 4);
+    grid.setPixel(1, 1, rgba(255, 0, 0));
+    grid.setPixel(2, 2, rgba(255, 0, 0, 128));
+    const mask = createMaskFromOpaquePixels(grid);
+    expect(isMaskSelected(mask, 1, 1)).toBe(true);
+    expect(isMaskSelected(mask, 2, 2)).toBe(true);
+    expect(isMaskSelected(mask, 0, 0)).toBe(false);
   });
 });

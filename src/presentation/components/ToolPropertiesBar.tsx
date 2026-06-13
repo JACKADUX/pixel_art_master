@@ -133,6 +133,7 @@ export function ToolPropertiesBar() {
             />
             完美像素
           </label>
+          <span className="text-zinc-500">Shift 直线连线</span>
         </>
       )}
 

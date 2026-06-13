@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
-import { getActiveLayer } from "@/domain/project/Project";
-import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
+import { getActiveReferenceLayer } from "@/domain/project/Project";
 import type { ReferenceColorImportScope } from "@/application/use-cases/ImportReferenceLayerColorsToPalette";
 import { useAppStore } from "../stores/appStore";
 
@@ -11,11 +10,8 @@ export function ReferencePaletteImportMenu() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const activeLayer = project ? getActiveLayer(project) : null;
-  const canImport =
-    activeLayer &&
-    isReferenceLayer(activeLayer) &&
-    activeLayer.imageData !== null;
+  const activeLayer = project ? getActiveReferenceLayer(project) : null;
+  const canImport = activeLayer && activeLayer.imageData !== null;
 
   const closeMenu = useCallback(() => setOpen(false), []);
 

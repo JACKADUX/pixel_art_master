@@ -1,10 +1,8 @@
 import { useEffect, useRef } from "react";
-import { XMarkIcon } from "@heroicons/react/24/outline";
+import { getDefaultColorPickerPanelWidth } from "@/domain/color/ColorPickerLayout";
 import { useAppStore } from "@/presentation/stores/appStore";
+import { ColorPickerHeader } from "./ColorPickerHeader";
 import { ColorPickerPanel } from "./ColorPickerPanel";
-
-const HEADER_HEIGHT = 28;
-const PANEL_WIDTH = 240;
 
 export function FloatingColorPickerPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -13,16 +11,19 @@ export function FloatingColorPickerPanel() {
 
   const project = useAppStore((s) => s.project);
   const floatingColorPicker = useAppStore((s) => s.floatingColorPicker);
+  const orientation = useAppStore((s) => s.colorPickerLayoutOrientation);
   const foregroundColor = useAppStore((s) => s.foregroundColor);
   const backgroundColor = useAppStore((s) => s.backgroundColor);
   const setColorSlot = useAppStore((s) => s.setColorSlot);
   const setFloatingColorPickerPosition = useAppStore(
     (s) => s.setFloatingColorPickerPosition,
   );
-  const setFloatingColorPickerPanelHeight = useAppStore(
-    (s) => s.setFloatingColorPickerPanelHeight,
+  const setFloatingColorPickerPanelSize = useAppStore(
+    (s) => s.setFloatingColorPickerPanelSize,
   );
   const closeFloatingColorPicker = useAppStore((s) => s.closeFloatingColorPicker);
+
+  const panelWidth = getDefaultColorPickerPanelWidth(orientation);
 
   const activeColor =
     floatingColorPicker.activeSlot === "background"
@@ -33,15 +34,19 @@ export function FloatingColorPickerPanel() {
     const panel = panelRef.current;
     if (!panel || !floatingColorPicker.visible) return;
 
-    const updateHeight = () => {
-      setFloatingColorPickerPanelHeight(panel.offsetHeight);
+    const updateSize = () => {
+      setFloatingColorPickerPanelSize(panel.offsetWidth, panel.offsetHeight);
     };
 
-    updateHeight();
-    const observer = new ResizeObserver(updateHeight);
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
     observer.observe(panel);
     return () => observer.disconnect();
-  }, [floatingColorPicker.visible, setFloatingColorPickerPanelHeight]);
+  }, [
+    floatingColorPicker.visible,
+    orientation,
+    setFloatingColorPickerPanelSize,
+  ]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -90,30 +95,19 @@ export function FloatingColorPickerPanel() {
       style={{
         left: floatingColorPicker.position.x,
         top: floatingColorPicker.position.y,
-        width: PANEL_WIDTH,
+        width: panelWidth,
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div
-        className="flex cursor-move select-none items-center justify-between gap-2 border-b-2 border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-300"
-        style={{ height: HEADER_HEIGHT }}
-        onMouseDown={handleHeaderMouseDown}
-      >
-        <span className="shrink-0">色彩选择器</span>
-        <button
-          type="button"
-          title="关闭"
-          aria-label="关闭悬浮色彩选择器"
-          onClick={closeFloatingColorPicker}
-          className="shrink-0 rounded p-0.5 text-zinc-400 transition hover:bg-zinc-700 hover:text-zinc-100"
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          <XMarkIcon className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      <ColorPickerHeader
+        variant="floating"
+        onClose={closeFloatingColorPicker}
+        onHeaderMouseDown={handleHeaderMouseDown}
+      />
       <ColorPickerPanel
         currentColor={activeColor}
         onChange={(color) => setColorSlot(floatingColorPicker.activeSlot, color)}
+        orientation={orientation}
       />
     </div>
   );

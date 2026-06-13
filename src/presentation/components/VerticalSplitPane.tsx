@@ -71,7 +71,7 @@ export function VerticalSplitPane({
   return (
     <div ref={containerRef} className="flex min-h-0 flex-1 flex-col">
       <div
-        className="flex min-h-0 flex-col overflow-hidden"
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
         style={{ flex: topRatio }}
       >
         {top}
@@ -88,7 +88,7 @@ export function VerticalSplitPane({
         onPointerCancel={handlePointerUp}
       />
 
-      <div className="min-h-0 overflow-hidden" style={{ flex: 1 - topRatio }}>
+      <div className="min-h-0 min-w-0 overflow-hidden" style={{ flex: 1 - topRatio }}>
         {bottom}
       </div>
     </div>
