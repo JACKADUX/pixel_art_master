@@ -27,10 +27,10 @@ export function ReferenceLayerColorStrip({
 
   return (
     <div
-      className="pointer-events-auto mt-1 max-w-full overflow-x-auto rounded border border-zinc-700/80 bg-zinc-900/90 p-1"
+      className="pointer-events-auto mt-1 w-full rounded border border-zinc-700/80 bg-zinc-900/90 p-1"
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div className="flex min-w-min gap-0.5">
+      <div className="flex flex-wrap gap-0.5">
         {colors.map((entry) => {
           const isForeground = colorsEqual(foregroundColor, entry.color);
           const isBackground = colorsEqual(backgroundColor, entry.color);

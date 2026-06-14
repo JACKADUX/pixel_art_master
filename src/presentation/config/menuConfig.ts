@@ -54,6 +54,8 @@ export interface MenuActions {
   copySelection: () => void;
   cutSelection: () => void;
   pasteSelection: () => void;
+  openPixelRestorePage: () => void;
+  openAssetLibrary: () => void;
 }
 
 export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
@@ -104,6 +106,12 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           label: "项目管理",
           icon: RectangleStackIcon,
           onClick: actions.openProjectManager,
+        },
+        {
+          type: "action",
+          label: "资产管理",
+          icon: PhotoIcon,
+          onClick: actions.openAssetLibrary,
         },
       ],
     },
@@ -165,6 +173,18 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           label: "粘贴",
           shortcut: SHORTCUT_LABELS.paste,
           onClick: actions.pasteSelection,
+        },
+      ],
+    },
+    {
+      id: "tools",
+      label: "工具",
+      items: [
+        {
+          type: "action",
+          label: "像素还原…",
+          icon: ArrowPathIcon,
+          onClick: actions.openPixelRestorePage,
         },
       ],
     },

@@ -131,8 +131,14 @@ export function CanvasView() {
   const brushLineAnchor = useAppStore((s) => s.brushLineAnchor);
   const getCompositeGrid = useAppStore((s) => s.getCompositeGrid);
   const isCapturing = useAppStore((s) => s.isCapturing);
+  const assetCaptureMode = useAppStore((s) => s.assetCaptureMode);
+  const assetCapturePreviewRect = useAppStore((s) => s.assetCapturePreviewRect);
+  const assetCapturePointerDown = useAppStore((s) => s.assetCapturePointerDown);
+  const assetCapturePointerMove = useAppStore((s) => s.assetCapturePointerMove);
+  const assetCapturePointerUp = useAppStore((s) => s.assetCapturePointerUp);
   const setViewportContainer = useAppStore((s) => s.setViewportContainer);
   const syncViewportSnapshot = useAppStore((s) => s.syncViewportSnapshot);
+  const adaptFloatingPanelsToViewport = useAppStore((s) => s.adaptFloatingPanelsToViewport);
   const mousePositionOverlayVisible = useAppStore((s) => s.mousePositionOverlayVisible);
   const canvasDisplayMode = useAppStore((s) => s.canvasDisplayMode);
   const setActiveReferenceLayer = useAppStore((s) => s.setActiveReferenceLayer);
@@ -172,6 +178,14 @@ export function CanvasView() {
 
   const boundsLabelRect = useMemo(() => {
     if (
+      assetCaptureMode &&
+      assetCapturePreviewRect &&
+      assetCapturePreviewRect.width > 0 &&
+      assetCapturePreviewRect.height > 0
+    ) {
+      return assetCapturePreviewRect;
+    }
+    if (
       activeTool === "select" &&
       selectionDrag?.mode === "create" &&
       toolSettings.selectionMode !== "lasso" &&
@@ -193,6 +207,8 @@ export function CanvasView() {
     }
     return null;
   }, [
+    assetCaptureMode,
+    assetCapturePreviewRect,
     activeTool,
     drawStart,
     isDrawing,
@@ -625,18 +641,20 @@ export function CanvasView() {
         setContainerSize({ width, height });
       }
       syncViewportSnapshot(canvasRef.current);
+      adaptFloatingPanelsToViewport();
     });
 
     container.addEventListener("scroll", handleScroll, { passive: true });
     resizeObserver.observe(container);
     syncViewportSnapshot(canvasRef.current);
+    adaptFloatingPanelsToViewport();
 
     return () => {
       container.removeEventListener("scroll", handleScroll);
       resizeObserver.disconnect();
       setViewportContainer(null);
     };
-  }, [project, setViewportContainer, syncViewportSnapshot]);
+  }, [project, setViewportContainer, syncViewportSnapshot, adaptFloatingPanelsToViewport]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -956,6 +974,11 @@ export function CanvasView() {
       startPanning(e.clientX, e.clientY);
       return;
     }
+    if (assetCaptureMode) {
+      e.preventDefault();
+      assetCapturePointerDown(toPixel(e));
+      return;
+    }
     const button = buttonFromMouseButton(e.button);
     if (!button) return;
     e.preventDefault();
@@ -975,6 +998,10 @@ export function CanvasView() {
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanningRef.current) return;
     const point = toPixel(e);
+    if (assetCaptureMode) {
+      assetCapturePointerMove(point);
+      return;
+    }
     updateHoverFromClient(e.clientX, e.clientY);
     const button = drawingButton;
     const modifiers = {
@@ -996,6 +1023,10 @@ export function CanvasView() {
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanningRef.current) return;
+    if (assetCaptureMode) {
+      void assetCapturePointerUp(toPixel(e));
+      return;
+    }
     const button = buttonFromMouseButton(e.button);
     if (!button) return;
     pointerUp(toPixel(e), button, {
@@ -1016,11 +1047,15 @@ export function CanvasView() {
     });
   };
 
+  const assetCaptureTracking =
+    assetCaptureMode && assetCapturePreviewRect !== null;
+
   const documentPointerTracking =
-    drawingButton !== null &&
-    ((selectionDrag !== null &&
-      (activeTool === "select" || activeTool === "transform")) ||
-      (isDrawing && isDrawingToolType(activeTool)));
+    assetCaptureTracking ||
+    (drawingButton !== null &&
+      ((selectionDrag !== null &&
+        (activeTool === "select" || activeTool === "transform")) ||
+        (isDrawing && isDrawingToolType(activeTool))));
 
   useEffect(() => {
     if (!documentPointerTracking) return;
@@ -1034,7 +1069,17 @@ export function CanvasView() {
         activeTool: tool,
         selectionDrag: drag,
         isDrawing: drawing,
+        assetCaptureMode: captureMode,
       } = useAppStore.getState();
+
+      if (captureMode) {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
+        useAppStore.getState().assetCapturePointerMove(point);
+        return;
+      }
+
       if (button === null) return;
 
       const isSelectTransform =
@@ -1059,6 +1104,13 @@ export function CanvasView() {
     const handleDocumentMouseUp = (e: MouseEvent) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
+
+      const { assetCaptureMode: captureMode } = useAppStore.getState();
+      if (captureMode) {
+        const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
+        void useAppStore.getState().assetCapturePointerUp(point);
+        return;
+      }
 
       const button = buttonFromMouseButton(e.button);
       if (!button) return;
@@ -1234,6 +1286,11 @@ export function CanvasView() {
       {isCapturing && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-zinc-900/70">
           <p className="text-sm text-zinc-300">正在截图...</p>
+        </div>
+      )}
+      {assetCaptureMode && (
+        <div className="pointer-events-none absolute left-4 top-4 z-20 rounded bg-zinc-900/90 px-3 py-2 text-xs text-zinc-200">
+          资产截图模式：拖拽框选区域，Esc 取消
         </div>
       )}
       {brushSizeHint && <CanvasBrushSizeHint hint={brushSizeHint} />}

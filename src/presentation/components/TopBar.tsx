@@ -26,6 +26,8 @@ export function TopBar() {
   const copySelection = useAppStore((s) => s.copySelection);
   const cutSelection = useAppStore((s) => s.cutSelection);
   const pasteSelection = useAppStore((s) => s.pasteSelection);
+  const openPixelRestorePage = useAppStore((s) => s.openPixelRestorePage);
+  const openAssetLibraryModal = useAppStore((s) => s.openAssetLibraryModal);
   const project = useAppStore((s) => s.project);
 
   const menus = useMemo(
@@ -52,6 +54,8 @@ export function TopBar() {
         copySelection: () => void copySelection(),
         cutSelection: () => void cutSelection(),
         pasteSelection: () => void pasteSelection(),
+        openPixelRestorePage,
+        openAssetLibrary: openAssetLibraryModal,
       }),
     [
       newProject,
@@ -75,6 +79,8 @@ export function TopBar() {
       copySelection,
       cutSelection,
       pasteSelection,
+      openPixelRestorePage,
+      openAssetLibraryModal,
     ],
   );
 

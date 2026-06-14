@@ -20,6 +20,20 @@ export interface ImportToReferenceLayerResult {
   openCropEditor: boolean;
 }
 
+export function importImageDataToReferenceLayer(
+  project: Project,
+  imageData: ImageData,
+  layerName: string,
+  targetLayerId?: string | null,
+): ImportToReferenceLayerResult {
+  return applyImageToReferenceLayer(
+    project,
+    targetLayerId ?? null,
+    imageData,
+    layerName,
+  );
+}
+
 function applyImageToReferenceLayer(
   project: Project,
   targetLayerId: string | null,

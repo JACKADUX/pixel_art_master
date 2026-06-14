@@ -63,6 +63,8 @@ import {
   type SelectionDragState,
 } from "@/presentation/controllers/canvasInteraction";
 
+import { usePixelRestoreStore } from "@/presentation/stores/pixelRestoreStore";
+
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
 
 import {
@@ -74,6 +76,8 @@ import {
   replaceProjectFromWindowCapture,
 
 } from "@/application/use-cases/ReplaceProjectFromImage";
+
+import { importImageDataToReferenceLayer } from "@/application/use-cases/ImportToReferenceLayer";
 
 import {
 
@@ -218,6 +222,14 @@ import { editorPreferencesRepository } from "@/infrastructure/storage/LocalEdito
 import { lastOpenedProjectStore } from "@/infrastructure/storage/LocalLastOpenedProjectStore";
 import { projectsWorkspaceStore } from "@/infrastructure/storage/LocalProjectsWorkspaceStore";
 
+import { assetLibraryRepository } from "@/infrastructure/storage/FileAssetLibraryRepository";
+
+import {
+  createAssetLibrarySlice,
+  type AssetLibrarySliceActions,
+  type AssetLibrarySliceState,
+} from "@/presentation/stores/assetLibrarySlice";
+
 import { captureService } from "@/infrastructure/tauri/TauriCaptureService";
 
 import { windowService } from "@/infrastructure/tauri/TauriWindowService";
@@ -233,6 +245,13 @@ import {
 } from "@/domain/viewport/NavigatorViewport";
 
 import { clampPanelPosition } from "@/domain/viewport/FloatingPanelBounds";
+import {
+  adaptPanelPositionOnResize,
+  applyMagneticSnap,
+  DEFAULT_PANEL_EDGE_ANCHOR,
+  detectEdgeAnchor,
+  type PanelEdgeAnchor,
+} from "@/domain/viewport/FloatingPanelAnchor";
 import { resolveNavigatorResizeConstraints } from "@/domain/viewport/NavigatorPanelResize";
 
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -269,12 +288,28 @@ function getNavigatorResizeConstraints(container: HTMLDivElement | null) {
   return resolveNavigatorResizeConstraints(container);
 }
 
+function getNavigatorPanelSize(navigator: NavigatorState) {
+  return {
+    width: navigator.size.width,
+    height: navigator.size.height + NAVIGATOR_HEADER_HEIGHT,
+  };
+}
+
+function getContainerDimensions(container: HTMLDivElement | null) {
+  if (!container) return null;
+  return {
+    width: container.clientWidth,
+    height: container.clientHeight,
+  };
+}
+
 export interface NavigatorState {
   visible: boolean;
   position: { x: number; y: number };
   size: { width: number; height: number };
   previewScale: number;
   previewPan: { x: number; y: number };
+  edgeAnchor: PanelEdgeAnchor;
 }
 
 export interface FloatingColorPickerState {
@@ -283,9 +318,10 @@ export interface FloatingColorPickerState {
   activeSlot: ColorSlot;
   panelWidth: number;
   panelHeight: number;
+  edgeAnchor: PanelEdgeAnchor;
 }
 
-interface AppState {
+interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions {
 
   project: Project | null;
 
@@ -427,13 +463,31 @@ interface AppState {
 
   setFloatingColorPickerPosition: (x: number, y: number) => void;
 
+  setFloatingColorPickerPositionWithAnchor: (
+    x: number,
+    y: number,
+    anchor?: PanelEdgeAnchor,
+  ) => void;
+
   setFloatingColorPickerPanelSize: (width: number, height: number) => void;
 
   setFloatingColorPickerSlot: (slot: ColorSlot) => void;
 
   closeFloatingColorPicker: () => void;
 
+  finalizeFloatingColorPickerDrag: () => void;
+
   setNavigatorPosition: (x: number, y: number) => void;
+
+  setNavigatorPositionWithAnchor: (
+    x: number,
+    y: number,
+    anchor?: PanelEdgeAnchor,
+  ) => void;
+
+  finalizeNavigatorDrag: () => void;
+
+  adaptFloatingPanelsToViewport: () => void;
 
   setNavigatorSize: (width: number, height: number) => void;
 
@@ -580,6 +634,10 @@ interface AppState {
 
   importImageToReferenceLayer: (layerId: string) => Promise<void>;
 
+  openPixelRestorePage: () => void;
+
+  exportRestoredImageToReference: (imageData: ImageData) => Promise<void>;
+
   openCanvasSizeModal: () => void;
 
   closeCanvasSizeModal: () => void;
@@ -646,7 +704,22 @@ async function promptSaveAs(defaultName: string): Promise<string | null> {
 
 
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set, get) => {
+
+  const assetLibrarySlice = createAssetLibrarySlice(
+    set as Parameters<typeof createAssetLibrarySlice>[0],
+    get,
+    {
+      workspaceStore: projectsWorkspaceStore,
+      assetRepository: assetLibraryRepository,
+      clipboard: clipboardService,
+      imageProcessor,
+    },
+  );
+
+  return {
+
+  ...assetLibrarySlice,
 
   project: createEmptyProject(),
 
@@ -722,6 +795,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     size: { width: NAVIGATOR_DEFAULT_WIDTH, height: NAVIGATOR_DEFAULT_HEIGHT },
     previewScale: 1,
     previewPan: { x: 0, y: 0 },
+    edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
   },
 
   mousePositionOverlayVisible: false,
@@ -734,6 +808,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     activeSlot: "foreground",
     panelWidth: COLOR_PICKER_VERTICAL_WIDTH,
     panelHeight: COLOR_PICKER_FLOAT_DEFAULT_HEIGHT,
+    edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
   },
 
   viewportSnapshot: null,
@@ -806,6 +881,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
           size: prefs.navigatorLayout.size,
 
+          edgeAnchor: prefs.navigatorLayout.edgeAnchor,
+
           previewScale: 1,
 
           previewPan: { x: 0, y: 0 },
@@ -826,11 +903,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
           activeSlot: prefs.floatingColorPickerLayout.activeSlot,
 
+          edgeAnchor: prefs.floatingColorPickerLayout.edgeAnchor,
+
         },
 
         mousePositionOverlayVisible: prefs.mousePositionOverlayVisible,
 
         canvasDisplayMode: prefs.canvasDisplayMode,
+
+        assetLibraryDrawerExpanded: prefs.assetLibraryDrawerExpanded,
+
+        assetLibraryDrawerHeight: prefs.assetLibraryDrawerHeight,
 
       });
 
@@ -1187,6 +1270,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         : s.navigator.position;
 
+      const edgeAnchor = isDefaultPosition
+
+        ? { horizontal: "right" as const, vertical: "bottom" as const }
+
+        : s.navigator.edgeAnchor;
+
       return {
 
         navigator: {
@@ -1194,6 +1283,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...s.navigator,
 
           visible: true,
+
+          edgeAnchor,
 
           position: {
 
@@ -1220,14 +1311,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       const height =
         panelSize?.height ??
         getEstimatedColorPickerPanelHeight(s.colorPickerLayoutOrientation);
+      const containerSize = getContainerDimensions(container);
+      const panelDimensions = { width, height };
       const clamped = clampPanelPosition(
         position.x,
         position.y,
         width,
         height,
-        container?.clientWidth ?? null,
-        container?.clientHeight ?? null,
+        containerSize?.width ?? null,
+        containerSize?.height ?? null,
       );
+      const edgeAnchor = containerSize
+        ? detectEdgeAnchor(clamped, panelDimensions, containerSize)
+        : DEFAULT_PANEL_EDGE_ANCHOR;
       return {
         floatingColorPicker: {
           visible: true,
@@ -1235,21 +1331,28 @@ export const useAppStore = create<AppState>((set, get) => ({
           position: clamped,
           panelWidth: width,
           panelHeight: height,
+          edgeAnchor,
         },
       };
     }),
 
   setFloatingColorPickerPosition: (x, y) =>
     set((s) => {
-      const container = s.viewportContainer;
-      const position = clampPanelPosition(
-        x,
-        y,
-        s.floatingColorPicker.panelWidth,
-        s.floatingColorPicker.panelHeight,
-        container?.clientWidth ?? null,
-        container?.clientHeight ?? null,
-      );
+      const containerSize = getContainerDimensions(s.viewportContainer);
+      const panelSize = {
+        width: s.floatingColorPicker.panelWidth,
+        height: s.floatingColorPicker.panelHeight,
+      };
+      const position = containerSize
+        ? applyMagneticSnap({ x, y }, panelSize, containerSize).position
+        : clampPanelPosition(
+            x,
+            y,
+            panelSize.width,
+            panelSize.height,
+            null,
+            null,
+          );
       return {
         floatingColorPicker: {
           ...s.floatingColorPicker,
@@ -1258,17 +1361,53 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
     }),
 
+  setFloatingColorPickerPositionWithAnchor: (x, y, anchor) =>
+    set((s) => {
+      const containerSize = getContainerDimensions(s.viewportContainer);
+      const panelSize = {
+        width: s.floatingColorPicker.panelWidth,
+        height: s.floatingColorPicker.panelHeight,
+      };
+
+      if (!containerSize) {
+        return {
+          floatingColorPicker: {
+            ...s.floatingColorPicker,
+            position: { x, y },
+            ...(anchor ? { edgeAnchor: anchor } : {}),
+          },
+        };
+      }
+
+      const snapped = applyMagneticSnap({ x, y }, panelSize, containerSize);
+      return {
+        floatingColorPicker: {
+          ...s.floatingColorPicker,
+          position: snapped.position,
+          edgeAnchor: anchor ?? snapped.anchor,
+        },
+      };
+    }),
+
   setFloatingColorPickerPanelSize: (width, height) =>
     set((s) => {
-      const container = s.viewportContainer;
-      const position = clampPanelPosition(
-        s.floatingColorPicker.position.x,
-        s.floatingColorPicker.position.y,
-        width,
-        height,
-        container?.clientWidth ?? null,
-        container?.clientHeight ?? null,
-      );
+      const containerSize = getContainerDimensions(s.viewportContainer);
+      const panelSize = { width, height };
+      const position = containerSize
+        ? adaptPanelPositionOnResize(
+            s.floatingColorPicker.position,
+            panelSize,
+            s.floatingColorPicker.edgeAnchor,
+            containerSize,
+          )
+        : clampPanelPosition(
+            s.floatingColorPicker.position.x,
+            s.floatingColorPicker.position.y,
+            width,
+            height,
+            null,
+            null,
+          );
       return {
         floatingColorPicker: {
           ...s.floatingColorPicker,
@@ -1295,23 +1434,130 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     })),
 
+  finalizeFloatingColorPickerDrag: () =>
+    set((s) => {
+      const containerSize = getContainerDimensions(s.viewportContainer);
+      if (!containerSize) return {};
+
+      const panelSize = {
+        width: s.floatingColorPicker.panelWidth,
+        height: s.floatingColorPicker.panelHeight,
+      };
+      const edgeAnchor = detectEdgeAnchor(
+        s.floatingColorPicker.position,
+        panelSize,
+        containerSize,
+      );
+
+      return {
+        floatingColorPicker: {
+          ...s.floatingColorPicker,
+          edgeAnchor,
+        },
+      };
+    }),
+
   setNavigatorPosition: (x, y) =>
     set((s) => {
-      const container = s.viewportContainer;
-      const position = clampPanelPosition(
-        x,
-        y,
-        s.navigator.size.width,
-        s.navigator.size.height + NAVIGATOR_HEADER_HEIGHT,
-        container?.clientWidth ?? null,
-        container?.clientHeight ?? null,
-      );
+      const containerSize = getContainerDimensions(s.viewportContainer);
+      const panelSize = getNavigatorPanelSize(s.navigator);
+      const position = containerSize
+        ? applyMagneticSnap({ x, y }, panelSize, containerSize).position
+        : clampPanelPosition(
+            x,
+            y,
+            panelSize.width,
+            panelSize.height,
+            null,
+            null,
+          );
       return {
         navigator: {
           ...s.navigator,
           position,
         },
       };
+    }),
+
+  setNavigatorPositionWithAnchor: (x, y, anchor) =>
+    set((s) => {
+      const containerSize = getContainerDimensions(s.viewportContainer);
+      const panelSize = getNavigatorPanelSize(s.navigator);
+
+      if (!containerSize) {
+        return {
+          navigator: {
+            ...s.navigator,
+            position: { x, y },
+            ...(anchor ? { edgeAnchor: anchor } : {}),
+          },
+        };
+      }
+
+      const snapped = applyMagneticSnap({ x, y }, panelSize, containerSize);
+      return {
+        navigator: {
+          ...s.navigator,
+          position: snapped.position,
+          edgeAnchor: anchor ?? snapped.anchor,
+        },
+      };
+    }),
+
+  finalizeNavigatorDrag: () =>
+    set((s) => {
+      const containerSize = getContainerDimensions(s.viewportContainer);
+      if (!containerSize) return {};
+
+      const edgeAnchor = detectEdgeAnchor(
+        s.navigator.position,
+        getNavigatorPanelSize(s.navigator),
+        containerSize,
+      );
+
+      return {
+        navigator: {
+          ...s.navigator,
+          edgeAnchor,
+        },
+      };
+    }),
+
+  adaptFloatingPanelsToViewport: () =>
+    set((s) => {
+      const containerSize = getContainerDimensions(s.viewportContainer);
+      if (!containerSize) return {};
+
+      const updates: Partial<Pick<AppState, "navigator" | "floatingColorPicker">> = {};
+
+      if (s.navigator.visible) {
+        updates.navigator = {
+          ...s.navigator,
+          position: adaptPanelPositionOnResize(
+            s.navigator.position,
+            getNavigatorPanelSize(s.navigator),
+            s.navigator.edgeAnchor,
+            containerSize,
+          ),
+        };
+      }
+
+      if (s.floatingColorPicker.visible) {
+        updates.floatingColorPicker = {
+          ...s.floatingColorPicker,
+          position: adaptPanelPositionOnResize(
+            s.floatingColorPicker.position,
+            {
+              width: s.floatingColorPicker.panelWidth,
+              height: s.floatingColorPicker.panelHeight,
+            },
+            s.floatingColorPicker.edgeAnchor,
+            containerSize,
+          ),
+        };
+      }
+
+      return updates;
     }),
 
 
@@ -2433,19 +2679,29 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setColorPickerLayoutOrientation: (orientation) =>
     set((s) => {
-      const container = s.viewportContainer;
+      const containerSize = getContainerDimensions(s.viewportContainer);
       const panelWidth = getDefaultColorPickerPanelWidth(orientation);
       const panelHeight = getEstimatedColorPickerPanelHeight(orientation);
-      const position = s.floatingColorPicker.visible
-        ? clampPanelPosition(
-            s.floatingColorPicker.position.x,
-            s.floatingColorPicker.position.y,
-            panelWidth,
-            panelHeight,
-            container?.clientWidth ?? null,
-            container?.clientHeight ?? null,
-          )
-        : s.floatingColorPicker.position;
+      const panelSize = { width: panelWidth, height: panelHeight };
+
+      let position = s.floatingColorPicker.position;
+      if (s.floatingColorPicker.visible) {
+        position = containerSize
+          ? adaptPanelPositionOnResize(
+              s.floatingColorPicker.position,
+              panelSize,
+              s.floatingColorPicker.edgeAnchor,
+              containerSize,
+            )
+          : clampPanelPosition(
+              s.floatingColorPicker.position.x,
+              s.floatingColorPicker.position.y,
+              panelWidth,
+              panelHeight,
+              null,
+              null,
+            );
+      }
 
       return {
         colorPickerLayoutOrientation: orientation,
@@ -2752,6 +3008,35 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     }
 
+  },
+
+
+
+  openPixelRestorePage: () => {
+    usePixelRestoreStore.getState().reset();
+    usePixelRestoreStore.getState().openPage();
+  },
+
+
+
+  exportRestoredImageToReference: async (imageData) => {
+    const { project } = get();
+    if (!project) return;
+
+    try {
+      const result = importImageDataToReferenceLayer(
+        project,
+        imageData,
+        `像素还原 ${new Date().toLocaleString()}`,
+      );
+      set({
+        project: result.project,
+        cropEditorLayerId: result.openCropEditor ? result.layerId : null,
+      });
+      usePixelRestoreStore.getState().closePage();
+    } catch {
+      set({ captureError: "导出到参考层失败，请重试" });
+    }
   },
 
 
@@ -3184,7 +3469,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   },
 
-}));
+  };
+
+});
 
 useAppStore.subscribe(() => {
   if (isHydratingPreferences) return;

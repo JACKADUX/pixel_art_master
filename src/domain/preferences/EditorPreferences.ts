@@ -7,6 +7,10 @@ import {
   type ColorPickerLayoutOrientation,
 } from "@/domain/color/ColorPickerLayout";
 import {
+  DEFAULT_PANEL_EDGE_ANCHOR,
+  type PanelEdgeAnchor,
+} from "@/domain/viewport/FloatingPanelAnchor";
+import {
   clampStampSize,
   clampMagicWandTolerance,
   DEFAULT_TOOL_SETTINGS,
@@ -34,6 +38,7 @@ export interface NavigatorPanelLayout {
   visible: boolean;
   position: PanelPosition;
   size: PanelSize;
+  edgeAnchor: PanelEdgeAnchor;
 }
 
 export interface FloatingColorPickerLayout {
@@ -42,6 +47,7 @@ export interface FloatingColorPickerLayout {
   panelWidth: number;
   panelHeight: number;
   activeSlot: EditorColorSlot;
+  edgeAnchor: PanelEdgeAnchor;
 }
 
 export interface EditorPreferences {
@@ -60,6 +66,8 @@ export interface EditorPreferences {
   floatingColorPickerLayout: FloatingColorPickerLayout;
   mousePositionOverlayVisible: boolean;
   canvasDisplayMode: CanvasDisplayMode;
+  assetLibraryDrawerExpanded: boolean;
+  assetLibraryDrawerHeight: number;
 }
 
 export const EDITOR_PREFERENCES_VERSION = 1;
@@ -82,6 +90,9 @@ const MIN_COLOR_PICKER_HEIGHT = 280;
 const MAX_COLOR_PICKER_HEIGHT = 720;
 const MIN_COLOR_PICKER_WIDTH = 200;
 const MAX_COLOR_PICKER_WIDTH = 800;
+const MIN_ASSET_DRAWER_HEIGHT = 120;
+const MAX_ASSET_DRAWER_HEIGHT = 800;
+export const DEFAULT_ASSET_DRAWER_HEIGHT = 320;
 
 const TOOL_TYPES: ToolType[] = ["brush", "fill", "eraser", "shape", "select", "transform"];
 const BRUSH_SHAPES: BrushShape[] = ["square", "circle"];
@@ -110,6 +121,7 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
     visible: false,
     position: { x: 16, y: 16 },
     size: { width: DEFAULT_NAVIGATOR_WIDTH, height: DEFAULT_NAVIGATOR_HEIGHT },
+    edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
   },
   floatingColorPickerLayout: {
     visible: false,
@@ -117,9 +129,12 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
     panelWidth: COLOR_PICKER_VERTICAL_WIDTH,
     panelHeight: DEFAULT_COLOR_PICKER_PANEL_HEIGHT,
     activeSlot: "foreground",
+    edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
   },
   mousePositionOverlayVisible: false,
   canvasDisplayMode: "normal",
+  assetLibraryDrawerExpanded: false,
+  assetLibraryDrawerHeight: DEFAULT_ASSET_DRAWER_HEIGHT,
 };
 
 export interface EditorPreferencesSource {
@@ -138,6 +153,7 @@ export interface EditorPreferencesSource {
     visible: boolean;
     position: PanelPosition;
     size: PanelSize;
+    edgeAnchor: PanelEdgeAnchor;
   };
   floatingColorPicker: {
     visible: boolean;
@@ -145,9 +161,12 @@ export interface EditorPreferencesSource {
     panelWidth: number;
     panelHeight: number;
     activeSlot: EditorColorSlot;
+    edgeAnchor: PanelEdgeAnchor;
   };
   mousePositionOverlayVisible: boolean;
   canvasDisplayMode: CanvasDisplayMode;
+  assetLibraryDrawerExpanded: boolean;
+  assetLibraryDrawerHeight: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -178,6 +197,19 @@ function parseSize(value: unknown, fallback: PanelSize, minWidth: number, minHei
     width: clampNumber(value.width, minWidth, 2000, fallback.width),
     height: clampNumber(value.height, minHeight, 2000, fallback.height),
   };
+}
+
+function parseEdgeAnchor(value: unknown, fallback: PanelEdgeAnchor): PanelEdgeAnchor {
+  if (!isRecord(value)) return { ...fallback };
+  const horizontal =
+    value.horizontal === "left" || value.horizontal === "right" || value.horizontal === "none"
+      ? value.horizontal
+      : fallback.horizontal;
+  const vertical =
+    value.vertical === "top" || value.vertical === "bottom" || value.vertical === "none"
+      ? value.vertical
+      : fallback.vertical;
+  return { horizontal, vertical };
 }
 
 function parseToolSettings(value: unknown): ToolSettings {
@@ -237,6 +269,7 @@ function parseNavigatorLayout(value: unknown): NavigatorPanelLayout {
     visible: typeof value.visible === "boolean" ? value.visible : defaults.visible,
     position: parsePosition(value.position, defaults.position),
     size: parseSize(value.size, defaults.size, MIN_NAVIGATOR_WIDTH, MIN_NAVIGATOR_HEIGHT),
+    edgeAnchor: parseEdgeAnchor(value.edgeAnchor, defaults.edgeAnchor),
   };
 }
 
@@ -264,6 +297,7 @@ function parseFloatingColorPickerLayout(value: unknown): FloatingColorPickerLayo
       defaults.panelHeight,
     ),
     activeSlot,
+    edgeAnchor: parseEdgeAnchor(value.edgeAnchor, defaults.edgeAnchor),
   };
 }
 
@@ -327,6 +361,16 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
         ? raw.mousePositionOverlayVisible
         : defaults.mousePositionOverlayVisible,
     canvasDisplayMode,
+    assetLibraryDrawerExpanded:
+      typeof raw.assetLibraryDrawerExpanded === "boolean"
+        ? raw.assetLibraryDrawerExpanded
+        : defaults.assetLibraryDrawerExpanded,
+    assetLibraryDrawerHeight: clampNumber(
+      raw.assetLibraryDrawerHeight,
+      MIN_ASSET_DRAWER_HEIGHT,
+      MAX_ASSET_DRAWER_HEIGHT,
+      defaults.assetLibraryDrawerHeight,
+    ),
   };
 }
 
@@ -357,6 +401,7 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
       visible: source.navigator.visible,
       position: { ...source.navigator.position },
       size: { ...source.navigator.size },
+      edgeAnchor: { ...source.navigator.edgeAnchor },
     },
     floatingColorPickerLayout: {
       visible: source.floatingColorPicker.visible,
@@ -364,8 +409,16 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
       panelWidth: source.floatingColorPicker.panelWidth,
       panelHeight: source.floatingColorPicker.panelHeight,
       activeSlot: source.floatingColorPicker.activeSlot,
+      edgeAnchor: { ...source.floatingColorPicker.edgeAnchor },
     },
     mousePositionOverlayVisible: source.mousePositionOverlayVisible,
     canvasDisplayMode: source.canvasDisplayMode,
+    assetLibraryDrawerExpanded: source.assetLibraryDrawerExpanded,
+    assetLibraryDrawerHeight: clampNumber(
+      source.assetLibraryDrawerHeight,
+      MIN_ASSET_DRAWER_HEIGHT,
+      MAX_ASSET_DRAWER_HEIGHT,
+      DEFAULT_EDITOR_PREFERENCES.assetLibraryDrawerHeight,
+    ),
   };
 }

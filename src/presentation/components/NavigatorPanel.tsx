@@ -58,6 +58,7 @@ export function NavigatorPanel() {
   const lastPanRef = useRef({ x: 0, y: 0 });
   const previewScaleRef = useRef(1);
   const isDraggingRef = useRef(false);
+  const isResizingRef = useRef(false);
   const isNavigatingRef = useRef(false);
   const isPanningRef = useRef(false);
 
@@ -66,8 +67,11 @@ export function NavigatorPanel() {
   const navigator = useAppStore((s) => s.navigator);
   const viewportSnapshot = useAppStore((s) => s.viewportSnapshot);
   const getCompositeGrid = useAppStore((s) => s.getCompositeGrid);
-  const setNavigatorPosition = useAppStore((s) => s.setNavigatorPosition);
+  const setNavigatorPositionWithAnchor = useAppStore(
+    (s) => s.setNavigatorPositionWithAnchor,
+  );
   const setNavigatorBounds = useAppStore((s) => s.setNavigatorBounds);
+  const finalizeNavigatorDrag = useAppStore((s) => s.finalizeNavigatorDrag);
   const viewportContainer = useAppStore((s) => s.viewportContainer);
   const zoomNavigatorPreviewAtPoint = useAppStore(
     (s) => s.zoomNavigatorPreviewAtPoint,
@@ -169,7 +173,7 @@ export function NavigatorPanel() {
       if (isDraggingRef.current) {
         const dx = e.clientX - dragStartRef.current.x;
         const dy = e.clientY - dragStartRef.current.y;
-        setNavigatorPosition(
+        setNavigatorPositionWithAnchor(
           dragStartRef.current.posX + dx,
           dragStartRef.current.posY + dy,
         );
@@ -177,6 +181,7 @@ export function NavigatorPanel() {
       }
 
       if (resizeStartRef.current) {
+        isResizingRef.current = true;
         const start = resizeStartRef.current;
         const bounds = computeNavigatorResizeFromCorner(
           start.corner,
@@ -212,9 +217,15 @@ export function NavigatorPanel() {
     };
 
     const handleMouseUp = (e: MouseEvent) => {
+      const wasDragging = isDraggingRef.current;
+      const wasResizing = isResizingRef.current;
       isDraggingRef.current = false;
       resizeStartRef.current = null;
+      isResizingRef.current = false;
       isNavigatingRef.current = false;
+      if (wasDragging || wasResizing) {
+        finalizeNavigatorDrag();
+      }
       if (isMiddleMouseButton(e.button)) {
         isPanningRef.current = false;
         setIsPanning(false);
@@ -228,8 +239,9 @@ export function NavigatorPanel() {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [
-    setNavigatorPosition,
+    setNavigatorPositionWithAnchor,
     setNavigatorBounds,
+    finalizeNavigatorDrag,
     viewportContainer,
     panNavigatorPreview,
     navigateToPreviewPoint,

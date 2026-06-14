@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { AssetLibraryModal } from "./presentation/components/asset/AssetLibraryModal";
+import { AssetLibraryDrawer } from "./presentation/components/asset/AssetLibraryDrawer";
 import { CanvasView } from "./presentation/components/CanvasView";
 import { RightPanel } from "./presentation/components/RightPanel";
 import { StatusBar } from "./presentation/components/StatusBar";
@@ -6,6 +8,7 @@ import { Toolbar } from "./presentation/components/Toolbar";
 import { ToolPropertiesBar } from "./presentation/components/ToolPropertiesBar";
 import { ProjectManagerModal } from "./presentation/components/ProjectManagerModal";
 import { CanvasSizeModal } from "./presentation/components/CanvasSizeModal";
+import { PixelRestorePage } from "./presentation/components/pixelRestore/PixelRestorePage";
 import { ToastContainer } from "./presentation/components/ToastContainer";
 import { TopBar } from "./presentation/components/TopBar";
 import { useAppShortcuts } from "./presentation/hooks/useAppShortcuts";
@@ -28,12 +31,15 @@ function App() {
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
           <ToolPropertiesBar />
           <CanvasView />
+          <AssetLibraryDrawer />
         </div>
         <RightPanel />
       </div>
       <StatusBar />
       <ProjectManagerModal />
+      <AssetLibraryModal />
       <CanvasSizeModal />
+      <PixelRestorePage />
       <ToastContainer />
     </div>
   );

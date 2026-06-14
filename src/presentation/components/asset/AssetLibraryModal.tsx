@@ -1,0 +1,93 @@
+import { useEffect } from "react";
+import { useAppStore } from "../../stores/appStore";
+import { AssetLibraryContent } from "./AssetLibraryContent";
+
+export function AssetLibraryModal() {
+  const open = useAppStore((s) => s.assetLibraryModalOpen);
+  const workspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const library = useAppStore((s) => s.assetLibrary);
+  const loading = useAppStore((s) => s.assetLibraryLoading);
+  const selectedFolderId = useAppStore((s) => s.selectedAssetFolderId);
+  const selectedAssetId = useAppStore((s) => s.selectedAssetId);
+
+  const closeAssetLibraryModal = useAppStore((s) => s.closeAssetLibraryModal);
+  const pickProjectsWorkspace = useAppStore((s) => s.pickProjectsWorkspace);
+  const refreshAssetLibrary = useAppStore((s) => s.refreshAssetLibrary);
+  const setSelectedAssetFolder = useAppStore((s) => s.setSelectedAssetFolder);
+  const setSelectedAsset = useAppStore((s) => s.setSelectedAsset);
+  const createAssetFolderAction = useAppStore((s) => s.createAssetFolderAction);
+  const renameAssetFolderAction = useAppStore((s) => s.renameAssetFolderAction);
+  const importAssetFromClipboardAction = useAppStore((s) => s.importAssetFromClipboardAction);
+  const importAssetFromFileAction = useAppStore((s) => s.importAssetFromFileAction);
+  const startAssetCanvasCapture = useAppStore((s) => s.startAssetCanvasCapture);
+  const updateAssetRecordAction = useAppStore((s) => s.updateAssetRecordAction);
+  const deleteAssetRecordAction = useAppStore((s) => s.deleteAssetRecordAction);
+  const createAssetCategoryAction = useAppStore((s) => s.createAssetCategoryAction);
+  const createAssetTagAction = useAppStore((s) => s.createAssetTagAction);
+
+  useEffect(() => {
+    if (open && workspacePath) {
+      void refreshAssetLibrary();
+    }
+  }, [open, workspacePath, refreshAssetLibrary]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60">
+      <div className="flex h-[85vh] w-[92vw] max-w-5xl flex-col overflow-hidden rounded-lg border border-zinc-600 bg-zinc-900 shadow-xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-700 px-4 py-3">
+          <h2 className="text-sm font-medium text-zinc-200">资产管理</h2>
+          <button
+            type="button"
+            onClick={closeAssetLibraryModal}
+            className="text-zinc-400 hover:text-zinc-200"
+          >
+            ✕
+          </button>
+        </div>
+
+        {!workspacePath ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 p-10 text-center">
+            <p className="text-sm text-zinc-400">
+              请先选择项目文件夹，资产库将保存在该目录下的 .pixelart-assets 中。
+            </p>
+            <button
+              type="button"
+              onClick={() => void pickProjectsWorkspace()}
+              className="rounded bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              选择项目文件夹
+            </button>
+          </div>
+        ) : loading || !library ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-zinc-500">
+            加载中...
+          </div>
+        ) : (
+          <AssetLibraryContent
+            library={library}
+            workspacePath={workspacePath}
+            selectedFolderId={selectedFolderId}
+            selectedAssetId={selectedAssetId}
+            onSelectFolder={setSelectedAssetFolder}
+            onSelectAsset={setSelectedAsset}
+            onCreateFolder={(parentId) => void createAssetFolderAction(parentId)}
+            onRenameFolder={(folderId, name) =>
+              void renameAssetFolderAction(folderId, name)
+            }
+            onImportClipboard={() => void importAssetFromClipboardAction()}
+            onImportFile={() => void importAssetFromFileAction()}
+            onStartCanvasCapture={() => startAssetCanvasCapture()}
+            onUpdateAsset={(assetId, updates) =>
+              void updateAssetRecordAction(assetId, updates)
+            }
+            onDeleteAsset={(assetId) => void deleteAssetRecordAction(assetId)}
+            onCreateCategory={(name) => void createAssetCategoryAction(name)}
+            onCreateTag={(name) => void createAssetTagAction(name)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

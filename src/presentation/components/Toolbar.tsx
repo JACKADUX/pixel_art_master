@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 
+import { isPanelMostlyOutsideViewport } from "@/domain/viewport/FloatingPanelAnchor";
 import type { ToolType } from "@/domain/tool/ToolType";
 
 import { TOOL_SHORTCUTS } from "../config/toolShortcuts";
@@ -26,9 +27,12 @@ export function Toolbar() {
   const foregroundColor = useAppStore((s) => s.foregroundColor);
   const backgroundColor = useAppStore((s) => s.backgroundColor);
   const floatingVisible = useAppStore((s) => s.floatingColorPicker.visible);
+  const floatingColorPicker = useAppStore((s) => s.floatingColorPicker);
+  const viewportContainer = useAppStore((s) => s.viewportContainer);
   const setActiveTool = useAppStore((s) => s.setActiveTool);
   const setColorSlot = useAppStore((s) => s.setColorSlot);
   const setFloatingColorPickerSlot = useAppStore((s) => s.setFloatingColorPickerSlot);
+  const closeFloatingColorPicker = useAppStore((s) => s.closeFloatingColorPicker);
 
   const [colorPickerSlot, setColorPickerSlot] = useState<ColorSlot | null>(null);
   const foregroundSwatchRef = useRef<HTMLButtonElement>(null);
@@ -39,6 +43,25 @@ export function Toolbar() {
 
   const handleSwatchToggle = (slot: ColorSlot) => {
     if (floatingVisible) {
+      const container = viewportContainer;
+      if (
+        container &&
+        isPanelMostlyOutsideViewport(
+          floatingColorPicker.position,
+          {
+            width: floatingColorPicker.panelWidth,
+            height: floatingColorPicker.panelHeight,
+          },
+          {
+            width: container.clientWidth,
+            height: container.clientHeight,
+          },
+        )
+      ) {
+        closeFloatingColorPicker();
+        setColorPickerSlot(slot);
+        return;
+      }
       setFloatingColorPickerSlot(slot);
       return;
     }

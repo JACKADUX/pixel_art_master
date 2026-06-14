@@ -48,6 +48,8 @@ export function StatusBar() {
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
   const saveCurrentProject = useAppStore((s) => s.saveCurrentProject);
+  const toggleAssetLibraryDrawer = useAppStore((s) => s.toggleAssetLibraryDrawer);
+  const assetLibraryDrawerExpanded = useAppStore((s) => s.assetLibraryDrawerExpanded);
   const canUndo = useAppStore((s) => s.historyStack.canUndo);
   const canRedo = useAppStore((s) => s.historyStack.canRedo);
 
@@ -117,6 +119,16 @@ export function StatusBar() {
         }`}
       >
         Oklab 明度 {canvasDisplayMode === "oklabLightness" ? "开" : "关"}
+      </button>
+
+      <button
+        type="button"
+        onClick={toggleAssetLibraryDrawer}
+        className={`rounded px-2 py-0.5 ${
+          assetLibraryDrawerExpanded ? "bg-zinc-700" : "bg-zinc-800 text-zinc-600"
+        }`}
+      >
+        资产库 {assetLibraryDrawerExpanded ? "开" : "关"}
       </button>
 
       <div className="ml-auto flex items-center gap-3">

@@ -15,11 +15,14 @@ export function FloatingColorPickerPanel() {
   const foregroundColor = useAppStore((s) => s.foregroundColor);
   const backgroundColor = useAppStore((s) => s.backgroundColor);
   const setColorSlot = useAppStore((s) => s.setColorSlot);
-  const setFloatingColorPickerPosition = useAppStore(
-    (s) => s.setFloatingColorPickerPosition,
+  const setFloatingColorPickerPositionWithAnchor = useAppStore(
+    (s) => s.setFloatingColorPickerPositionWithAnchor,
   );
   const setFloatingColorPickerPanelSize = useAppStore(
     (s) => s.setFloatingColorPickerPanelSize,
+  );
+  const finalizeFloatingColorPickerDrag = useAppStore(
+    (s) => s.finalizeFloatingColorPickerDrag,
   );
   const closeFloatingColorPicker = useAppStore((s) => s.closeFloatingColorPicker);
 
@@ -53,13 +56,16 @@ export function FloatingColorPickerPanel() {
       if (!isDraggingRef.current) return;
       const dx = e.clientX - dragStartRef.current.x;
       const dy = e.clientY - dragStartRef.current.y;
-      setFloatingColorPickerPosition(
+      setFloatingColorPickerPositionWithAnchor(
         dragStartRef.current.posX + dx,
         dragStartRef.current.posY + dy,
       );
     };
 
     const handleMouseUp = () => {
+      if (isDraggingRef.current) {
+        finalizeFloatingColorPickerDrag();
+      }
       isDraggingRef.current = false;
     };
 
@@ -69,7 +75,7 @@ export function FloatingColorPickerPanel() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [setFloatingColorPickerPosition]);
+  }, [setFloatingColorPickerPositionWithAnchor, finalizeFloatingColorPickerDrag]);
 
   if (!floatingColorPicker.visible || !project) return null;
 
