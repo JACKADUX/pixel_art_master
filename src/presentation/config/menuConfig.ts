@@ -5,6 +5,7 @@ import {
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   ArrowsPointingOutIcon,
+  ChatBubbleLeftRightIcon,
   DocumentDuplicateIcon,
   Cog6ToothIcon,
   DocumentPlusIcon,
@@ -58,6 +59,7 @@ export interface MenuActions {
   pasteSelection: () => void;
   openPixelRestorePage: () => void;
   openColorEditPage: () => void;
+  openAiChatTestPage: () => void;
   openAssetLibrary: () => void;
   openSettingsModal: () => void;
 }
@@ -202,6 +204,12 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           label: "颜色编辑…",
           icon: SwatchIcon,
           onClick: actions.openColorEditPage,
+        },
+        {
+          type: "action",
+          label: "AI 对话测试…",
+          icon: ChatBubbleLeftRightIcon,
+          onClick: actions.openAiChatTestPage,
         },
       ],
     },

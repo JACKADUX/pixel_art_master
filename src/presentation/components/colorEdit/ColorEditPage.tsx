@@ -3,6 +3,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { MonitorPicker } from "../MonitorPicker";
 import { useAppStore } from "../../stores/appStore";
 import { useColorEditStore } from "../../stores/colorEditStore";
+import { useImageFileDrop } from "../../hooks/useImageFileDrop";
+import { ImageDropOverlay } from "../toolPage/ImageDropOverlay";
+import { ToolPagePreviewSplit } from "../toolPage/ToolPagePreviewSplit";
 import { ColorEditResultPreview } from "./ColorEditResultPreview";
 import { ColorEditSourcePreview } from "./ColorEditSourcePreview";
 import { ColorEditToolPanel } from "./ColorEditToolPanel";
@@ -15,6 +18,7 @@ export function ColorEditPage() {
   const availableMonitors = useColorEditStore((s) => s.availableMonitors);
   const closePage = useColorEditStore((s) => s.closePage);
   const importFromPath = useColorEditStore((s) => s.importFromPath);
+  const importFromFile = useColorEditStore((s) => s.importFromFile);
   const importFromClipboard = useColorEditStore((s) => s.importFromClipboard);
   const screenCapture = useColorEditStore((s) => s.screenCapture);
   const captureFromMonitor = useColorEditStore((s) => s.captureFromMonitor);
@@ -24,6 +28,13 @@ export function ColorEditPage() {
   const exportRestoredImageToAssetLibrary = useAppStore(
     (s) => s.exportRestoredImageToAssetLibrary,
   );
+
+  const { isDraggingOver, dropZoneProps } = useImageFileDrop({
+    enabled: openPage,
+    disabled: loading,
+    onImportPath: importFromPath,
+    onImportFile: importFromFile,
+  });
 
   useEffect(() => {
     if (!openPage) return;
@@ -65,7 +76,11 @@ export function ColorEditPage() {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100">
+      <div
+        className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100"
+        {...dropZoneProps}
+      >
+        <ImageDropOverlay visible={isDraggingOver} />
         <header className="flex shrink-0 items-center gap-3 border-b border-zinc-700 bg-zinc-900 px-4 py-2.5">
           <button
             type="button"
@@ -76,7 +91,9 @@ export function ColorEditPage() {
           </button>
           <h1 className="text-sm font-medium text-zinc-200">颜色编辑工具</h1>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[10px] text-zinc-600">Ctrl+V 粘贴 · 滚轮缩放 · 中键平移</span>
+            <span className="text-[10px] text-zinc-600">
+              拖放图片 · Ctrl+V 粘贴 · 滚轮缩放 · 中键平移
+            </span>
             <button
               type="button"
               onClick={() => void screenCapture()}
@@ -97,10 +114,10 @@ export function ColorEditPage() {
         </header>
 
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_16rem] overflow-hidden">
-          <div className="grid min-h-0 grid-rows-2 divide-y divide-zinc-800 border-r border-zinc-800">
-            <ColorEditSourcePreview />
-            <ColorEditResultPreview imageData={resultImageData} />
-          </div>
+          <ToolPagePreviewSplit
+            source={<ColorEditSourcePreview />}
+            result={<ColorEditResultPreview imageData={resultImageData} />}
+          />
 
           <ColorEditToolPanel
             canExport={projectsWorkspacePath !== null && resultImageData !== null}

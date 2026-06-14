@@ -28,6 +28,7 @@ export function TopBar() {
   const pasteSelection = useAppStore((s) => s.pasteSelection);
   const openPixelRestorePage = useAppStore((s) => s.openPixelRestorePage);
   const openColorEditPage = useAppStore((s) => s.openColorEditPage);
+  const openAiChatTestPage = useAppStore((s) => s.openAiChatTestPage);
   const openAssetLibraryModal = useAppStore((s) => s.openAssetLibraryModal);
   const openSettingsModal = useAppStore((s) => s.openSettingsModal);
   const project = useAppStore((s) => s.project);
@@ -58,6 +59,7 @@ export function TopBar() {
         pasteSelection: () => void pasteSelection(),
         openPixelRestorePage,
         openColorEditPage,
+        openAiChatTestPage,
         openAssetLibrary: openAssetLibraryModal,
         openSettingsModal,
       }),
@@ -85,6 +87,7 @@ export function TopBar() {
       pasteSelection,
       openPixelRestorePage,
       openColorEditPage,
+      openAiChatTestPage,
       openAssetLibraryModal,
       openSettingsModal,
     ],

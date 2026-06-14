@@ -6,6 +6,7 @@ import { saveColorEditPreferences } from "@/application/use-cases/SaveColorEditP
 import {
   captureMonitorToImagePath,
   loadSourceImageFromClipboard,
+  loadSourceImageFromFile,
   loadSourceImageFromPath,
 } from "@/application/use-cases/PixelRestoreUseCases";
 import type { PixelColor } from "@/domain/canvas/PixelColor";
@@ -50,6 +51,7 @@ interface ColorEditStore {
   closePage: () => void;
   reset: () => void;
   importFromPath: (path: string) => Promise<void>;
+  importFromFile: (file: File) => Promise<void>;
   importFromImageData: (imageData: ImageData) => void;
   importFromClipboard: () => Promise<void>;
   screenCapture: () => Promise<void>;
@@ -182,6 +184,22 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const sourceImageData = await loadSourceImageFromPath(imageProcessor, path);
+      set({
+        ...applySourceImage(sourceImageData, get().unmatchedPixelBehavior),
+        loading: false,
+      });
+    } catch {
+      set({
+        loading: false,
+        error: "导入图片失败，请重试",
+      });
+    }
+  },
+
+  importFromFile: async (file) => {
+    set({ loading: true, error: null });
+    try {
+      const sourceImageData = await loadSourceImageFromFile(imageProcessor, file);
       set({
         ...applySourceImage(sourceImageData, get().unmatchedPixelBehavior),
         loading: false,

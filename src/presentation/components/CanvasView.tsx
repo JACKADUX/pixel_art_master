@@ -28,12 +28,15 @@ import {
 } from "@/infrastructure/canvas/OklabDisplayGlRenderer";
 import { renderBrushStampPreview } from "@/infrastructure/canvas/BrushStampPreviewRenderer";
 import { renderBrushLinePreview } from "@/infrastructure/canvas/BrushLinePreviewRenderer";
+import { renderPatternBrushPreview } from "@/infrastructure/canvas/PatternBrushPreviewRenderer";
 import {
   renderSelectionOverlay,
   renderTransformHandles,
 } from "@/infrastructure/canvas/SelectionOverlayRenderer";
 import { renderSymmetryAxis } from "@/infrastructure/canvas/SymmetryAxisRenderer";
+import { renderTileOverlay } from "@/infrastructure/canvas/TileOverlayRenderer";
 import type { Point } from "@/domain/tool/ITool";
+import { rgbKey } from "@/domain/canvas/PixelColor";
 import { isSymmetryActive } from "@/domain/symmetry/SymmetryConfig";
 import {
   forEachSymmetricTransform,
@@ -181,6 +184,12 @@ export function CanvasView() {
   const beginSymmetryAxisDrag = useAppStore((s) => s.beginSymmetryAxisDrag);
   const endSymmetryAxisDrag = useAppStore((s) => s.endSymmetryAxisDrag);
   const setSymmetryOrigin = useAppStore((s) => s.setSymmetryOrigin);
+  const getActivePatternBrushGrid = useAppStore((s) => s.getActivePatternBrushGrid);
+  const patternBrushAnchorForegroundColor = useAppStore(
+    (s) => s.patternBrushAnchorForegroundColor,
+  );
+  const tileSession = useAppStore((s) => s.tileSession);
+  const tilePreviewRect = useAppStore((s) => s.tilePreviewRect);
 
   const [isPanning, setIsPanning] = useState(false);
   const altHeld = useAltKeyHeld();
@@ -218,7 +227,20 @@ export function CanvasView() {
   const isAssetCaptureAdjusting = assetCapturePhase === "adjusting";
   const isAssetCaptureActive = assetCapturePhase !== "idle";
 
+  const isRepeatTileCreating = tileSession.phase === "creating";
+  const isRepeatTileDrawing = tileSession.phase === "drawing";
+  const isRepeatTilePointerActive =
+    isRepeatTileCreating || (isRepeatTileDrawing && isDrawing && isDrawingToolType(activeTool));
+
   const boundsLabelRect = useMemo(() => {
+    if (
+      isRepeatTileCreating &&
+      tilePreviewRect &&
+      tilePreviewRect.width > 0 &&
+      tilePreviewRect.height > 0
+    ) {
+      return tilePreviewRect;
+    }
     if (
       isAssetCaptureActive &&
       assetCaptureRect &&
@@ -249,6 +271,8 @@ export function CanvasView() {
     }
     return null;
   }, [
+    isRepeatTileCreating,
+    tilePreviewRect,
     isAssetCaptureActive,
     assetCaptureRect,
     activeTool,
@@ -466,13 +490,22 @@ export function CanvasView() {
       return {
         size: toolSettings.brushSize,
         shape: toolSettings.brushShape,
+        isPattern: toolSettings.brushShape === "pattern",
+        patternScale: toolSettings.patternBrushScale,
       };
     }
     return {
       size: toolSettings.eraserSize,
       shape: toolSettings.eraserShape,
+      isPattern: false,
+      patternScale: 100,
     };
   }, [activeTool, toolSettings]);
+
+  const patternBrushGrid = useMemo(() => {
+    if (!brushPreview?.isPattern) return null;
+    return getActivePatternBrushGrid();
+  }, [brushPreview?.isPattern, getActivePatternBrushGrid]);
 
   const renderOverlay = useCallback(() => {
     const previewCanvas = previewRef.current;
@@ -496,15 +529,37 @@ export function CanvasView() {
         ? assetCaptureRect
         : null;
 
+    const tileCreatePreviewRect =
+      isRepeatTileCreating &&
+      tilePreviewRect &&
+      tilePreviewRect.width > 0 &&
+      tilePreviewRect.height > 0
+        ? tilePreviewRect
+        : null;
+
+    const showTileRegionOverlay =
+      (isRepeatTileDrawing &&
+        tileSession.region.width > 0 &&
+        tileSession.region.height > 0) ||
+      (isRepeatTileCreating && tileCreatePreviewRect !== null);
+
     renderSelectionOverlay(ctx, {
-      selection: capturePreviewRect ? null : selectionDrag?.layerPan ? null : selection,
-      previewRect: capturePreviewRect ?? selectionPreviewRect,
+      selection: capturePreviewRect || showTileRegionOverlay ? null : selectionDrag?.layerPan ? null : selection,
+      previewRect: capturePreviewRect ?? (showTileRegionOverlay ? null : selectionPreviewRect),
       lassoPoints,
       phase: marchPhase,
       zoom,
       canvasWidth: composite.width,
       canvasHeight: composite.height,
     });
+
+    if (showTileRegionOverlay) {
+      renderTileOverlay(
+        ctx,
+        isRepeatTileDrawing ? tileSession.region : tileCreatePreviewRect!,
+        zoom,
+      );
+    }
 
     if (activeTool === "transform" && selection && !selectionDrag?.layerPan) {
       renderTransformHandles(ctx, { selection, zoom, phase: marchPhase });
@@ -523,7 +578,24 @@ export function CanvasView() {
       },
     });
 
+    const applyForegroundTint =
+      patternBrushAnchorForegroundColor !== null &&
+      rgbKey(foregroundColor) !== rgbKey(patternBrushAnchorForegroundColor);
+
     const renderStampPreviewAt = (center: Point) => {
+      if (brushPreview!.isPattern && patternBrushGrid) {
+        renderPatternBrushPreview(
+          ctx,
+          center,
+          patternBrushGrid,
+          brushPreview!.patternScale,
+          foregroundColor,
+          applyForegroundTint,
+          zoom,
+          { width: composite.width, height: composite.height },
+        );
+        return;
+      }
       renderBrushStampPreview(
         ctx,
         center,
@@ -538,6 +610,7 @@ export function CanvasView() {
     if (brushPreview && hoverPoint && !isPanning && !isAssetCaptureActive) {
       if (
         activeTool === "brush" &&
+        !brushPreview.isPattern &&
         shiftKeyHeld &&
         brushLineAnchor &&
         (brushLineAnchor.x !== hoverPoint.x || brushLineAnchor.y !== hoverPoint.y)
@@ -576,6 +649,8 @@ export function CanvasView() {
     assetCaptureRect,
     brushLineAnchor,
     brushPreview,
+    patternBrushGrid,
+    patternBrushAnchorForegroundColor,
     composite,
     displayWidth,
     displayHeight,
@@ -583,11 +658,15 @@ export function CanvasView() {
     hoverPoint,
     isAssetCaptureActive,
     isPanning,
+    isRepeatTileCreating,
+    isRepeatTileDrawing,
+    tilePreviewRect,
     lassoPoints,
     marchPhase,
     selection,
     selectionDrag,
     selectionPreviewRect,
+    tileSession,
     shiftKeyHeld,
     symmetry,
     appSettings.symmetryAxisVisible,
@@ -893,6 +972,14 @@ export function CanvasView() {
         const { activeTool: tool, toolSettings: settings } = useAppStore.getState();
         if (tool === "brush" || tool === "eraser") {
           const delta = e.deltaY > 0 ? -1 : 1;
+          if (tool === "brush" && settings.brushShape === "pattern") {
+            const currentScale = settings.patternBrushScale;
+            const newScale = Math.max(0, Math.min(500, currentScale + delta * 5));
+            if (newScale !== currentScale) {
+              setToolSettings({ patternBrushScale: newScale });
+            }
+            return;
+          }
           const sizeKey = tool === "brush" ? "brushSize" : "eraserSize";
           const currentSize = settings[sizeKey];
           const newSize = clampStampSize(currentSize + delta);
@@ -1279,7 +1366,8 @@ export function CanvasView() {
     (drawingButton !== null &&
       ((selectionDrag !== null &&
         (activeTool === "select" || activeTool === "transform")) ||
-        (isDrawing && isDrawingToolType(activeTool))));
+        (isDrawing && isDrawingToolType(activeTool)) ||
+        isRepeatTilePointerActive));
 
   useEffect(() => {
     if (!documentPointerTracking) return;
@@ -1295,6 +1383,7 @@ export function CanvasView() {
         isDrawing: drawing,
         assetCapturePhase: capturePhase,
         symmetryAxisDrag: axisDrag,
+        tileSession: currentTileSession,
       } = useAppStore.getState();
 
       if (capturePhase === "dragging") {
@@ -1320,7 +1409,11 @@ export function CanvasView() {
 
       const isSelectTransform =
         (tool === "select" || tool === "transform") && drag !== null;
-      const isActiveDrawingTool = drawing && isDrawingToolType(tool);
+      const isRepeatTileActive =
+        currentTileSession.phase === "creating" ||
+        (currentTileSession.phase === "drawing" && drawing && isDrawingToolType(tool));
+      const isActiveDrawingTool =
+        (drawing && isDrawingToolType(tool)) || isRepeatTileActive;
       if (!isSelectTransform && !isActiveDrawingTool) return;
 
       const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
@@ -1363,11 +1456,16 @@ export function CanvasView() {
         selectionDrag: drag,
         isDrawing: drawing,
         activeTool: tool,
+        tileSession: currentTileSession,
       } = useAppStore.getState();
 
       const isSelectTransform =
         (tool === "select" || tool === "transform") && drag !== null;
-      const isActiveDrawingTool = drawing && isDrawingToolType(tool);
+      const isRepeatTileActive =
+        currentTileSession.phase === "creating" ||
+        (currentTileSession.phase === "drawing" && drawing && isDrawingToolType(tool));
+      const isActiveDrawingTool =
+        (drawing && isDrawingToolType(tool)) || isRepeatTileActive;
       if (!isSelectTransform && !isActiveDrawingTool) return;
 
       const expectedButton = activeButton ?? "primary";

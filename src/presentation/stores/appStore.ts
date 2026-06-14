@@ -1,13 +1,9 @@
 import {
-
   applyToolPointerDown,
-
   applyToolPointerMove,
-
   applyToolPointerUp,
-
   applyBrushStraightLine,
-
+  type DrawToolOptions,
 } from "@/application/use-cases/DrawStroke";
 
 import {
@@ -40,10 +36,12 @@ import type { FloatingSelection } from "@/domain/selection/FloatingSelection";
 
 import { isSelectionEmpty } from "@/domain/selection/SelectionState";
 
+import type { SelectionMask } from "@/domain/selection/SelectionMask";
 import type { SelectionRect } from "@/domain/selection/SelectionRect";
 
 import {
   clampMagicWandTolerance,
+  clampPatternScale,
 } from "@/domain/tool/ToolType";
 
 import { clipboardService } from "@/infrastructure/clipboard/createClipboardService";
@@ -65,6 +63,7 @@ import {
 
 import { usePixelRestoreStore } from "@/presentation/stores/pixelRestoreStore";
 import { useColorEditStore } from "@/presentation/stores/colorEditStore";
+import { useAiChatStore } from "@/presentation/stores/aiChatStore";
 import type { ToolPageId } from "@/presentation/config/toolPagesConfig";
 
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
@@ -135,10 +134,9 @@ import {
 
   resolveDefaultSavePath,
 
-  resolveProjectSavePath,
-
 } from "@/application/use-cases/ResolveProjectSavePath";
 
+import { saveCurrentProject as saveCurrentProjectUseCase } from "@/application/use-cases/SaveCurrentProject";
 import { saveProject } from "@/application/use-cases/SaveProject";
 import { resizeCanvas } from "@/application/use-cases/ResizeCanvas";
 
@@ -150,7 +148,7 @@ import {
   getEstimatedColorPickerPanelHeight,
   type ColorPickerLayoutOrientation,
 } from "@/domain/color/ColorPickerLayout";
-import { rgba, TRANSPARENT, type PixelColor } from "@/domain/canvas/PixelColor";
+import { rgba, TRANSPARENT, rgbKey, type PixelColor } from "@/domain/canvas/PixelColor";
 import {
   DEFAULT_COLOR_PICKER_PANEL_HEIGHT,
   DEFAULT_NAVIGATOR_HEIGHT,
@@ -203,12 +201,28 @@ import {
 } from "@/domain/tool/ToolType";
 
 import { isDrawingToolType } from "@/domain/tool/ToolRegistry";
+import {
+  closeTileSession as closeTileSessionUseCase,
+  handleTileCreatePointerDown,
+  handleTileCreatePointerMove,
+  handleTileCreatePointerUp,
+  type TileCreateDragState,
+} from "@/application/use-cases/TileSessionUseCases";
+import {
+  createTileCellMask,
+  createTileUnionMask,
+} from "@/domain/tile/TileReplication";
+import {
+  createIdleTileSession,
+  type TileSessionState,
+} from "@/domain/tile/TileSession";
 
 export type ColorSlot = "foreground" | "background";
 export type DrawingButton = "primary" | "secondary";
 
 import {
   addColorToPalette as addColorToPaletteUseCase,
+  clearPalette as clearPaletteUseCase,
   removeColorsFromPalette as removeColorsFromPaletteUseCase,
 } from "@/application/use-cases/PaletteUseCases";
 import {
@@ -230,12 +244,18 @@ import { lastOpenedProjectStore } from "@/infrastructure/storage/LocalLastOpened
 import { projectsWorkspaceStore } from "@/infrastructure/storage/LocalProjectsWorkspaceStore";
 
 import { assetLibraryRepository } from "@/infrastructure/storage/FileAssetLibraryRepository";
+import { patternBrushRepository } from "@/infrastructure/storage/FilePatternBrushRepository";
 
 import {
   createAssetLibrarySlice,
   type AssetLibrarySliceActions,
   type AssetLibrarySliceState,
 } from "@/presentation/stores/assetLibrarySlice";
+import {
+  createPatternBrushSlice,
+  type PatternBrushSliceActions,
+  type PatternBrushSliceState,
+} from "@/presentation/stores/patternBrushSlice";
 import {
   createSettingsSlice,
   type SettingsSliceActions,
@@ -249,6 +269,13 @@ import {
   type AppSettingsSliceState,
 } from "@/presentation/stores/appSettingsSlice";
 import { appSettingsRepository } from "@/infrastructure/storage/LocalAppSettingsRepository";
+import {
+  createLlmSettingsSlice,
+  subscribeLlmSettingsPersistence,
+  type LlmSettingsSliceActions,
+  type LlmSettingsSliceState,
+} from "@/presentation/stores/llmSettingsSlice";
+import { llmSettingsRepository } from "@/infrastructure/storage/LocalLlmSettingsRepository";
 
 import { captureService } from "@/infrastructure/tauri/TauriCaptureService";
 
@@ -341,7 +368,7 @@ export interface FloatingColorPickerState {
   edgeAnchor: PanelEdgeAnchor;
 }
 
-interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, SettingsSliceState, SettingsSliceActions, AppSettingsSliceState, AppSettingsSliceActions {
+interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, PatternBrushSliceState, PatternBrushSliceActions, SettingsSliceState, SettingsSliceActions, AppSettingsSliceState, AppSettingsSliceActions, LlmSettingsSliceState, LlmSettingsSliceActions {
 
   project: Project | null;
 
@@ -439,6 +466,12 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Set
 
   symmetryAxisDrag: SymmetryAxisKind | null;
 
+  tileSession: TileSessionState;
+
+  tileCreateDrag: TileCreateDragState | null;
+
+  tilePreviewRect: SelectionRect | null;
+
 
 
   init: () => Promise<void>;
@@ -454,6 +487,12 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Set
   saveProjectAs: () => Promise<boolean>;
 
   setActiveTool: (tool: ToolType) => void;
+
+  beginTileRegionCreate: () => void;
+
+  cancelTileRegionCreate: () => void;
+
+  closeTileSession: () => void;
 
   setToolSettings: (settings: Partial<ToolSettings>) => void;
 
@@ -632,6 +671,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Set
 
   removeColorsFromPalette: (hexes: string[]) => void;
 
+  clearPalette: () => void;
+
   importReferenceLayerColors: (
     layerId: string,
     scope: ReferenceColorImportScope,
@@ -674,6 +715,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Set
   openPixelRestorePage: () => void;
 
   openColorEditPage: () => void;
+
+  openAiChatTestPage: () => void;
 
   sendAssetToToolPage: (assetId: string, toolPageId: ToolPageId) => Promise<void>;
 
@@ -731,6 +774,78 @@ async function promptSaveAs(defaultName: string): Promise<string | null> {
 
 }
 
+function buildPatternDrawOptions(
+  state: Pick<
+    AppState,
+    | "activeTool"
+    | "toolSettings"
+    | "activePatternBrushId"
+    | "patternBrushPixelsCache"
+    | "foregroundColor"
+    | "backgroundColor"
+    | "patternBrushAnchorForegroundColor"
+  >,
+  button: DrawingButton,
+): DrawToolOptions | undefined {
+  if (state.activeTool !== "brush" || state.toolSettings.brushShape !== "pattern") {
+    return undefined;
+  }
+  if (!state.activePatternBrushId || state.toolSettings.patternBrushScale === 0) {
+    return undefined;
+  }
+  const source = state.patternBrushPixelsCache[state.activePatternBrushId];
+  if (!source) return undefined;
+
+  const applyForegroundTint =
+    state.patternBrushAnchorForegroundColor !== null &&
+    rgbKey(state.foregroundColor) !== rgbKey(state.patternBrushAnchorForegroundColor);
+
+  return {
+    patternStamp: {
+      source,
+      drawMode: button === "primary" ? "foreground" : "background",
+      foregroundColor: state.foregroundColor,
+      backgroundColor: state.backgroundColor,
+      applyForegroundTint,
+    },
+  };
+}
+
+function isPatternBrushActive(state: Pick<AppState, "activeTool" | "toolSettings">): boolean {
+  return state.activeTool === "brush" && state.toolSettings.brushShape === "pattern";
+}
+
+function resolveTileDrawParams(
+  tileSession: TileSessionState,
+  activeTool: ToolType,
+  grid: PixelGrid,
+  point?: Point,
+): {
+  selectionMask: SelectionMask;
+  tileRegion: SelectionRect;
+} | null {
+  if (tileSession.phase !== "drawing" || !isDrawingToolType(activeTool)) {
+    return null;
+  }
+
+  const { region } = tileSession;
+  const unionMask = createTileUnionMask(region, grid.width, grid.height);
+  const selectionMask =
+    activeTool === "fill" && point
+      ? (createTileCellMask(point.x, point.y, region, grid.width, grid.height) ?? unionMask)
+      : unionMask;
+
+  return { selectionMask, tileRegion: region };
+}
+
+function mergeDrawOptions(
+  base: DrawToolOptions | undefined,
+  tileRegion: SelectionRect | undefined,
+): DrawToolOptions | undefined {
+  if (!tileRegion) return base;
+  return { ...base, tileRegion };
+}
+
 
 
 export const useAppStore = create<AppState>((set, get) => {
@@ -746,6 +861,15 @@ export const useAppStore = create<AppState>((set, get) => {
     },
   );
 
+  const patternBrushSlice = createPatternBrushSlice(
+    set as Parameters<typeof createPatternBrushSlice>[0],
+    get,
+    {
+      workspaceStore: projectsWorkspaceStore,
+      patternBrushRepository,
+    },
+  );
+
   const settingsSlice = createSettingsSlice(
     set as Parameters<typeof createSettingsSlice>[0],
   );
@@ -756,13 +880,22 @@ export const useAppStore = create<AppState>((set, get) => {
     appSettingsRepository,
   );
 
+  const llmSettingsSlice = createLlmSettingsSlice(
+    set as Parameters<typeof createLlmSettingsSlice>[0],
+    llmSettingsRepository,
+  );
+
   return {
 
   ...assetLibrarySlice,
 
+  ...patternBrushSlice,
+
   ...settingsSlice,
 
   ...appSettingsSlice,
+
+  ...llmSettingsSlice,
 
   project: createEmptyProject(),
 
@@ -874,6 +1007,12 @@ export const useAppStore = create<AppState>((set, get) => {
 
   symmetryAxisDrag: null,
 
+  tileSession: createIdleTileSession(),
+
+  tileCreateDrag: null,
+
+  tilePreviewRect: null,
+
 
 
   init: async () => {
@@ -958,9 +1097,18 @@ export const useAppStore = create<AppState>((set, get) => {
 
         symmetry: prefs.symmetry,
 
+        activePatternBrushId: prefs.activePatternBrushId,
+
+        patternBrushAnchorForegroundColor:
+          prefs.activePatternBrushId && prefs.toolSettings.brushShape === "pattern"
+            ? prefs.foregroundColor
+            : null,
+
       });
 
     }
+
+    void get().refreshPatternBrushLibrary();
 
     const stored = windowService.getStoredPreference();
 
@@ -1129,43 +1277,43 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!project) return false;
 
-    if (project.filePath) {
+    const result = await saveCurrentProjectUseCase(
 
-      const saved = await saveProject(projectRepository, project, project.filePath);
+      projectRepository,
 
-      set({ project: saved });
+      projectsWorkspaceStore,
 
-      return true;
+      lastOpenedProjectStore,
 
-    } else if (projectsWorkspaceStore.getPath()) {
+      project,
 
-      try {
+      async (defaultPath) => {
 
-        const targetPath = await resolveProjectSavePath(projectsWorkspaceStore, project.name);
+        const selected = await save({
 
-        if (!targetPath) {
+          filters: [{ name: "像素画项目", extensions: ["pixelart.json"] }],
 
-          return get().saveProjectAs();
+          defaultPath: defaultPath ?? `${project.name}.pixelart.json`,
 
-        }
+        });
 
-        const saved = await saveProject(projectRepository, project, targetPath);
+        return selected && typeof selected === "string" ? selected : null;
 
-        set({ project: saved });
+      },
 
-        return true;
+    );
 
-      } catch {
+    if (!result.saved || !result.project) return false;
 
-        return get().saveProjectAs();
+    set({ project: result.project });
 
-      }
+    if (projectsWorkspaceStore.getPath()) {
 
-    } else {
-
-      return get().saveProjectAs();
+      await get().refreshProjectList();
 
     }
+
+    return true;
 
   },
 
@@ -1187,11 +1335,19 @@ export const useAppStore = create<AppState>((set, get) => {
 
     });
 
-    if (!selected) return false;
+    if (!selected || typeof selected !== "string") return false;
 
     const saved = await saveProject(projectRepository, project, selected);
 
+    saveLastOpenedProject(lastOpenedProjectStore, selected);
+
     set({ project: saved });
+
+    if (projectsWorkspaceStore.getPath()) {
+
+      await get().refreshProjectList();
+
+    }
 
     return true;
 
@@ -1200,6 +1356,52 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
   setActiveTool: (tool) => {
+    const state = get();
+    if (
+      state.activeTool === "select" &&
+      tool !== "select" &&
+      state.selectionDrag?.mode === "create" &&
+      state.project
+    ) {
+      const grid = getActiveLayerGridFromProject(state.project);
+      if (grid) {
+        const result = handleSelectPointerUp({
+          project: state.project,
+          point: state.selectionDrag.current,
+          settings: state.toolSettings,
+          selection: state.selection,
+          selectionDrag: state.selectionDrag,
+          lassoPoints: state.lassoPoints,
+          modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+          historyStack: state.historyStack,
+          grid,
+        });
+        if (result.grid) get().syncActiveLayer(result.grid);
+        set({
+          selection: result.selection,
+          selectionDrag: result.selectionDrag,
+          lassoPoints: result.lassoPoints,
+          selectionPreviewRect: result.selectionPreviewRect,
+          isDrawing: false,
+          drawingButton: null,
+          drawStart: null,
+          lastPoint: null,
+        });
+      }
+    }
+
+    if (
+      state.activeTool === "repeatTile" &&
+      tool !== "repeatTile" &&
+      state.tileSession.phase === "creating"
+    ) {
+      set({
+        tileSession: createIdleTileSession(),
+        tilePreviewRect: null,
+        tileCreateDrag: null,
+      });
+    }
+
     const { selection, project } = get();
     if (selection?.floating && project) {
       const grid = getActiveLayerGridFromProject(project);
@@ -1211,6 +1413,39 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     }
     set({ activeTool: tool, brushLineAnchor: tool === "brush" ? get().brushLineAnchor : null });
+  },
+
+  beginTileRegionCreate: () => {
+    set({
+      tileSession: { ...get().tileSession, phase: "creating" },
+      tilePreviewRect: null,
+      tileCreateDrag: null,
+    });
+  },
+
+  cancelTileRegionCreate: () => {
+    set({
+      tileSession: createIdleTileSession(),
+      tilePreviewRect: null,
+      tileCreateDrag: null,
+    });
+  },
+
+  closeTileSession: () => {
+    const { project, tileSession, historyStack, selection } = get();
+    if (!project || tileSession.phase !== "drawing") return;
+
+    const grid = getActiveLayerGridFromProject(project);
+    if (!grid) return;
+
+    pushHistory(historyStack, project, selection);
+    const nextSession = closeTileSessionUseCase(grid, tileSession);
+    get().syncActiveLayer(grid);
+    set({
+      tileSession: nextSession,
+      tilePreviewRect: null,
+      tileCreateDrag: null,
+    });
   },
 
 
@@ -1227,7 +1462,18 @@ export const useAppStore = create<AppState>((set, get) => {
       if (settings.magicWandTolerance !== undefined) {
         next.magicWandTolerance = clampMagicWandTolerance(settings.magicWandTolerance);
       }
-      return { toolSettings: next };
+      if (settings.patternBrushScale !== undefined) {
+        next.patternBrushScale = clampPatternScale(settings.patternBrushScale);
+      }
+      const patch: Partial<AppState> = { toolSettings: next };
+      if (
+        next.brushShape === "pattern" &&
+        s.activePatternBrushId &&
+        s.patternBrushAnchorForegroundColor === null
+      ) {
+        patch.patternBrushAnchorForegroundColor = s.foregroundColor;
+      }
+      return patch;
     }),
 
 
@@ -2258,12 +2504,43 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
-    const selectionMask =
+    if (activeTool === "repeatTile") {
+      const { tileSession } = get();
+
+      if (tileSession.phase === "creating") {
+        const drag = handleTileCreatePointerDown(point);
+        const { previewRect } = handleTileCreatePointerMove(drag, point);
+        set({
+          tileCreateDrag: drag,
+          tilePreviewRect: previewRect,
+          isDrawing: true,
+          drawingButton: button,
+          drawStart: point,
+          lastPoint: point,
+        });
+      }
+
+      return;
+    }
+
+    const tileSession = get().tileSession;
+    const tileDraw = resolveTileDrawParams(tileSession, activeTool, grid, point);
+
+    let selectionMask =
       selection && !isSelectionEmpty(selection) ? selection.mask : null;
+    let activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
 
-    const activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
+    if (tileDraw) {
+      selectionMask = tileDraw.selectionMask;
+      activeSymmetry = null;
+    }
 
-    if (activeTool === "brush" && modifiers.shiftKey && brushLineAnchor) {
+    if (
+      activeTool === "brush" &&
+      toolSettings.brushShape !== "pattern" &&
+      modifiers.shiftKey &&
+      brushLineAnchor
+    ) {
       pushHistory(historyStack, project, selection);
       const selectedColor = button === "primary" ? foregroundColor : backgroundColor;
       applyBrushStraightLine(
@@ -2274,6 +2551,7 @@ export const useAppStore = create<AppState>((set, get) => {
         point,
         selectionMask,
         activeSymmetry,
+        mergeDrawOptions(undefined, tileDraw?.tileRegion),
       );
       get().syncActiveLayer(grid);
       set({ brushLineAnchor: point });
@@ -2287,6 +2565,22 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!isDrawingToolType(activeTool)) return;
 
+    if (isPatternBrushActive(get())) {
+      const patternGrid = get().getActivePatternBrushGrid();
+      if (!patternGrid) {
+        toast.info("请先在图案笔刷库中选择笔刷");
+        return;
+      }
+      if (toolSettings.patternBrushScale === 0) {
+        return;
+      }
+    }
+
+    const drawOptions = mergeDrawOptions(
+      buildPatternDrawOptions(get(), button),
+      tileDraw?.tileRegion,
+    );
+
     applyToolPointerDown(
       grid,
       activeTool,
@@ -2295,6 +2589,7 @@ export const useAppStore = create<AppState>((set, get) => {
       point,
       selectionMask,
       activeSymmetry,
+      drawOptions,
     );
 
     get().syncActiveLayer(grid);
@@ -2373,15 +2668,42 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
+    if (activeTool === "repeatTile") {
+      const { tileSession, tileCreateDrag } = get();
+
+      if (tileSession.phase === "creating" && tileCreateDrag) {
+        const { drag, previewRect } = handleTileCreatePointerMove(tileCreateDrag, point);
+        set({
+          tileCreateDrag: drag,
+          tilePreviewRect: previewRect,
+          lastPoint: point,
+        });
+      }
+
+      return;
+    }
+
     if (!isDrawing || !lastPoint || drawingButton !== button || drawingColor === null) return;
 
     if (activeTool === "fill") return;
 
-    const selectionMask = getEffectiveSelectionMask(selection);
+    const tileSession = get().tileSession;
+    const tileDraw = resolveTileDrawParams(tileSession, activeTool, grid);
+
+    let selectionMask = getEffectiveSelectionMask(selection);
+    let activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
+
+    if (tileDraw) {
+      selectionMask = tileDraw.selectionMask;
+      activeSymmetry = null;
+    }
 
     if (!isDrawingToolType(activeTool)) return;
 
-    const activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
+    const drawOptions = mergeDrawOptions(
+      buildPatternDrawOptions(get(), drawingButton),
+      tileDraw?.tileRegion,
+    );
 
     applyToolPointerMove(
       grid,
@@ -2392,6 +2714,7 @@ export const useAppStore = create<AppState>((set, get) => {
       point,
       selectionMask,
       activeSymmetry,
+      drawOptions,
     );
 
     get().syncActiveLayer(grid);
@@ -2471,14 +2794,41 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
+    if (activeTool === "repeatTile") {
+      const { tileSession, tileCreateDrag } = get();
+
+      if (tileSession.phase === "creating" && tileCreateDrag) {
+        const { session, previewRect } = handleTileCreatePointerUp(grid, tileCreateDrag, point);
+        set({
+          tileSession: session,
+          tilePreviewRect: previewRect,
+          tileCreateDrag: null,
+          isDrawing: false,
+          drawingButton: null,
+          drawStart: null,
+          lastPoint: null,
+          ...(session.phase === "drawing" ? { activeTool: "brush" as ToolType } : {}),
+        });
+      }
+
+      return;
+    }
+
     if (!isDrawing || !drawStart || drawingButton !== button || drawingColor === null) return;
 
+    const tileSession = get().tileSession;
+    const tileDraw = resolveTileDrawParams(tileSession, activeTool, grid);
+
     if (activeTool === "shape") {
-
-      const selectionMask =
+      let selectionMask =
         selection && !isSelectionEmpty(selection) ? selection.mask : null;
+      let activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
+      const drawOptions = mergeDrawOptions(undefined, tileDraw?.tileRegion);
 
-      const activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
+      if (tileDraw) {
+        selectionMask = tileDraw.selectionMask;
+        activeSymmetry = null;
+      }
 
       if (isDrawingToolType(activeTool)) {
         applyToolPointerUp(
@@ -2490,11 +2840,11 @@ export const useAppStore = create<AppState>((set, get) => {
           point,
           selectionMask,
           activeSymmetry,
+          drawOptions,
         );
       }
 
       get().syncActiveLayer(grid);
-
     }
 
     set({
@@ -2840,7 +3190,15 @@ export const useAppStore = create<AppState>((set, get) => {
 
   },
 
+  clearPalette: () => {
 
+    const { project } = get();
+
+    if (!project) return;
+
+    set({ project: clearPaletteUseCase(project) });
+
+  },
 
   importReferenceLayerColors: async (layerId, scope) => {
 
@@ -3231,6 +3589,11 @@ export const useAppStore = create<AppState>((set, get) => {
   openColorEditPage: () => {
     useColorEditStore.getState().reset();
     useColorEditStore.getState().openPage();
+  },
+
+  openAiChatTestPage: () => {
+    useAiChatStore.getState().reset();
+    useAiChatStore.getState().openPage();
   },
 
   sendAssetToToolPage: async (assetId, toolPageId) => {
@@ -3700,6 +4063,13 @@ useAppStore.subscribe(() => {
   subscribeAppSettingsPersistence(
     () => ({ appSettings: useAppStore.getState().appSettings }),
     appSettingsRepository,
+  );
+});
+
+useAppStore.subscribe(() => {
+  subscribeLlmSettingsPersistence(
+    () => ({ llmSettings: useAppStore.getState().llmSettings }),
+    llmSettingsRepository,
   );
 });
 

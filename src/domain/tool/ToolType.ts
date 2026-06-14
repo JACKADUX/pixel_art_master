@@ -1,10 +1,18 @@
-export type ToolType = "brush" | "fill" | "eraser" | "shape" | "select" | "transform";
+export type ToolType = "brush" | "fill" | "eraser" | "shape" | "select" | "transform" | "repeatTile";
 
-export type DrawingToolType = Exclude<ToolType, "select" | "transform">;
+export type DrawingToolType = Exclude<ToolType, "select" | "transform" | "repeatTile">;
 
 export type ShapeMode = "rectangle" | "line" | "ellipse";
 
-export type BrushShape = "square" | "circle";
+export type BrushShape = "square" | "circle" | "pattern";
+
+export const MIN_PATTERN_SCALE = 0;
+export const MAX_PATTERN_SCALE = 500;
+export const DEFAULT_PATTERN_SCALE = 100;
+
+export function clampPatternScale(scalePercent: number): number {
+  return Math.max(MIN_PATTERN_SCALE, Math.min(MAX_PATTERN_SCALE, Math.round(scalePercent)));
+}
 
 export type SelectionMode = "rectangle" | "ellipse" | "lasso" | "magicWand";
 
@@ -25,6 +33,7 @@ export interface ToolSettings {
   brushSize: number;
   brushShape: BrushShape;
   brushPerfectPixel: boolean;
+  patternBrushScale: number;
   eraserSize: number;
   eraserShape: BrushShape;
   shapeMode: ShapeMode;
@@ -39,6 +48,7 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
   brushSize: 1,
   brushShape: "square",
   brushPerfectPixel: false,
+  patternBrushScale: DEFAULT_PATTERN_SCALE,
   eraserSize: 1,
   eraserShape: "square",
   shapeMode: "rectangle",

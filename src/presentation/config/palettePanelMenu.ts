@@ -1,4 +1,4 @@
-import { TrashIcon } from "@heroicons/react/24/outline";
+import { NoSymbolIcon, TrashIcon } from "@heroicons/react/24/outline";
 import type { MenuItem } from "../components/MenuDropdown";
 
 export interface PalettePanelMenuState {
@@ -10,6 +10,7 @@ export interface PalettePanelMenuState {
 export interface PalettePanelMenuActions {
   setPaletteViewMode: (mode: "grid" | "oklabMap") => void;
   enterRemoveMode: () => void;
+  requestClearPalette: () => void;
 }
 
 export function buildPalettePanelMenuItems(
@@ -37,12 +38,20 @@ export function buildPalettePanelMenuItems(
 
   if (state.colorsCount > 0 && !state.removeMode) {
     if (items.length > 0) items.push({ type: "separator" });
-    items.push({
-      type: "action",
-      label: "移除颜色",
-      icon: TrashIcon,
-      onClick: actions.enterRemoveMode,
-    });
+    items.push(
+      {
+        type: "action",
+        label: "移除颜色",
+        icon: TrashIcon,
+        onClick: actions.enterRemoveMode,
+      },
+      {
+        type: "action",
+        label: "清空色板",
+        icon: NoSymbolIcon,
+        onClick: actions.requestClearPalette,
+      },
+    );
   }
 
   return items;

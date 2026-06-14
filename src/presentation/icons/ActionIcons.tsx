@@ -4,6 +4,7 @@ export {
   ArrowsPointingOutIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
+  ChatBubbleLeftRightIcon,
   ComputerDesktopIcon,
   Cog6ToothIcon,
   DocumentDuplicateIcon,

@@ -20,6 +20,7 @@ const TOOLS: { type: ToolType; label: string }[] = [
   { type: "shape", label: "形状" },
   { type: "select", label: "选区" },
   { type: "transform", label: "变换" },
+  { type: "repeatTile", label: "重复Tile" },
 ];
 
 export function Toolbar() {

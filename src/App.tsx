@@ -10,6 +10,7 @@ import { ProjectManagerModal } from "./presentation/components/ProjectManagerMod
 import { CanvasSizeModal } from "./presentation/components/CanvasSizeModal";
 import { PixelRestorePage } from "./presentation/components/pixelRestore/PixelRestorePage";
 import { ColorEditPage } from "./presentation/components/colorEdit/ColorEditPage";
+import { AiChatTestPage } from "./presentation/components/ai/AiChatTestPage";
 import { SettingsModal } from "./presentation/components/settings/SettingsModal";
 import { ToastContainer } from "./presentation/components/ToastContainer";
 import { TopBar } from "./presentation/components/TopBar";
@@ -46,6 +47,7 @@ function App() {
       <SettingsModal />
       <PixelRestorePage />
       <ColorEditPage />
+      <AiChatTestPage />
       <ToastContainer />
     </div>
   );

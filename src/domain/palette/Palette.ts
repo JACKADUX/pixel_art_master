@@ -55,6 +55,10 @@ export class Palette {
     return new Palette(this.colors.filter((c) => !removeSet.has(c.hex)));
   }
 
+  cleared(): Palette {
+    return Palette.empty();
+  }
+
   setColors(colors: ColorEntry[]): void {
     this.colors = [...colors];
   }

@@ -15,3 +15,11 @@ export function removeColorsFromPalette(project: Project, hexes: string[]): Proj
     palette: project.palette.withRemovedColors(hexes),
   });
 }
+
+export function clearPalette(project: Project): Project {
+  if (project.palette.getColors().length === 0) return project;
+  return touchProject({
+    ...project,
+    palette: project.palette.cleared(),
+  });
+}

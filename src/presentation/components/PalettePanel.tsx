@@ -5,6 +5,7 @@ import {
   PALETTE_OKLAB_MAP_MAX_COLORS,
 } from "@/domain/palette/PaletteOklabLayout";
 import { useAppStore } from "../stores/appStore";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { PaletteGridView } from "./PaletteGridView";
 import { PaletteMoreMenu } from "./PaletteMoreMenu";
 import { PaletteOklabMapView } from "./PaletteOklabMapView";
@@ -24,8 +25,10 @@ export function PalettePanel() {
   const paletteViewMode = useAppStore((s) => s.paletteViewMode);
   const addColorToPalette = useAppStore((s) => s.addColorToPalette);
   const removeColorsFromPalette = useAppStore((s) => s.removeColorsFromPalette);
+  const clearPalette = useAppStore((s) => s.clearPalette);
 
   const [removeMode, setRemoveMode] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [selectedHexes, setSelectedHexes] = useState<Set<string>>(() => new Set());
 
   const exitRemoveMode = useCallback(() => {
@@ -50,6 +53,12 @@ export function PalettePanel() {
     removeColorsFromPalette([...selectedHexes]);
     exitRemoveMode();
   }, [selectedHexes, removeColorsFromPalette, exitRemoveMode]);
+
+  const handleConfirmClearPalette = useCallback(() => {
+    clearPalette();
+    exitRemoveMode();
+    setClearConfirmOpen(false);
+  }, [clearPalette, exitRemoveMode]);
 
   if (!project) return null;
 
@@ -91,6 +100,7 @@ export function PalettePanel() {
             colorsCount={colors.length}
             removeMode={removeMode}
             onEnterRemoveMode={() => setRemoveMode(true)}
+            onRequestClearPalette={() => setClearConfirmOpen(true)}
           />
         </div>
       </div>
@@ -134,6 +144,16 @@ export function PalettePanel() {
           </button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={clearConfirmOpen}
+        title="清空色板"
+        message={`确定清空色板中的全部 ${colors.length} 个颜色？此操作不可撤销。`}
+        confirmLabel="清空"
+        danger
+        onConfirm={handleConfirmClearPalette}
+        onCancel={() => setClearConfirmOpen(false)}
+      />
     </div>
   );
 }

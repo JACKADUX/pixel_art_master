@@ -1,8 +1,9 @@
 import type { ComponentType } from "react";
+import { AiSettingsSection } from "./AiSettingsSection";
 import { CanvasSettingsSection } from "./CanvasSettingsSection";
 import { GeneralSettingsSection } from "./GeneralSettingsSection";
 
-export type SettingsSectionId = "general" | "canvas";
+export type SettingsSectionId = "general" | "canvas" | "ai";
 
 export interface SettingsSectionDefinition {
   id: SettingsSectionId;
@@ -23,5 +24,11 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
     label: "画布",
     description: "网格与透明背景棋盘格显示",
     component: CanvasSettingsSection,
+  },
+  {
+    id: "ai",
+    label: "AI",
+    description: "LLM 提供商与连接配置",
+    component: AiSettingsSection,
   },
 ];

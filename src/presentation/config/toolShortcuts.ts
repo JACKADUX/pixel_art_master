@@ -7,6 +7,7 @@ export const TOOL_SHORTCUTS: Record<ToolType, string> = {
   shape: "U",
   select: "M",
   transform: "V",
+  repeatTile: "T",
 };
 
 const SHORTCUT_CODE_TO_TOOL: Record<string, ToolType> = {
@@ -16,6 +17,7 @@ const SHORTCUT_CODE_TO_TOOL: Record<string, ToolType> = {
   KeyU: "shape",
   KeyM: "select",
   KeyV: "transform",
+  KeyT: "repeatTile",
 };
 
 export function toolFromShortcutCode(code: string): ToolType | null {

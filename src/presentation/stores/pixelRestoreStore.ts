@@ -11,6 +11,7 @@ import {
   applyFixedScaleRestore,
   captureMonitorToImagePath,
   loadSourceImageFromClipboard,
+  loadSourceImageFromFile,
   loadSourceImageFromPath,
 } from "@/application/use-cases/PixelRestoreUseCases";
 import type { CropRect } from "@/domain/layer/Layer";
@@ -64,6 +65,7 @@ interface PixelRestoreStore {
   closePage: () => void;
   reset: () => void;
   importFromPath: (path: string) => Promise<void>;
+  importFromFile: (file: File) => Promise<void>;
   importFromImageData: (imageData: ImageData) => void;
   importFromClipboard: () => Promise<void>;
   screenCapture: () => Promise<void>;
@@ -283,6 +285,20 @@ export const usePixelRestoreStore = create<PixelRestoreStore>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const sourceImageData = await loadSourceImageFromPath(imageProcessor, path);
+      const { restoreMode, selectedScale } = get();
+      set({ ...applySourceImage(sourceImageData, restoreMode, selectedScale), loading: false });
+    } catch {
+      set({
+        loading: false,
+        error: "导入图片失败，请重试",
+      });
+    }
+  },
+
+  importFromFile: async (file) => {
+    set({ loading: true, error: null });
+    try {
+      const sourceImageData = await loadSourceImageFromFile(imageProcessor, file);
       const { restoreMode, selectedScale } = get();
       set({ ...applySourceImage(sourceImageData, restoreMode, selectedScale), loading: false });
     } catch {

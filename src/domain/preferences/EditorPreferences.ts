@@ -13,6 +13,7 @@ import {
 import {
   clampStampSize,
   clampMagicWandTolerance,
+  clampPatternScale,
   DEFAULT_TOOL_SETTINGS,
   type BrushShape,
   type SelectionMode,
@@ -73,6 +74,7 @@ export interface EditorPreferences {
   assetLibraryDrawerExpanded: boolean;
   assetLibraryDrawerHeight: number;
   assetFolderTreeWidth: number;
+  activePatternBrushId: string | null;
 }
 
 export const EDITOR_PREFERENCES_VERSION = 1;
@@ -102,8 +104,9 @@ const MIN_ASSET_FOLDER_TREE_WIDTH = 120;
 const MAX_ASSET_FOLDER_TREE_WIDTH = 400;
 export const DEFAULT_ASSET_FOLDER_TREE_WIDTH = 160;
 
-const TOOL_TYPES: ToolType[] = ["brush", "fill", "eraser", "shape", "select", "transform"];
-const BRUSH_SHAPES: BrushShape[] = ["square", "circle"];
+const TOOL_TYPES: ToolType[] = ["brush", "fill", "eraser", "shape", "select", "transform", "repeatTile"];
+const BRUSH_SHAPES: BrushShape[] = ["square", "circle", "pattern"];
+const ERASER_SHAPES: BrushShape[] = ["square", "circle"];
 const SHAPE_MODES: ShapeMode[] = ["rectangle", "line", "ellipse"];
 const SELECTION_MODES: SelectionMode[] = ["rectangle", "ellipse", "lasso", "magicWand"];
 const TRANSFORM_MODES: TransformMode[] = ["move", "scale", "rotate"];
@@ -143,6 +146,7 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   assetLibraryDrawerExpanded: false,
   assetLibraryDrawerHeight: DEFAULT_ASSET_DRAWER_HEIGHT,
   assetFolderTreeWidth: DEFAULT_ASSET_FOLDER_TREE_WIDTH,
+  activePatternBrushId: null,
 };
 
 export interface EditorPreferencesSource {
@@ -176,6 +180,7 @@ export interface EditorPreferencesSource {
   assetLibraryDrawerExpanded: boolean;
   assetLibraryDrawerHeight: number;
   assetFolderTreeWidth: number;
+  activePatternBrushId: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -246,7 +251,7 @@ function parseToolSettings(value: unknown): ToolSettings {
   const brushShape = BRUSH_SHAPES.includes(value.brushShape as BrushShape)
     ? (value.brushShape as BrushShape)
     : defaults.brushShape;
-  const eraserShape = BRUSH_SHAPES.includes(value.eraserShape as BrushShape)
+  const eraserShape = ERASER_SHAPES.includes(value.eraserShape as BrushShape)
     ? (value.eraserShape as BrushShape)
     : defaults.eraserShape;
   const shapeMode = SHAPE_MODES.includes(value.shapeMode as ShapeMode)
@@ -268,6 +273,11 @@ function parseToolSettings(value: unknown): ToolSettings {
       typeof value.brushPerfectPixel === "boolean"
         ? value.brushPerfectPixel
         : defaults.brushPerfectPixel,
+    patternBrushScale: clampPatternScale(
+      typeof value.patternBrushScale === "number"
+        ? value.patternBrushScale
+        : defaults.patternBrushScale,
+    ),
     eraserSize: clampStampSize(
       typeof value.eraserSize === "number" ? value.eraserSize : defaults.eraserSize,
     ),
@@ -401,6 +411,8 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
       MAX_ASSET_FOLDER_TREE_WIDTH,
       defaults.assetFolderTreeWidth,
     ),
+    activePatternBrushId:
+      typeof raw.activePatternBrushId === "string" ? raw.activePatternBrushId : null,
   };
 }
 
@@ -456,5 +468,6 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
       MAX_ASSET_FOLDER_TREE_WIDTH,
       DEFAULT_EDITOR_PREFERENCES.assetFolderTreeWidth,
     ),
+    activePatternBrushId: source.activePatternBrushId,
   };
 }

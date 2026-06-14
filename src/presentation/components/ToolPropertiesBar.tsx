@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useRef } from "react";
 import type {
   BrushShape,
   SelectionMode,
@@ -9,6 +10,9 @@ import type {
 import { getBrushShapeIcon, getSelectionModeIcon, getShapeIcon, SymmetryHorizontalIcon, SymmetryVerticalIcon } from "../icons/ToolIcons";
 import { useAppStore } from "../stores/appStore";
 import { BrushSizeInput } from "./BrushSizeInput";
+import { PatternBrushScaleSlider } from "./PatternBrushScaleSlider";
+import { PatternBrushPickerPopover } from "./patternBrush/PatternBrushPickerPopover";
+import { getPatternBrush } from "@/domain/patternBrush/PatternBrushLibrary";
 
 const TOOL_LABELS: Record<ToolType, string> = {
   brush: "画笔",
@@ -17,6 +21,7 @@ const TOOL_LABELS: Record<ToolType, string> = {
   shape: "形状",
   select: "选区",
   transform: "变换",
+  repeatTile: "重复Tile",
 };
 
 const SHAPES: { mode: ShapeMode; label: string }[] = [
@@ -39,6 +44,12 @@ const TRANSFORM_MODES: { mode: TransformMode; label: string }[] = [
 ];
 
 const BRUSH_SHAPES: { shape: BrushShape; label: string }[] = [
+  { shape: "square", label: "方形" },
+  { shape: "circle", label: "圆形" },
+  { shape: "pattern", label: "图案" },
+];
+
+const ERASER_SHAPES: { shape: BrushShape; label: string }[] = [
   { shape: "square", label: "方形" },
   { shape: "circle", label: "圆形" },
 ];
@@ -71,11 +82,13 @@ function SegmentedButton({
 function StampToolProperties({
   size,
   shape,
+  shapes,
   onSizeChange,
   onShapeChange,
 }: {
   size: number;
   shape: BrushShape;
+  shapes: { shape: BrushShape; label: string }[];
   onSizeChange: (size: number) => void;
   onShapeChange: (shape: BrushShape) => void;
 }) {
@@ -84,7 +97,7 @@ function StampToolProperties({
       <label className="flex items-center gap-2 text-zinc-400">
         形状
         <span className="flex gap-1">
-          {BRUSH_SHAPES.map((item) => (
+          {shapes.map((item) => (
             <SegmentedButton
               key={item.shape}
               active={shape === item.shape}
@@ -104,30 +117,86 @@ function StampToolProperties({
   );
 }
 
-export function ToolPropertiesBar() {
-  const project = useAppStore((s) => s.project);
-  const activeTool = useAppStore((s) => s.activeTool);
+function BrushToolProperties() {
   const toolSettings = useAppStore((s) => s.toolSettings);
   const setToolSettings = useAppStore((s) => s.setToolSettings);
-  const symmetry = useAppStore((s) => s.symmetry);
-  const toggleSymmetryHorizontal = useAppStore((s) => s.toggleSymmetryHorizontal);
-  const toggleSymmetryVertical = useAppStore((s) => s.toggleSymmetryVertical);
-  const resetSymmetryToCenter = useAppStore((s) => s.resetSymmetryToCenter);
+  const patternBrushLibrary = useAppStore((s) => s.patternBrushLibrary);
+  const activePatternBrushId = useAppStore((s) => s.activePatternBrushId);
+  const patternBrushPickerOpen = useAppStore((s) => s.patternBrushPickerOpen);
+  const openPatternBrushPicker = useAppStore((s) => s.openPatternBrushPicker);
+  const closePatternBrushPicker = useAppStore((s) => s.closePatternBrushPicker);
+  const pickerAnchorRef = useRef<HTMLButtonElement>(null);
+  const isPattern = toolSettings.brushShape === "pattern";
+  const activeBrush =
+    patternBrushLibrary && activePatternBrushId
+      ? getPatternBrush(patternBrushLibrary, activePatternBrushId)
+      : null;
 
-  if (!project) return null;
+  const togglePicker = () => {
+    if (patternBrushPickerOpen) {
+      closePatternBrushPicker();
+    } else {
+      openPatternBrushPicker();
+    }
+  };
 
   return (
-    <div className="flex shrink-0 items-center gap-6 border-b border-zinc-700 bg-zinc-900 px-4 py-2 text-xs">
-      <span className="font-medium text-zinc-200">{TOOL_LABELS[activeTool]}</span>
-
-      {activeTool === "brush" && (
+    <>
+      <label className="flex items-center gap-2 text-zinc-400">
+        形状
+        <span className="flex gap-1">
+          {BRUSH_SHAPES.map((item) => (
+            <SegmentedButton
+              key={item.shape}
+              active={toolSettings.brushShape === item.shape}
+              title={item.label}
+              onClick={() => setToolSettings({ brushShape: item.shape })}
+            >
+              {getBrushShapeIcon(item.shape)}
+            </SegmentedButton>
+          ))}
+        </span>
+      </label>
+      {isPattern ? (
         <>
-          <StampToolProperties
-            size={toolSettings.brushSize}
-            shape={toolSettings.brushShape}
-            onSizeChange={(brushSize) => setToolSettings({ brushSize })}
-            onShapeChange={(brushShape) => setToolSettings({ brushShape })}
+          <label className="flex items-center gap-2 text-zinc-400">
+            缩放
+            <PatternBrushScaleSlider
+              value={toolSettings.patternBrushScale}
+              onChange={(patternBrushScale) => setToolSettings({ patternBrushScale })}
+            />
+          </label>
+          <button
+            ref={pickerAnchorRef}
+            type="button"
+            title="打开图案笔刷库"
+            onClick={togglePicker}
+            className={`rounded border px-2 py-1 text-zinc-300 transition hover:bg-zinc-800 ${
+              patternBrushPickerOpen ? "border-blue-500 bg-zinc-800" : "border-zinc-600"
+            }`}
+          >
+            图案库
+          </button>
+          {activeBrush && (
+            <span className="text-zinc-500">
+              {activeBrush.width}×{activeBrush.height}
+            </span>
+          )}
+          <PatternBrushPickerPopover
+            open={patternBrushPickerOpen}
+            anchorRef={pickerAnchorRef}
+            onClose={closePatternBrushPicker}
           />
+        </>
+      ) : (
+        <>
+          <label className="flex items-center gap-2 text-zinc-400">
+            尺寸
+            <BrushSizeInput
+              value={toolSettings.brushSize}
+              onChange={(brushSize) => setToolSettings({ brushSize })}
+            />
+          </label>
           <label className="flex items-center gap-2 text-zinc-400">
             <input
               type="checkbox"
@@ -140,11 +209,36 @@ export function ToolPropertiesBar() {
           <span className="text-zinc-500">Shift 直线连线</span>
         </>
       )}
+    </>
+  );
+}
+
+export function ToolPropertiesBar() {
+  const project = useAppStore((s) => s.project);
+  const activeTool = useAppStore((s) => s.activeTool);
+  const toolSettings = useAppStore((s) => s.toolSettings);
+  const setToolSettings = useAppStore((s) => s.setToolSettings);
+  const symmetry = useAppStore((s) => s.symmetry);
+  const toggleSymmetryHorizontal = useAppStore((s) => s.toggleSymmetryHorizontal);
+  const toggleSymmetryVertical = useAppStore((s) => s.toggleSymmetryVertical);
+  const resetSymmetryToCenter = useAppStore((s) => s.resetSymmetryToCenter);
+  const tileSession = useAppStore((s) => s.tileSession);
+  const beginTileRegionCreate = useAppStore((s) => s.beginTileRegionCreate);
+  const closeTileSession = useAppStore((s) => s.closeTileSession);
+
+  if (!project) return null;
+
+  return (
+    <div className="flex shrink-0 items-center gap-6 border-b border-zinc-700 bg-zinc-900 px-4 py-2 text-xs">
+      <span className="font-medium text-zinc-200">{TOOL_LABELS[activeTool]}</span>
+
+      {activeTool === "brush" && <BrushToolProperties />}
 
       {activeTool === "eraser" && (
         <StampToolProperties
           size={toolSettings.eraserSize}
           shape={toolSettings.eraserShape}
+          shapes={ERASER_SHAPES}
           onSizeChange={(eraserSize) => setToolSettings({ eraserSize })}
           onShapeChange={(eraserShape) => setToolSettings({ eraserShape })}
         />
@@ -249,6 +343,35 @@ export function ToolPropertiesBar() {
             </span>
           </label>
           <span className="text-zinc-500">拖拽手柄变换选区内容</span>
+        </>
+      )}
+
+      {activeTool === "repeatTile" && tileSession.phase === "idle" && (
+        <button
+          type="button"
+          onClick={beginTileRegionCreate}
+          className="rounded bg-blue-600 px-3 py-1 text-white transition hover:bg-blue-500"
+        >
+          创建区域
+        </button>
+      )}
+
+      {activeTool === "repeatTile" && tileSession.phase === "creating" && (
+        <span className="text-zinc-500">拖拽画布创建 tile 区域 · Esc 取消</span>
+      )}
+
+      {tileSession.phase === "drawing" && (
+        <>
+          <button
+            type="button"
+            onClick={closeTileSession}
+            className="rounded bg-zinc-700 px-3 py-1 text-zinc-200 transition hover:bg-zinc-600"
+          >
+            关闭区域
+          </button>
+          <span className="text-zinc-500">
+            Tile {tileSession.region.width}×{tileSession.region.height} · 9 区同步绘制 · 可切换工具
+          </span>
         </>
       )}
 

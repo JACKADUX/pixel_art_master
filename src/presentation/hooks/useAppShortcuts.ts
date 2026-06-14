@@ -74,6 +74,12 @@ export function useAppShortcuts() {
         return;
       }
 
+      if (store.tileSession.phase === "creating" && event.key === "Escape") {
+        event.preventDefault();
+        store.cancelTileRegionCreate();
+        return;
+      }
+
       const { selection } = store;
       const hasSelection = selection !== null && !isSelectionEmpty(selection);
       const hasFloatingSelection = selection?.floating != null;
@@ -110,6 +116,12 @@ export function useAppShortcuts() {
       if (ctrl && event.shiftKey && (event.key === "i" || event.key === "I")) {
         event.preventDefault();
         store.invertCanvasSelection();
+        return;
+      }
+
+      if (ctrl && (event.key === "b" || event.key === "B")) {
+        event.preventDefault();
+        void store.createPatternBrushFromSelection();
         return;
       }
 

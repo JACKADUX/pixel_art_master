@@ -51,6 +51,7 @@ export function SettingsNumberInput({
   step,
   suffix,
   onChange,
+  className,
 }: {
   value: number;
   min?: number;
@@ -58,6 +59,7 @@ export function SettingsNumberInput({
   step?: number;
   suffix?: string;
   onChange: (value: number) => void;
+  className?: string;
 }) {
   return (
     <div className="flex items-center gap-1.5">
@@ -68,10 +70,40 @@ export function SettingsNumberInput({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className={settingsInputClassName}
+        className={className ?? settingsInputClassName}
       />
       {suffix && <span className="text-[11px] text-zinc-500">{suffix}</span>}
     </div>
+  );
+}
+
+export function SettingsTextInput({
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  disabled,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  type?: "text" | "password";
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <input
+      type={type}
+      value={value}
+      placeholder={placeholder}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value)}
+      className={
+        className ??
+        "h-8 w-full min-w-[12rem] max-w-[20rem] rounded border border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-100 outline-none transition focus:border-blue-500 focus-visible:ring-1 focus-visible:ring-blue-500/60 disabled:cursor-not-allowed disabled:opacity-50"
+      }
+    />
   );
 }
 

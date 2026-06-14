@@ -3,6 +3,9 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { MonitorPicker } from "../MonitorPicker";
 import { usePixelRestoreStore } from "../../stores/pixelRestoreStore";
 import { useAppStore } from "../../stores/appStore";
+import { useImageFileDrop } from "../../hooks/useImageFileDrop";
+import { ImageDropOverlay } from "../toolPage/ImageDropOverlay";
+import { ToolPagePreviewSplit } from "../toolPage/ToolPagePreviewSplit";
 import { GridRestoreSourcePreview } from "./GridRestoreSourcePreview";
 import { PixelRestorePreview } from "./PixelRestorePreview";
 import { RestoreToolPanel } from "./RestoreToolPanel";
@@ -19,6 +22,7 @@ export function PixelRestorePage() {
   const gridRegion = usePixelRestoreStore((s) => s.gridRegion);
   const closePage = usePixelRestoreStore((s) => s.closePage);
   const importFromPath = usePixelRestoreStore((s) => s.importFromPath);
+  const importFromFile = usePixelRestoreStore((s) => s.importFromFile);
   const importFromClipboard = usePixelRestoreStore((s) => s.importFromClipboard);
   const screenCapture = usePixelRestoreStore((s) => s.screenCapture);
   const captureFromMonitor = usePixelRestoreStore((s) => s.captureFromMonitor);
@@ -34,6 +38,13 @@ export function PixelRestorePage() {
 
   const hasGridSelection =
     gridScaleType === "singleCell" ? gridSeedCell !== null : gridRegion !== null;
+
+  const { isDraggingOver, dropZoneProps } = useImageFileDrop({
+    enabled: openPage,
+    disabled: loading,
+    onImportPath: importFromPath,
+    onImportFile: importFromFile,
+  });
 
   useEffect(() => {
     if (!openPage) return;
@@ -107,7 +118,11 @@ export function PixelRestorePage() {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100">
+      <div
+        className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100"
+        {...dropZoneProps}
+      >
+        <ImageDropOverlay visible={isDraggingOver} />
         <header className="flex shrink-0 items-center gap-3 border-b border-zinc-700 bg-zinc-900 px-4 py-2.5">
           <button
             type="button"
@@ -118,7 +133,9 @@ export function PixelRestorePage() {
           </button>
           <h1 className="text-sm font-medium text-zinc-200">像素还原工具</h1>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[10px] text-zinc-600">Ctrl+V 粘贴 · 滚轮缩放 · 中键平移</span>
+            <span className="text-[10px] text-zinc-600">
+              拖放图片 · Ctrl+V 粘贴 · 滚轮缩放 · 中键平移
+            </span>
             <button
               type="button"
               onClick={() => void screenCapture()}
@@ -139,10 +156,10 @@ export function PixelRestorePage() {
         </header>
 
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_16rem] overflow-hidden">
-          <div className="grid min-h-0 grid-rows-2 divide-y divide-zinc-800 border-r border-zinc-800">
-            <GridRestoreSourcePreview />
-            <PixelRestorePreview imageData={resultImageData} label="结果" />
-          </div>
+          <ToolPagePreviewSplit
+            source={<GridRestoreSourcePreview />}
+            result={<PixelRestorePreview imageData={resultImageData} label="结果" />}
+          />
 
           <RestoreToolPanel
             canExport={projectsWorkspacePath !== null && resultImageData !== null}

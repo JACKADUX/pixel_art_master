@@ -47,6 +47,22 @@ function MagicWandIcon({ className }: { className?: string }) {
   );
 }
 
+function RepeatTileIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" className={className} aria-hidden="true">
+      <rect x="5.5" y="5.5" width="5" height="5" strokeWidth="1.25" />
+      <rect x="0.5" y="5.5" width="4" height="5" strokeWidth="1" opacity="0.7" />
+      <rect x="11.5" y="5.5" width="4" height="5" strokeWidth="1" opacity="0.7" />
+      <rect x="5.5" y="0.5" width="5" height="4" strokeWidth="1" opacity="0.7" />
+      <rect x="5.5" y="11.5" width="5" height="4" strokeWidth="1" opacity="0.7" />
+      <rect x="0.5" y="0.5" width="4" height="4" strokeWidth="1" opacity="0.5" />
+      <rect x="11.5" y="0.5" width="4" height="4" strokeWidth="1" opacity="0.5" />
+      <rect x="0.5" y="11.5" width="4" height="4" strokeWidth="1" opacity="0.5" />
+      <rect x="11.5" y="11.5" width="4" height="4" strokeWidth="1" opacity="0.5" />
+    </svg>
+  );
+}
+
 const TOOL_ICONS = {
   brush: PaintBrushIcon,
   fill: SwatchIcon,
@@ -54,6 +70,7 @@ const TOOL_ICONS = {
   shape: Squares2X2Icon,
   select: CursorArrowRaysIcon,
   transform: ViewfinderCircleIcon,
+  repeatTile: RepeatTileIcon,
 } satisfies Record<ToolType, ComponentType<{ className?: string }>>;
 
 function CircleIcon({ className }: { className?: string }) {
@@ -64,9 +81,21 @@ function CircleIcon({ className }: { className?: string }) {
   );
 }
 
+function PatternBrushIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" className={className} aria-hidden="true">
+      <rect x="2" y="2" width="4" height="4" />
+      <rect x="7" y="2" width="4" height="4" opacity="0.6" />
+      <rect x="2" y="7" width="4" height="4" opacity="0.6" />
+      <rect x="7" y="7" width="4" height="4" />
+    </svg>
+  );
+}
+
 const BRUSH_SHAPE_ICONS = {
   square: StopIcon,
   circle: CircleIcon,
+  pattern: PatternBrushIcon,
 } satisfies Record<BrushShape, ComponentType<{ className?: string }>>;
 
 const SHAPE_ICONS = {

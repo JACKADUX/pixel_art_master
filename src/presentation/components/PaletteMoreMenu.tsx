@@ -11,12 +11,14 @@ interface PaletteMoreMenuProps {
   colorsCount: number;
   removeMode: boolean;
   onEnterRemoveMode: () => void;
+  onRequestClearPalette: () => void;
 }
 
 export function PaletteMoreMenu({
   colorsCount,
   removeMode,
   onEnterRemoveMode,
+  onRequestClearPalette,
 }: PaletteMoreMenuProps) {
   const paletteViewMode = useAppStore((s) => s.paletteViewMode);
   const setPaletteViewMode = useAppStore((s) => s.setPaletteViewMode);
@@ -34,8 +36,9 @@ export function PaletteMoreMenu({
     () => ({
       setPaletteViewMode,
       enterRemoveMode: onEnterRemoveMode,
+      requestClearPalette: onRequestClearPalette,
     }),
-    [setPaletteViewMode, onEnterRemoveMode],
+    [setPaletteViewMode, onEnterRemoveMode, onRequestClearPalette],
   );
 
   const items = useMemo(

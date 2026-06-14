@@ -1,7 +1,9 @@
 import type { PixelGrid } from "../canvas/PixelGrid";
 import type { MaskedPixelGrid } from "../canvas/MaskedPixelGrid";
 import type { SymmetricPixelSurface } from "../canvas/SymmetricPixelSurface";
+import type { TiledPixelSurface } from "../canvas/TiledPixelSurface";
 import type { PixelColor } from "../canvas/PixelColor";
+import type { PatternDrawMode } from "../patternBrush/PatternBrushTint";
 import type { SelectionMask } from "../selection/SelectionMask";
 import type { ToolSettings } from "./ToolType";
 
@@ -10,13 +12,22 @@ export interface Point {
   y: number;
 }
 
-export type PixelSurface = PixelGrid | MaskedPixelGrid | SymmetricPixelSurface;
+export type PixelSurface = PixelGrid | MaskedPixelGrid | SymmetricPixelSurface | TiledPixelSurface;
+
+export interface PatternStampContext {
+  source: PixelGrid;
+  drawMode: PatternDrawMode;
+  foregroundColor: PixelColor;
+  backgroundColor: PixelColor;
+  applyForegroundTint: boolean;
+}
 
 export interface ToolContext {
   grid: PixelSurface;
   color: PixelColor;
   settings: ToolSettings;
   selectionMask?: SelectionMask | null;
+  patternStamp?: PatternStampContext | null;
 }
 
 export interface ITool {
