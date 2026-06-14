@@ -32,6 +32,13 @@ import {
   renderSelectionOverlay,
   renderTransformHandles,
 } from "@/infrastructure/canvas/SelectionOverlayRenderer";
+import { renderSymmetryAxis } from "@/infrastructure/canvas/SymmetryAxisRenderer";
+import type { Point } from "@/domain/tool/ITool";
+import { isSymmetryActive } from "@/domain/symmetry/SymmetryConfig";
+import {
+  forEachSymmetricTransform,
+  hitTestSymmetryAxis,
+} from "@/domain/symmetry/SymmetryMirror";
 import { isDrawingToolType } from "@/domain/tool/ToolRegistry";
 import { clampStampSize } from "@/domain/tool/ToolType";
 import type { ReferenceLayer } from "@/domain/layer/Layer";
@@ -51,7 +58,8 @@ import { useAppStore, type ColorSlot, type DrawingButton } from "../stores/appSt
 import { useAltKeyHeld } from "../hooks/useAltKeyHeld";
 import { useBrushSizeHint } from "../hooks/useBrushSizeHint";
 import { useMousePositionOverlay } from "../hooks/useMousePositionOverlay";
-import { releaseKeyboardFocus, isTextEntryElement } from "../utils/editableFocus";
+import { focusCanvasKeyboard } from "../utils/canvasKeyboardFocus";
+import { isTextEntryElement } from "../utils/editableFocus";
 import { CanvasBoundsLabel } from "./CanvasBoundsLabel";
 import { CanvasBrushSizeHint } from "./CanvasBrushSizeHint";
 import { CanvasMousePositionHint } from "./CanvasMousePositionHint";
@@ -94,6 +102,21 @@ function clientToPixel(
     y: Math.floor((clientY - rect.top) / zoom),
   };
 }
+
+function clientToPixelFloat(
+  clientX: number,
+  clientY: number,
+  canvas: HTMLCanvasElement,
+  zoom: number,
+): Point {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left) / zoom,
+    y: (clientY - rect.top) / zoom,
+  };
+}
+
+const SYMMETRY_HIT_SCREEN_PX = 6;
 
 export function CanvasView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -152,6 +175,12 @@ export function CanvasView() {
   const openCropEditor = useAppStore((s) => s.openCropEditor);
   const toggleReferenceGrid = useAppStore((s) => s.toggleReferenceGrid);
   const importImageToReferenceLayer = useAppStore((s) => s.importImageToReferenceLayer);
+  const importReferenceLayerColors = useAppStore((s) => s.importReferenceLayerColors);
+  const symmetry = useAppStore((s) => s.symmetry);
+  const symmetryAxisDrag = useAppStore((s) => s.symmetryAxisDrag);
+  const beginSymmetryAxisDrag = useAppStore((s) => s.beginSymmetryAxisDrag);
+  const endSymmetryAxisDrag = useAppStore((s) => s.endSymmetryAxisDrag);
+  const setSymmetryOrigin = useAppStore((s) => s.setSymmetryOrigin);
 
   const [isPanning, setIsPanning] = useState(false);
   const altHeld = useAltKeyHeld();
@@ -164,6 +193,7 @@ export function CanvasView() {
   } | null>(null);
   const [shiftKeyHeld, setShiftKeyHeld] = useState(false);
   const [spaceKeyHeld, setSpaceKeyHeld] = useState(false);
+  const [symmetryAxisHover, setSymmetryAxisHover] = useState<"horizontal" | "vertical" | null>(null);
   const spaceKeyHeldRef = useRef(false);
   const [marchPhase, setMarchPhase] = useState(0);
   const marchFrameRef = useRef<number | null>(null);
@@ -277,15 +307,19 @@ export function CanvasView() {
       importImageToReferenceLayer: (layerId) => {
         void importImageToReferenceLayer(layerId);
       },
+      importReferenceLayerColors: (layerId, scope) => {
+        void importReferenceLayerColors(layerId, scope);
+      },
     });
   }, [
     referenceContextMenuLayer,
     openCropEditor,
     toggleReferenceGrid,
     importImageToReferenceLayer,
+    importReferenceLayerColors,
   ]);
 
-  const overlayZIndex = 100;
+  const overlayZIndex = 2;
 
   const stageLayout = useMemo(() => {
     if (displayWidth <= 0 || displayHeight <= 0) {
@@ -476,6 +510,31 @@ export function CanvasView() {
       renderTransformHandles(ctx, { selection, zoom, phase: marchPhase });
     }
 
+      renderSymmetryAxis(ctx, {
+      config: symmetry,
+      zoom,
+      canvasWidth: composite.width,
+      canvasHeight: composite.height,
+      style: {
+        visible: appSettings.symmetryAxisVisible,
+        colorHex: appSettings.symmetryAxisColorHex,
+        lineWidth: appSettings.symmetryAxisLineWidth,
+        outlineEnabled: appSettings.symmetryAxisOutlineEnabled,
+      },
+    });
+
+    const renderStampPreviewAt = (center: Point) => {
+      renderBrushStampPreview(
+        ctx,
+        center,
+        brushPreview!.size,
+        brushPreview!.shape,
+        activeTool === "brush" ? foregroundColor : null,
+        zoom,
+        { width: composite.width, height: composite.height },
+      );
+    };
+
     if (brushPreview && hoverPoint && !isPanning && !isAssetCaptureActive) {
       if (
         activeTool === "brush" &&
@@ -483,26 +542,34 @@ export function CanvasView() {
         brushLineAnchor &&
         (brushLineAnchor.x !== hoverPoint.x || brushLineAnchor.y !== hoverPoint.y)
       ) {
-        renderBrushLinePreview(
-          ctx,
-          brushLineAnchor,
-          hoverPoint,
-          { brushSize: brushPreview.size, brushShape: brushPreview.shape },
-          foregroundColor,
-          zoom,
-          { width: composite.width, height: composite.height },
-        );
+        const drawLinePreview = (from: Point, to: Point) => {
+          renderBrushLinePreview(
+            ctx,
+            from,
+            to,
+            { brushSize: brushPreview.size, brushShape: brushPreview.shape },
+            foregroundColor,
+            zoom,
+            { width: composite.width, height: composite.height },
+          );
+        };
+
+        if (isSymmetryActive(symmetry)) {
+          forEachSymmetricTransform(symmetry, (transform) => {
+            drawLinePreview(transform(brushLineAnchor), transform(hoverPoint));
+          });
+        } else {
+          drawLinePreview(brushLineAnchor, hoverPoint);
+        }
       }
 
-      renderBrushStampPreview(
-        ctx,
-        hoverPoint,
-        brushPreview.size,
-        brushPreview.shape,
-        activeTool === "brush" ? foregroundColor : null,
-        zoom,
-        { width: composite.width, height: composite.height },
-      );
+      if (isSymmetryActive(symmetry)) {
+        forEachSymmetricTransform(symmetry, (transform) => {
+          renderStampPreviewAt(transform(hoverPoint));
+        });
+      } else {
+        renderStampPreviewAt(hoverPoint);
+      }
     }
   }, [
     activeTool,
@@ -522,14 +589,66 @@ export function CanvasView() {
     selectionDrag,
     selectionPreviewRect,
     shiftKeyHeld,
+    symmetry,
+    appSettings.symmetryAxisVisible,
+    appSettings.symmetryAxisColorHex,
+    appSettings.symmetryAxisLineWidth,
+    appSettings.symmetryAxisOutlineEnabled,
     zoom,
   ]);
+
+  const resolveSymmetryHitAtClient = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !isSymmetryActive(symmetry)) return null;
+      const floatPoint = clientToPixelFloat(clientX, clientY, canvas, zoom);
+      const threshold = SYMMETRY_HIT_SCREEN_PX / zoom;
+      return hitTestSymmetryAxis(floatPoint.x, floatPoint.y, symmetry, threshold);
+    },
+    [symmetry, zoom],
+  );
+
+  const activeSymmetryAxisInteraction = symmetryAxisDrag ?? symmetryAxisHover;
+
+  const symmetryCursorClass =
+    activeSymmetryAxisInteraction === "horizontal"
+      ? " cursor-col-resize"
+      : activeSymmetryAxisInteraction === "vertical"
+        ? " cursor-row-resize"
+        : "";
 
   const preventSpaceScroll = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
     if (isTextEntryElement(document.activeElement)) return;
     if (e.code !== "Space") return;
     e.preventDefault();
   }, []);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !isSymmetryActive(symmetry)) {
+      setSymmetryAxisHover(null);
+      return;
+    }
+
+    const handleMove = (e: MouseEvent) => {
+      if (isPanningRef.current || useAppStore.getState().symmetryAxisDrag) return;
+      setSymmetryAxisHover(resolveSymmetryHitAtClient(e.clientX, e.clientY));
+    };
+
+    const handleLeave = () => setSymmetryAxisHover(null);
+
+    container.addEventListener("mousemove", handleMove);
+    container.addEventListener("mouseleave", handleLeave);
+    return () => {
+      container.removeEventListener("mousemove", handleMove);
+      container.removeEventListener("mouseleave", handleLeave);
+    };
+  }, [symmetry, resolveSymmetryHitAtClient]);
+
+  useEffect(() => {
+    if (!symmetryAxisDrag) return;
+    setSymmetryAxisHover(symmetryAxisDrag);
+  }, [symmetryAxisDrag]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -996,11 +1115,6 @@ export function CanvasView() {
     clearMousePositionOverlay,
   ]);
 
-  const focusCanvasKeyboard = useCallback(() => {
-    releaseKeyboardFocus();
-    containerRef.current?.focus({ preventScroll: true });
-  }, []);
-
   useEffect(() => {
     if (!isAssetCaptureActive) return;
     setHoverPoint(null);
@@ -1010,7 +1124,7 @@ export function CanvasView() {
   useEffect(() => {
     if (!isAssetCaptureAdjusting) return;
     focusCanvasKeyboard();
-  }, [isAssetCaptureAdjusting, focusCanvasKeyboard]);
+  }, [isAssetCaptureAdjusting]);
 
   useEffect(() => {
     if (!isAssetCaptureAdjusting) return;
@@ -1063,6 +1177,14 @@ export function CanvasView() {
     const button = buttonFromMouseButton(e.button);
     if (!button) return;
     e.preventDefault();
+    const canvas = canvasRef.current;
+    if (canvas && isSymmetryActive(symmetry)) {
+      const hitAxis = resolveSymmetryHitAtClient(e.clientX, e.clientY);
+      if (hitAxis) {
+        beginSymmetryAxisDrag(hitAxis);
+        return;
+      }
+    }
     const point = toPixel(e);
     const modifiers = {
       shiftKey: e.shiftKey,
@@ -1076,8 +1198,23 @@ export function CanvasView() {
     pointerDown(point, button, modifiers);
   };
 
+  const handleSymmetryAxisDragMove = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !symmetryAxisDrag || !composite) return;
+    const floatPoint = clientToPixelFloat(clientX, clientY, canvas, zoom);
+    if (symmetryAxisDrag === "horizontal") {
+      setSymmetryOrigin(floatPoint.x, symmetry.originY);
+    } else {
+      setSymmetryOrigin(symmetry.originX, floatPoint.y);
+    }
+  };
+
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanningRef.current) return;
+    if (symmetryAxisDrag) {
+      handleSymmetryAxisDragMove(e.clientX, e.clientY);
+      return;
+    }
     const point = toPixel(e);
     if (isAssetCaptureDragging) {
       assetCapturePointerMove(point);
@@ -1105,6 +1242,10 @@ export function CanvasView() {
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanningRef.current) return;
+    if (symmetryAxisDrag) {
+      endSymmetryAxisDrag();
+      return;
+    }
     if (isAssetCaptureDragging) {
       assetCapturePointerUp(toPixel(e));
       return;
@@ -1134,6 +1275,7 @@ export function CanvasView() {
 
   const documentPointerTracking =
     assetCaptureTracking ||
+    symmetryAxisDrag !== null ||
     (drawingButton !== null &&
       ((selectionDrag !== null &&
         (activeTool === "select" || activeTool === "transform")) ||
@@ -1152,6 +1294,7 @@ export function CanvasView() {
         selectionDrag: drag,
         isDrawing: drawing,
         assetCapturePhase: capturePhase,
+        symmetryAxisDrag: axisDrag,
       } = useAppStore.getState();
 
       if (capturePhase === "dragging") {
@@ -1159,6 +1302,17 @@ export function CanvasView() {
         if (!canvas) return;
         const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
         useAppStore.getState().assetCapturePointerMove(point);
+        return;
+      }
+
+      if (axisDrag) {
+        const floatPoint = clientToPixelFloat(e.clientX, e.clientY, canvas, zoomRef.current);
+        const { symmetry: currentSymmetry, setSymmetryOrigin: updateOrigin } = useAppStore.getState();
+        if (axisDrag === "horizontal") {
+          updateOrigin(floatPoint.x, currentSymmetry.originY);
+        } else {
+          updateOrigin(currentSymmetry.originX, floatPoint.y);
+        }
         return;
       }
 
@@ -1187,7 +1341,14 @@ export function CanvasView() {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const { assetCapturePhase: capturePhase } = useAppStore.getState();
+      const { assetCapturePhase: capturePhase, symmetryAxisDrag: axisDrag, endSymmetryAxisDrag: finishAxisDrag } =
+        useAppStore.getState();
+
+      if (axisDrag) {
+        finishAxisDrag();
+        return;
+      }
+
       if (capturePhase === "dragging") {
         const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
         useAppStore.getState().assetCapturePointerUp(point);
@@ -1256,9 +1417,18 @@ export function CanvasView() {
 
   const handleContainerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     focusCanvasKeyboard();
-    if (!isMiddleMouseButton(e.button)) return;
-    e.preventDefault();
-    startPanning(e.clientX, e.clientY);
+    if (isMiddleMouseButton(e.button)) {
+      e.preventDefault();
+      startPanning(e.clientX, e.clientY);
+      return;
+    }
+    if (e.button === 0 && isSymmetryActive(symmetry)) {
+      const hitAxis = resolveSymmetryHitAtClient(e.clientX, e.clientY);
+      if (hitAxis) {
+        e.preventDefault();
+        beginSymmetryAxisDrag(hitAxis);
+      }
+    }
   };
 
   const handleAuxClick = (e: React.MouseEvent) => {
@@ -1281,7 +1451,7 @@ export function CanvasView() {
         ref={containerRef}
         tabIndex={-1}
         className={`relative min-h-0 min-w-0 flex-1 overflow-auto bg-zinc-800 outline-none${
-          isPanning ? " cursor-grabbing" : isAssetCaptureActive ? " cursor-capture" : ""
+          isPanning ? " cursor-grabbing" : isAssetCaptureActive ? " cursor-capture" : symmetryCursorClass
         }`}
         onMouseDown={handleContainerMouseDown}
         onKeyDown={preventSpaceScroll}
@@ -1301,10 +1471,12 @@ export function CanvasView() {
             }}
           >
             <div
-              className="absolute"
+              className="absolute isolate overflow-hidden"
               style={{
                 left: stageLayout.canvasLeft,
                 top: stageLayout.canvasTop,
+                width: displayWidth,
+                height: displayHeight,
                 zIndex: 0,
                 imageRendering: "pixelated",
               }}
@@ -1318,7 +1490,7 @@ export function CanvasView() {
                       ? " cursor-capture"
                       : altHeld
                         ? " cursor-eyedropper"
-                        : " cursor-crosshair"
+                        : symmetryCursorClass || " cursor-crosshair"
                 }`}
                 style={{ imageRendering: "pixelated" }}
                 onMouseDown={handleMouseDown}
@@ -1333,6 +1505,24 @@ export function CanvasView() {
                 className="pointer-events-none absolute left-0 top-0"
                 style={{ imageRendering: "pixelated" }}
               />
+              <div
+                className="pointer-events-none absolute left-0 top-0"
+                style={{
+                  width: displayWidth,
+                  height: displayHeight,
+                  zIndex: overlayZIndex,
+                  imageRendering: "pixelated",
+                }}
+              >
+                <canvas
+                  ref={previewRef}
+                  className="block"
+                  style={{ imageRendering: "pixelated" }}
+                />
+                {boundsLabelRect && (
+                  <CanvasBoundsLabel rect={boundsLabelRect} zoom={zoom} />
+                )}
+              </div>
             </div>
             {project.canvas.layers.map((layer) => {
               if (layer.type !== "reference") return null;
@@ -1349,26 +1539,6 @@ export function CanvasView() {
                 />
               );
             })}
-            <div
-              className="pointer-events-none absolute"
-              style={{
-                left: stageLayout.canvasLeft,
-                top: stageLayout.canvasTop,
-                width: displayWidth,
-                height: displayHeight,
-                zIndex: overlayZIndex,
-                imageRendering: "pixelated",
-              }}
-            >
-              <canvas
-                ref={previewRef}
-                className="block"
-                style={{ imageRendering: "pixelated" }}
-              />
-              {boundsLabelRect && (
-                <CanvasBoundsLabel rect={boundsLabelRect} zoom={zoom} />
-              )}
-            </div>
           </div>
         )}
         <div className="sr-only">当前工具: {activeTool}</div>

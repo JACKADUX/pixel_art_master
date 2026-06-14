@@ -159,6 +159,14 @@ import {
   DEFAULT_SPLIT_PANE_RATIO,
   extractEditorPreferences,
 } from "@/domain/preferences/EditorPreferences";
+import {
+  createCenteredOrigin,
+  createDefaultSymmetryConfig,
+  isSymmetryActive,
+  type SymmetryConfig,
+} from "@/domain/symmetry/SymmetryConfig";
+import type { SymmetryAxisKind } from "@/domain/symmetry/SymmetryMirror";
+import { snapSymmetryOrigin } from "@/domain/symmetry/SymmetryMirror";
 
 import { findAssetById, ROOT_FOLDER_ID } from "@/domain/asset/AssetLibrary";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
@@ -170,7 +178,6 @@ import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 import {
 
   getActiveLayer,
-  getActiveReferenceLayer,
 
   createEmptyProject,
 
@@ -182,7 +189,7 @@ import {
 
 } from "@/domain/project/Project";
 
-import type { CropRect, LayerPosition } from "@/domain/layer/Layer";
+import type { CropRect, LayerPosition, ReferenceLayer } from "@/domain/layer/Layer";
 
 import type { ProjectSummary } from "@/domain/project/ProjectSummary";
 
@@ -428,6 +435,10 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Set
 
   internalClipboard: FloatingSelection | null;
 
+  symmetry: SymmetryConfig;
+
+  symmetryAxisDrag: SymmetryAxisKind | null;
+
 
 
   init: () => Promise<void>;
@@ -445,6 +456,18 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Set
   setActiveTool: (tool: ToolType) => void;
 
   setToolSettings: (settings: Partial<ToolSettings>) => void;
+
+  toggleSymmetryHorizontal: () => void;
+
+  toggleSymmetryVertical: () => void;
+
+  resetSymmetryToCenter: () => void;
+
+  setSymmetryOrigin: (originX: number, originY: number) => void;
+
+  beginSymmetryAxisDrag: (axis: SymmetryAxisKind) => void;
+
+  endSymmetryAxisDrag: () => void;
 
   setForegroundColor: (color: PixelColor) => void;
 
@@ -609,7 +632,10 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Set
 
   removeColorsFromPalette: (hexes: string[]) => void;
 
-  importReferenceLayerColors: (scope: ReferenceColorImportScope) => Promise<void>;
+  importReferenceLayerColors: (
+    layerId: string,
+    scope: ReferenceColorImportScope,
+  ) => Promise<void>;
 
   importAssetToNewDrawingLayer: (assetId: string) => Promise<void>;
 
@@ -844,6 +870,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
   internalClipboard: null,
 
+  symmetry: createDefaultSymmetryConfig(),
+
+  symmetryAxisDrag: null,
+
 
 
   init: async () => {
@@ -923,6 +953,10 @@ export const useAppStore = create<AppState>((set, get) => {
         assetLibraryDrawerExpanded: prefs.assetLibraryDrawerExpanded,
 
         assetLibraryDrawerHeight: prefs.assetLibraryDrawerHeight,
+
+        assetFolderTreeWidth: prefs.assetFolderTreeWidth,
+
+        symmetry: prefs.symmetry,
 
       });
 
@@ -1033,6 +1067,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
     });
 
+    get().resetSymmetryToCenter();
+
   },
 
 
@@ -1080,6 +1116,8 @@ export const useAppStore = create<AppState>((set, get) => {
       brushLineAnchor: null,
 
     });
+
+    get().resetSymmetryToCenter();
 
   },
 
@@ -1191,6 +1229,47 @@ export const useAppStore = create<AppState>((set, get) => {
       }
       return { toolSettings: next };
     }),
+
+
+
+  toggleSymmetryHorizontal: () =>
+    set((s) => ({
+      symmetry: { ...s.symmetry, horizontal: !s.symmetry.horizontal },
+    })),
+
+  toggleSymmetryVertical: () =>
+    set((s) => ({
+      symmetry: { ...s.symmetry, vertical: !s.symmetry.vertical },
+    })),
+
+  resetSymmetryToCenter: () => {
+    const { project } = get();
+    if (!project) return;
+    const origin = createCenteredOrigin(project.canvas.width, project.canvas.height);
+    set({
+      symmetry: {
+        ...get().symmetry,
+        originX: origin.originX,
+        originY: origin.originY,
+      },
+    });
+  },
+
+  setSymmetryOrigin: (originX, originY) => {
+    const { symmetry } = get();
+    if (!Number.isFinite(originX) || !Number.isFinite(originY)) return;
+    set({
+      symmetry: {
+        ...symmetry,
+        originX: snapSymmetryOrigin(originX),
+        originY: snapSymmetryOrigin(originY),
+      },
+    });
+  },
+
+  beginSymmetryAxisDrag: (axis) => set({ symmetryAxisDrag: axis }),
+
+  endSymmetryAxisDrag: () => set({ symmetryAxisDrag: null }),
 
 
 
@@ -2122,6 +2201,7 @@ export const useAppStore = create<AppState>((set, get) => {
       selection,
       historyStack,
       brushLineAnchor,
+      symmetry,
     } = get();
 
     if (!project) return;
@@ -2181,6 +2261,8 @@ export const useAppStore = create<AppState>((set, get) => {
     const selectionMask =
       selection && !isSelectionEmpty(selection) ? selection.mask : null;
 
+    const activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
+
     if (activeTool === "brush" && modifiers.shiftKey && brushLineAnchor) {
       pushHistory(historyStack, project, selection);
       const selectedColor = button === "primary" ? foregroundColor : backgroundColor;
@@ -2191,6 +2273,7 @@ export const useAppStore = create<AppState>((set, get) => {
         brushLineAnchor,
         point,
         selectionMask,
+        activeSymmetry,
       );
       get().syncActiveLayer(grid);
       set({ brushLineAnchor: point });
@@ -2211,6 +2294,7 @@ export const useAppStore = create<AppState>((set, get) => {
       toolSettings,
       point,
       selectionMask,
+      activeSymmetry,
     );
 
     get().syncActiveLayer(grid);
@@ -2240,6 +2324,7 @@ export const useAppStore = create<AppState>((set, get) => {
       selection,
       selectionDrag,
       lassoPoints,
+      symmetry,
     } = get();
 
     if (!project) return;
@@ -2296,6 +2381,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!isDrawingToolType(activeTool)) return;
 
+    const activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
+
     applyToolPointerMove(
       grid,
       activeTool,
@@ -2304,6 +2391,7 @@ export const useAppStore = create<AppState>((set, get) => {
       lastPoint,
       point,
       selectionMask,
+      activeSymmetry,
     );
 
     get().syncActiveLayer(grid);
@@ -2329,6 +2417,7 @@ export const useAppStore = create<AppState>((set, get) => {
       selectionDrag,
       lassoPoints,
       historyStack,
+      symmetry,
     } = get();
 
     if (!project) return;
@@ -2389,6 +2478,8 @@ export const useAppStore = create<AppState>((set, get) => {
       const selectionMask =
         selection && !isSelectionEmpty(selection) ? selection.mask : null;
 
+      const activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
+
       if (isDrawingToolType(activeTool)) {
         applyToolPointerUp(
           grid,
@@ -2398,6 +2489,7 @@ export const useAppStore = create<AppState>((set, get) => {
           drawStart,
           point,
           selectionMask,
+          activeSymmetry,
         );
       }
 
@@ -2750,30 +2842,31 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  importReferenceLayerColors: async (scope) => {
+  importReferenceLayerColors: async (layerId, scope) => {
 
     const { project } = get();
 
     if (!project) return;
 
-    const activeLayer = getActiveReferenceLayer(project);
+    const found = project.canvas.layers.find((l) => l.id === layerId);
+    const layer = found && isReferenceLayer(found) ? found : null;
 
-    if (!activeLayer || !activeLayer.imageData) return;
+    if (!layer?.imageData) return;
 
     const loadPixels = async (
-      layer: typeof activeLayer,
+      refLayer: ReferenceLayer,
       importScope: ReferenceColorImportScope,
     ) => {
       const cache =
         importScope === "full"
-          ? await ensureReferenceLayerFullPixelCache(layer)
-          : await ensureReferenceLayerPixelCache(layer);
+          ? await ensureReferenceLayerFullPixelCache(refLayer)
+          : await ensureReferenceLayerPixelCache(refLayer);
       return cache?.pixels ?? null;
     };
 
     const nextProject = await importReferenceLayerColorsToPalette(
       project,
-      activeLayer,
+      layer,
       scope,
       loadPixels,
     );
@@ -3053,6 +3146,7 @@ export const useAppStore = create<AppState>((set, get) => {
       lassoPoints: [],
       selectionPreviewRect: null,
     });
+    get().resetSymmetryToCenter();
   },
 
 

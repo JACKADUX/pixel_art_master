@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { focusCanvasKeyboard } from "@/presentation/utils/canvasKeyboardFocus";
 
 const NUMERIC_WIDTH_CLASS = "w-[3ch]";
 
@@ -57,10 +58,12 @@ export function ColorChannelSlider({
     const parsed = parseInput(inputText.trim());
     if (parsed === null || !Number.isFinite(parsed)) return;
     onChange(Math.min(max, Math.max(min, parsed)));
+    focusCanvasKeyboard();
   };
 
   const cancelEdit = () => {
     setEditing(false);
+    focusCanvasKeyboard();
   };
 
   const beginEdit = () => {

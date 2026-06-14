@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon, ChevronRightIcon, EllipsisVerticalIcon } from "@heroicons/react/24/outline";
-import { getActiveReferenceLayer } from "@/domain/project/Project";
 import type { MenuItem } from "./MenuDropdown";
 import {
   buildPalettePanelMenuItems,
@@ -19,17 +18,12 @@ export function PaletteMoreMenu({
   removeMode,
   onEnterRemoveMode,
 }: PaletteMoreMenuProps) {
-  const project = useAppStore((s) => s.project);
   const paletteViewMode = useAppStore((s) => s.paletteViewMode);
   const setPaletteViewMode = useAppStore((s) => s.setPaletteViewMode);
-  const importReferenceLayerColors = useAppStore((s) => s.importReferenceLayerColors);
 
   const [open, setOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const activeLayer = project ? getActiveReferenceLayer(project) : null;
-  const canImportReference = Boolean(activeLayer?.imageData);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
@@ -39,12 +33,9 @@ export function PaletteMoreMenu({
   const actions = useMemo<PalettePanelMenuActions>(
     () => ({
       setPaletteViewMode,
-      importReferenceLayerColors: (scope) => {
-        void importReferenceLayerColors(scope);
-      },
       enterRemoveMode: onEnterRemoveMode,
     }),
-    [setPaletteViewMode, importReferenceLayerColors, onEnterRemoveMode],
+    [setPaletteViewMode, onEnterRemoveMode],
   );
 
   const items = useMemo(
@@ -53,12 +44,11 @@ export function PaletteMoreMenu({
         {
           paletteViewMode,
           colorsCount,
-          canImportReference,
           removeMode,
         },
         actions,
       ),
-    [paletteViewMode, colorsCount, canImportReference, removeMode, actions],
+    [paletteViewMode, colorsCount, removeMode, actions],
   );
 
   useEffect(() => {

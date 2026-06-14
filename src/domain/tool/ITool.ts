@@ -1,5 +1,6 @@
 import type { PixelGrid } from "../canvas/PixelGrid";
 import type { MaskedPixelGrid } from "../canvas/MaskedPixelGrid";
+import type { SymmetricPixelSurface } from "../canvas/SymmetricPixelSurface";
 import type { PixelColor } from "../canvas/PixelColor";
 import type { SelectionMask } from "../selection/SelectionMask";
 import type { ToolSettings } from "./ToolType";
@@ -9,7 +10,7 @@ export interface Point {
   y: number;
 }
 
-export type PixelSurface = PixelGrid | MaskedPixelGrid;
+export type PixelSurface = PixelGrid | MaskedPixelGrid | SymmetricPixelSurface;
 
 export interface ToolContext {
   grid: PixelSurface;

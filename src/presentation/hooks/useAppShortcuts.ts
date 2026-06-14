@@ -4,17 +4,30 @@ import { toolFromShortcutCode } from "../config/toolShortcuts";
 import { toast } from "../stores/toastStore";
 import { useAppStore } from "../stores/appStore";
 import { usePixelRestoreStore } from "../stores/pixelRestoreStore";
+import { focusCanvasKeyboard } from "../utils/canvasKeyboardFocus";
 import {
   installGlobalFocusRelease,
   isTextEntryElement,
+  shouldDeferShortcutToTextEntry,
 } from "../utils/editableFocus";
 
 export function useAppShortcuts() {
-  useEffect(() => installGlobalFocusRelease(), []);
+  useEffect(() => {
+    const teardownFocus = installGlobalFocusRelease(focusCanvasKeyboard);
+    const handleWindowFocus = () => {
+      if (isTextEntryElement(document.activeElement)) return;
+      focusCanvasKeyboard();
+    };
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      teardownFocus();
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (isTextEntryElement(document.activeElement)) return;
+      if (shouldDeferShortcutToTextEntry(event)) return;
 
       const pixelRestore = usePixelRestoreStore.getState();
       if (pixelRestore.open) {

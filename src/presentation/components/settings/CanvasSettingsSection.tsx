@@ -2,9 +2,12 @@ import {
   MAX_CHECKERBOARD_TILE_SIZE,
   MAX_GRID_LINE_WIDTH,
   MAX_GRID_SIZE,
+  MAX_SYMMETRY_AXIS_LINE_WIDTH,
   MIN_CHECKERBOARD_TILE_SIZE,
   MIN_GRID_LINE_WIDTH,
   MIN_GRID_SIZE,
+  MIN_SYMMETRY_AXIS_LINE_WIDTH,
+  symmetryAxisColorRgba,
 } from "@/domain/appSettings/AppSettings";
 import { useAppStore } from "../../stores/appStore";
 import {
@@ -26,6 +29,12 @@ export function CanvasSettingsSection() {
   const checkerboardTileSize = useAppStore((s) => s.appSettings.checkerboardTileSize);
   const checkerboardLightHex = useAppStore((s) => s.appSettings.checkerboardLightHex);
   const checkerboardDarkHex = useAppStore((s) => s.appSettings.checkerboardDarkHex);
+  const symmetryAxisVisible = useAppStore((s) => s.appSettings.symmetryAxisVisible);
+  const symmetryAxisColorHex = useAppStore((s) => s.appSettings.symmetryAxisColorHex);
+  const symmetryAxisLineWidth = useAppStore((s) => s.appSettings.symmetryAxisLineWidth);
+  const symmetryAxisOutlineEnabled = useAppStore(
+    (s) => s.appSettings.symmetryAxisOutlineEnabled,
+  );
   const gridVisible = project?.grid.visible ?? true;
 
   const setDefaultGridPrimary = useAppStore((s) => s.setDefaultGridPrimary);
@@ -36,6 +45,10 @@ export function CanvasSettingsSection() {
   const setCheckerboardTileSize = useAppStore((s) => s.setCheckerboardTileSize);
   const setCheckerboardLightHex = useAppStore((s) => s.setCheckerboardLightHex);
   const setCheckerboardDarkHex = useAppStore((s) => s.setCheckerboardDarkHex);
+  const setSymmetryAxisVisible = useAppStore((s) => s.setSymmetryAxisVisible);
+  const setSymmetryAxisColorHex = useAppStore((s) => s.setSymmetryAxisColorHex);
+  const setSymmetryAxisLineWidth = useAppStore((s) => s.setSymmetryAxisLineWidth);
+  const setSymmetryAxisOutlineEnabled = useAppStore((s) => s.setSymmetryAxisOutlineEnabled);
   const toggleGrid = useAppStore((s) => s.toggleGrid);
 
   return (
@@ -133,6 +146,55 @@ export function CanvasSettingsSection() {
             />
           </SettingsRow>
         </div>
+      </SettingsGroup>
+
+      <SettingsGroup
+        title="对称轴"
+        description="开启对称模式后在画布上显示的辅助线样式。"
+      >
+        <SettingsToggle
+          label="显示对称轴"
+          hint="关闭后仍可使用对称绘制，但不显示辅助线"
+          checked={symmetryAxisVisible}
+          onChange={setSymmetryAxisVisible}
+        />
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <SettingsRow label="线条颜色">
+            <SettingsColorInput
+              value={symmetryAxisColorHex}
+              onChange={setSymmetryAxisColorHex}
+              preview={
+                <span
+                  className="inline-block h-4 w-10 rounded border border-zinc-600"
+                  style={{
+                    backgroundImage: `repeating-linear-gradient(90deg, ${symmetryAxisColorRgba(symmetryAxisColorHex)} 0 6px, transparent 6px 10px)`,
+                  }}
+                />
+              }
+            />
+          </SettingsRow>
+          <SettingsRow
+            label="线条粗细"
+            hint={`${MIN_SYMMETRY_AXIS_LINE_WIDTH}–${MAX_SYMMETRY_AXIS_LINE_WIDTH} px`}
+          >
+            <SettingsNumberInput
+              value={symmetryAxisLineWidth}
+              min={MIN_SYMMETRY_AXIS_LINE_WIDTH}
+              max={MAX_SYMMETRY_AXIS_LINE_WIDTH}
+              step={1}
+              suffix="px"
+              onChange={setSymmetryAxisLineWidth}
+            />
+          </SettingsRow>
+        </div>
+
+        <SettingsToggle
+          label="对比描边"
+          hint="在辅助线外侧绘制深色轮廓，便于在浅色像素上辨认"
+          checked={symmetryAxisOutlineEnabled}
+          onChange={setSymmetryAxisOutlineEnabled}
+        />
       </SettingsGroup>
     </div>
   );

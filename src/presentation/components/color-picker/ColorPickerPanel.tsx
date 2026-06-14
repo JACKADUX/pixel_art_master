@@ -16,6 +16,7 @@ import { hslToRgb, oklabToRgb, rgbToHex } from "@/domain/color/ColorConverter";
 import { createHsl } from "@/domain/color/HslColor";
 import { createOklabPolar, polarToOklab } from "@/domain/color/OklabPolarColor";
 import { useColorPickerState } from "@/presentation/hooks/useColorPickerState";
+import { focusCanvasKeyboard } from "@/presentation/utils/canvasKeyboardFocus";
 import {
   ColorChannelSlider,
   parseAlphaPercentInput,
@@ -149,6 +150,11 @@ export function ColorPickerPanel({
     pickOklabPlaneColor,
     commitOklabPlanePick,
   } = useColorPickerState({ currentColor, onChange });
+
+  const handleCommitHexInput = () => {
+    commitHexInput();
+    focusCanvasKeyboard();
+  };
 
   const isHorizontal = orientation === "horizontal";
 
@@ -310,9 +316,9 @@ export function ColorPickerPanel({
             type="text"
             value={hexInput}
             onChange={(e) => setHexInput(e.target.value)}
-            onBlur={commitHexInput}
+            onBlur={handleCommitHexInput}
             onKeyDown={(e) => {
-              if (e.key === "Enter") commitHexInput();
+              if (e.key === "Enter") handleCommitHexInput();
             }}
             className="w-full rounded border border-zinc-700 bg-zinc-800 px-1 py-1 font-mono text-[10px] leading-none text-zinc-200 outline-none focus:border-blue-500"
             spellCheck={false}
@@ -353,9 +359,9 @@ export function ColorPickerPanel({
           type="text"
           value={hexInput}
           onChange={(e) => setHexInput(e.target.value)}
-          onBlur={commitHexInput}
+          onBlur={handleCommitHexInput}
           onKeyDown={(e) => {
-            if (e.key === "Enter") commitHexInput();
+            if (e.key === "Enter") handleCommitHexInput();
           }}
           className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 font-mono text-xs text-zinc-200 outline-none focus:border-blue-500"
           spellCheck={false}

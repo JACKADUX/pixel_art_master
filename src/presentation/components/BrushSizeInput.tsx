@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { clampStampSize, MAX_STAMP_SIZE, MIN_STAMP_SIZE } from "@/domain/tool/ToolType";
+import { focusCanvasKeyboard } from "../utils/canvasKeyboardFocus";
 
 interface BrushSizeInputProps {
   value: number;
@@ -128,6 +129,7 @@ export function BrushSizeInput({ value, onChange }: BrushSizeInputProps) {
       setDraft(String(value));
     }
     setIsEditing(false);
+    focusCanvasKeyboard();
   }, [draft, onChange, value]);
 
   const handleInputChange = (raw: string) => {

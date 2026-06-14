@@ -6,6 +6,7 @@ import {
   clampCheckerboardTileSize,
   clampGridLineWidth,
   clampGridSize,
+  clampSymmetryAxisLineWidth,
   type AppSettings,
 } from "@/domain/appSettings/AppSettings";
 import { fromHex, toHex } from "@/domain/canvas/PixelColor";
@@ -28,6 +29,10 @@ export interface AppSettingsSliceActions {
   setCheckerboardTileSize: (size: number) => void;
   setCheckerboardLightHex: (hex: string) => void;
   setCheckerboardDarkHex: (hex: string) => void;
+  setSymmetryAxisVisible: (visible: boolean) => void;
+  setSymmetryAxisColorHex: (hex: string) => void;
+  setSymmetryAxisLineWidth: (width: number) => void;
+  setSymmetryAxisOutlineEnabled: (enabled: boolean) => void;
 }
 
 type AppSettingsSet = (
@@ -162,6 +167,32 @@ export function createAppSettingsSlice(
           ...state.appSettings,
           checkerboardDarkHex: toHex(fromHex(hex)),
         },
+      })),
+
+    setSymmetryAxisVisible: (visible) =>
+      set((state) => ({
+        appSettings: { ...state.appSettings, symmetryAxisVisible: visible },
+      })),
+
+    setSymmetryAxisColorHex: (hex) =>
+      set((state) => ({
+        appSettings: {
+          ...state.appSettings,
+          symmetryAxisColorHex: toHex(fromHex(hex)),
+        },
+      })),
+
+    setSymmetryAxisLineWidth: (width) =>
+      set((state) => ({
+        appSettings: {
+          ...state.appSettings,
+          symmetryAxisLineWidth: clampSymmetryAxisLineWidth(width),
+        },
+      })),
+
+    setSymmetryAxisOutlineEnabled: (enabled) =>
+      set((state) => ({
+        appSettings: { ...state.appSettings, symmetryAxisOutlineEnabled: enabled },
       })),
   };
 }

@@ -9,6 +9,7 @@ import { AssetGrid } from "./AssetGrid";
 import { AssetImportMenu } from "./AssetImportMenu";
 import { AssetImageViewerModal } from "./AssetImageViewerModal";
 import { useAssetPointerDrag } from "../../hooks/useAssetPointerDrag";
+import { ResizablePanelColumn } from "../ResizablePanelColumn";
 
 interface AssetLibraryContentProps {
   library: AssetLibraryIndex;
@@ -61,6 +62,8 @@ export function AssetLibraryContent({
   const openAssetImageViewer = useAppStore((s) => s.openAssetImageViewer);
   const closeAssetImageViewer = useAppStore((s) => s.closeAssetImageViewer);
   const hasProject = useAppStore((s) => s.project !== null);
+  const assetFolderTreeWidth = useAppStore((s) => s.assetFolderTreeWidth);
+  const setAssetFolderTreeWidth = useAppStore((s) => s.setAssetFolderTreeWidth);
   const importAssetToNewDrawingLayer = useAppStore((s) => s.importAssetToNewDrawingLayer);
   const importAssetToNewReferenceLayer = useAppStore((s) => s.importAssetToNewReferenceLayer);
   const importAssetColorsToPalette = useAppStore((s) => s.importAssetColorsToPalette);
@@ -107,26 +110,31 @@ export function AssetLibraryContent({
   return (
     <>
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-      <div className="flex h-full min-h-0 w-40 shrink-0 flex-col overflow-hidden border-r border-zinc-700">
-        <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5">
-          <AssetImportMenu
-            onImportClipboard={onImportClipboard}
-            onImportFile={onImportFile}
-            onStartCanvasCapture={onStartCanvasCapture}
-          />
+      <ResizablePanelColumn
+        width={assetFolderTreeWidth}
+        onWidthChange={setAssetFolderTreeWidth}
+      >
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5">
+            <AssetImportMenu
+              onImportClipboard={onImportClipboard}
+              onImportFile={onImportFile}
+              onStartCanvasCapture={onStartCanvasCapture}
+            />
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <AssetFolderTree
+              library={library}
+              selectedFolderId={selectedFolderId}
+              hoverFolderId={hoverFolderId}
+              onSelectFolder={onSelectFolder}
+              onCreateFolder={onCreateFolder}
+              onRenameFolder={onRenameFolder}
+              onRequestDeleteFolder={onRequestDeleteFolder}
+            />
+          </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-hidden">
-        <AssetFolderTree
-          library={library}
-          selectedFolderId={selectedFolderId}
-          hoverFolderId={hoverFolderId}
-          onSelectFolder={onSelectFolder}
-          onCreateFolder={onCreateFolder}
-          onRenameFolder={onRenameFolder}
-          onRequestDeleteFolder={onRequestDeleteFolder}
-        />
-        </div>
-      </div>
+      </ResizablePanelColumn>
 
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AssetGrid

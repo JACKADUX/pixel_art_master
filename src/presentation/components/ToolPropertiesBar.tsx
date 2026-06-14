@@ -6,7 +6,7 @@ import type {
   ToolType,
   TransformMode,
 } from "@/domain/tool/ToolType";
-import { getBrushShapeIcon, getSelectionModeIcon, getShapeIcon } from "../icons/ToolIcons";
+import { getBrushShapeIcon, getSelectionModeIcon, getShapeIcon, SymmetryHorizontalIcon, SymmetryVerticalIcon } from "../icons/ToolIcons";
 import { useAppStore } from "../stores/appStore";
 import { BrushSizeInput } from "./BrushSizeInput";
 
@@ -109,6 +109,10 @@ export function ToolPropertiesBar() {
   const activeTool = useAppStore((s) => s.activeTool);
   const toolSettings = useAppStore((s) => s.toolSettings);
   const setToolSettings = useAppStore((s) => s.setToolSettings);
+  const symmetry = useAppStore((s) => s.symmetry);
+  const toggleSymmetryHorizontal = useAppStore((s) => s.toggleSymmetryHorizontal);
+  const toggleSymmetryVertical = useAppStore((s) => s.toggleSymmetryVertical);
+  const resetSymmetryToCenter = useAppStore((s) => s.resetSymmetryToCenter);
 
   if (!project) return null;
 
@@ -247,6 +251,36 @@ export function ToolPropertiesBar() {
           <span className="text-zinc-500">拖拽手柄变换选区内容</span>
         </>
       )}
+
+      <div className="ml-auto flex items-center gap-3 border-l border-zinc-700 pl-4">
+        <label className="flex items-center gap-2 text-zinc-400">
+          对称
+          <span className="flex gap-1">
+            <SegmentedButton
+              active={symmetry.horizontal}
+              title="水平对称（左右镜像）"
+              onClick={toggleSymmetryHorizontal}
+            >
+              <SymmetryHorizontalIcon className="h-4 w-4" />
+            </SegmentedButton>
+            <SegmentedButton
+              active={symmetry.vertical}
+              title="垂直对称（上下镜像）"
+              onClick={toggleSymmetryVertical}
+            >
+              <SymmetryVerticalIcon className="h-4 w-4" />
+            </SegmentedButton>
+          </span>
+        </label>
+        <button
+          type="button"
+          title="重置对称轴到画布中心"
+          onClick={resetSymmetryToCenter}
+          className="rounded px-2 py-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200"
+        >
+          重置轴
+        </button>
+      </div>
     </div>
   );
 }

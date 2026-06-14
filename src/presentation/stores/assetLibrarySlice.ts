@@ -41,7 +41,10 @@ import type { SelectionRect } from "@/domain/selection/SelectionRect";
 import type { Point } from "@/domain/tool/ITool";
 import { toast } from "@/presentation/stores/toastStore";
 
-import { DEFAULT_ASSET_DRAWER_HEIGHT } from "@/domain/preferences/EditorPreferences";
+import {
+  DEFAULT_ASSET_DRAWER_HEIGHT,
+  DEFAULT_ASSET_FOLDER_TREE_WIDTH,
+} from "@/domain/preferences/EditorPreferences";
 
 export interface AssetFolderDeleteTarget {
   folderId: string;
@@ -68,6 +71,7 @@ export interface AssetLibrarySliceState {
   assetLibraryModalOpen: boolean;
   assetLibraryDrawerExpanded: boolean;
   assetLibraryDrawerHeight: number;
+  assetFolderTreeWidth: number;
   assetLibrary: AssetLibraryIndex | null;
   assetLibraryLoading: boolean;
   selectedAssetFolderId: string;
@@ -88,6 +92,7 @@ export interface AssetLibrarySliceActions {
   closeAssetLibraryModal: () => void;
   toggleAssetLibraryDrawer: () => void;
   setAssetLibraryDrawerHeight: (height: number) => void;
+  setAssetFolderTreeWidth: (width: number) => void;
   refreshAssetLibrary: () => Promise<void>;
   setSelectedAssetFolder: (folderId: string) => void;
   setSelectedAsset: (assetId: string | null) => void;
@@ -151,6 +156,7 @@ export function createAssetLibraryInitialState(): AssetLibrarySliceState {
     assetLibraryModalOpen: false,
     assetLibraryDrawerExpanded: false,
     assetLibraryDrawerHeight: DEFAULT_ASSET_DRAWER_HEIGHT,
+    assetFolderTreeWidth: DEFAULT_ASSET_FOLDER_TREE_WIDTH,
     assetLibrary: null,
     assetLibraryLoading: false,
     selectedAssetFolderId: ROOT_FOLDER_ID,
@@ -203,6 +209,8 @@ export function createAssetLibrarySlice(
 
     setAssetLibraryDrawerHeight: (height) =>
       set({ assetLibraryDrawerHeight: height }),
+
+    setAssetFolderTreeWidth: (width) => set({ assetFolderTreeWidth: width }),
 
     refreshAssetLibrary: async () => {
       const workspacePath = await resolveWorkspace();

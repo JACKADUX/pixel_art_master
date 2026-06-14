@@ -20,6 +20,11 @@ export const DEFAULT_GRID_COLOR_HEX = "#3b82f6";
 export const DEFAULT_CHECKERBOARD_LIGHT_HEX = "#c0c0c0";
 export const DEFAULT_CHECKERBOARD_DARK_HEX = "#808080";
 
+export const DEFAULT_SYMMETRY_AXIS_COLOR_HEX = "#ff4fd8";
+
+export const MIN_SYMMETRY_AXIS_LINE_WIDTH = 1;
+export const MAX_SYMMETRY_AXIS_LINE_WIDTH = 8;
+
 export interface AppSettings {
   autoSaveIntervalMinutes: number;
   pomodoroVisible: boolean;
@@ -31,6 +36,10 @@ export interface AppSettings {
   checkerboardTileSize: number;
   checkerboardLightHex: string;
   checkerboardDarkHex: string;
+  symmetryAxisVisible: boolean;
+  symmetryAxisColorHex: string;
+  symmetryAxisLineWidth: number;
+  symmetryAxisOutlineEnabled: boolean;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -44,6 +53,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   checkerboardTileSize: 16,
   checkerboardLightHex: DEFAULT_CHECKERBOARD_LIGHT_HEX,
   checkerboardDarkHex: DEFAULT_CHECKERBOARD_DARK_HEX,
+  symmetryAxisVisible: true,
+  symmetryAxisColorHex: DEFAULT_SYMMETRY_AXIS_COLOR_HEX,
+  symmetryAxisLineWidth: 2,
+  symmetryAxisOutlineEnabled: true,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -91,6 +104,20 @@ export function clampCheckerboardTileSize(value: number): number {
     MAX_CHECKERBOARD_TILE_SIZE,
     DEFAULT_APP_SETTINGS.checkerboardTileSize,
   );
+}
+
+export function clampSymmetryAxisLineWidth(value: number): number {
+  return clampNumber(
+    value,
+    MIN_SYMMETRY_AXIS_LINE_WIDTH,
+    MAX_SYMMETRY_AXIS_LINE_WIDTH,
+    DEFAULT_APP_SETTINGS.symmetryAxisLineWidth,
+  );
+}
+
+export function symmetryAxisColorRgba(hex: string, alpha = 1): string {
+  const { r, g, b } = parseRgbFromHex(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export function gridColorRgbString(hex: string): string {
@@ -149,5 +176,22 @@ export function parseAppSettings(raw: unknown): AppSettings {
       defaults.checkerboardLightHex,
     ),
     checkerboardDarkHex: parseHexColor(raw.checkerboardDarkHex, defaults.checkerboardDarkHex),
+    symmetryAxisVisible:
+      typeof raw.symmetryAxisVisible === "boolean"
+        ? raw.symmetryAxisVisible
+        : defaults.symmetryAxisVisible,
+    symmetryAxisColorHex: parseHexColor(
+      raw.symmetryAxisColorHex,
+      defaults.symmetryAxisColorHex,
+    ),
+    symmetryAxisLineWidth: clampSymmetryAxisLineWidth(
+      typeof raw.symmetryAxisLineWidth === "number"
+        ? raw.symmetryAxisLineWidth
+        : defaults.symmetryAxisLineWidth,
+    ),
+    symmetryAxisOutlineEnabled:
+      typeof raw.symmetryAxisOutlineEnabled === "boolean"
+        ? raw.symmetryAxisOutlineEnabled
+        : defaults.symmetryAxisOutlineEnabled,
   };
 }

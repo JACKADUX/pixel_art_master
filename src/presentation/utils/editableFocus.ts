@@ -36,11 +36,32 @@ export function releaseKeyboardFocus(): void {
   }
 }
 
+/**
+ * When a text input is focused, defer unmodified shortcuts so typed keys reach the field.
+ * Modifier combos (Ctrl/Cmd/Alt) are always handled by the app shortcut layer.
+ */
+export function shouldDeferShortcutToTextEntryWhen(
+  isTextEntry: boolean,
+  event: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "altKey">,
+): boolean {
+  if (!isTextEntry) return false;
+  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+  return true;
+}
+
+export function shouldDeferShortcutToTextEntry(event: KeyboardEvent): boolean {
+  return shouldDeferShortcutToTextEntryWhen(
+    isTextEntryElement(document.activeElement),
+    event,
+  );
+}
+
 /** Blur text inputs when clicking elsewhere so global shortcuts keep working. */
-export function installGlobalFocusRelease(): () => void {
+export function installGlobalFocusRelease(onAfterRelease?: () => void): () => void {
   const handlePointerDown = (event: PointerEvent) => {
     if (isTextEntryElement(event.target as Element)) return;
     releaseKeyboardFocus();
+    onAfterRelease?.();
   };
 
   document.addEventListener("pointerdown", handlePointerDown, true);

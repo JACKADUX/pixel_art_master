@@ -21,6 +21,10 @@ import {
   type ToolType,
   type TransformMode,
 } from "@/domain/tool/ToolType";
+import {
+  createDefaultSymmetryConfig,
+  type SymmetryConfig,
+} from "@/domain/symmetry/SymmetryConfig";
 
 export type EditorColorSlot = "foreground" | "background";
 
@@ -53,6 +57,7 @@ export interface FloatingColorPickerLayout {
 export interface EditorPreferences {
   activeTool: ToolType;
   toolSettings: ToolSettings;
+  symmetry: SymmetryConfig;
   foregroundColor: PixelColor;
   backgroundColor: PixelColor;
   zoom: number;
@@ -67,6 +72,7 @@ export interface EditorPreferences {
   canvasDisplayMode: CanvasDisplayMode;
   assetLibraryDrawerExpanded: boolean;
   assetLibraryDrawerHeight: number;
+  assetFolderTreeWidth: number;
 }
 
 export const EDITOR_PREFERENCES_VERSION = 1;
@@ -92,6 +98,9 @@ const MAX_COLOR_PICKER_WIDTH = 800;
 const MIN_ASSET_DRAWER_HEIGHT = 120;
 const MAX_ASSET_DRAWER_HEIGHT = 800;
 export const DEFAULT_ASSET_DRAWER_HEIGHT = 320;
+const MIN_ASSET_FOLDER_TREE_WIDTH = 120;
+const MAX_ASSET_FOLDER_TREE_WIDTH = 400;
+export const DEFAULT_ASSET_FOLDER_TREE_WIDTH = 160;
 
 const TOOL_TYPES: ToolType[] = ["brush", "fill", "eraser", "shape", "select", "transform"];
 const BRUSH_SHAPES: BrushShape[] = ["square", "circle"];
@@ -106,6 +115,7 @@ const CANVAS_DISPLAY_MODES = ["normal", "oklabLightness"] as const;
 export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   activeTool: "brush",
   toolSettings: { ...DEFAULT_TOOL_SETTINGS },
+  symmetry: createDefaultSymmetryConfig(),
   foregroundColor: rgba(255, 0, 0),
   backgroundColor: TRANSPARENT,
   zoom: 8,
@@ -132,11 +142,13 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   canvasDisplayMode: "normal",
   assetLibraryDrawerExpanded: false,
   assetLibraryDrawerHeight: DEFAULT_ASSET_DRAWER_HEIGHT,
+  assetFolderTreeWidth: DEFAULT_ASSET_FOLDER_TREE_WIDTH,
 };
 
 export interface EditorPreferencesSource {
   activeTool: ToolType;
   toolSettings: ToolSettings;
+  symmetry: SymmetryConfig;
   foregroundColor: PixelColor;
   backgroundColor: PixelColor;
   zoom: number;
@@ -163,6 +175,7 @@ export interface EditorPreferencesSource {
   canvasDisplayMode: CanvasDisplayMode;
   assetLibraryDrawerExpanded: boolean;
   assetLibraryDrawerHeight: number;
+  assetFolderTreeWidth: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -206,6 +219,24 @@ function parseEdgeAnchor(value: unknown, fallback: PanelEdgeAnchor): PanelEdgeAn
       ? value.vertical
       : fallback.vertical;
   return { horizontal, vertical };
+}
+
+function parseSymmetryConfig(value: unknown): SymmetryConfig {
+  const defaults = DEFAULT_EDITOR_PREFERENCES.symmetry;
+  if (!isRecord(value)) return { ...defaults };
+
+  return {
+    horizontal: typeof value.horizontal === "boolean" ? value.horizontal : defaults.horizontal,
+    vertical: typeof value.vertical === "boolean" ? value.vertical : defaults.vertical,
+    originX:
+      typeof value.originX === "number" && Number.isFinite(value.originX)
+        ? value.originX
+        : defaults.originX,
+    originY:
+      typeof value.originY === "number" && Number.isFinite(value.originY)
+        ? value.originY
+        : defaults.originY,
+  };
 }
 
 function parseToolSettings(value: unknown): ToolSettings {
@@ -326,6 +357,7 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
   return {
     activeTool,
     toolSettings: parseToolSettings(raw.toolSettings),
+    symmetry: parseSymmetryConfig(raw.symmetry),
     foregroundColor: parsePixelColor(raw.foregroundColor, defaults.foregroundColor),
     backgroundColor: parsePixelColor(raw.backgroundColor, defaults.backgroundColor),
     zoom: clampNumber(raw.zoom, MIN_ZOOM, MAX_ZOOM, defaults.zoom),
@@ -363,6 +395,12 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
       MAX_ASSET_DRAWER_HEIGHT,
       defaults.assetLibraryDrawerHeight,
     ),
+    assetFolderTreeWidth: clampNumber(
+      raw.assetFolderTreeWidth,
+      MIN_ASSET_FOLDER_TREE_WIDTH,
+      MAX_ASSET_FOLDER_TREE_WIDTH,
+      defaults.assetFolderTreeWidth,
+    ),
   };
 }
 
@@ -370,6 +408,7 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
   return {
     activeTool: source.activeTool,
     toolSettings: { ...source.toolSettings },
+    symmetry: { ...source.symmetry },
     foregroundColor: source.foregroundColor,
     backgroundColor: source.backgroundColor,
     zoom: clampNumber(source.zoom, MIN_ZOOM, MAX_ZOOM, DEFAULT_EDITOR_PREFERENCES.zoom),
@@ -410,6 +449,12 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
       MIN_ASSET_DRAWER_HEIGHT,
       MAX_ASSET_DRAWER_HEIGHT,
       DEFAULT_EDITOR_PREFERENCES.assetLibraryDrawerHeight,
+    ),
+    assetFolderTreeWidth: clampNumber(
+      source.assetFolderTreeWidth,
+      MIN_ASSET_FOLDER_TREE_WIDTH,
+      MAX_ASSET_FOLDER_TREE_WIDTH,
+      DEFAULT_EDITOR_PREFERENCES.assetFolderTreeWidth,
     ),
   };
 }
