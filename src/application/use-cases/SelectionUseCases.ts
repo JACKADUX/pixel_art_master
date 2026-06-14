@@ -4,7 +4,10 @@ import type { Point } from "@/domain/tool/ITool";
 
 import type { ToolSettings } from "@/domain/tool/ToolType";
 
-import { floodSelectMask } from "@/domain/selection/FloodSelect";
+import { floodSelectMaskByTargetColor } from "@/domain/selection/FloodSelect";
+import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
+import { resolveMagicWandTargetColor } from "./ResolveMagicWandTargetColor";
+import type { Project } from "@/domain/project/Project";
 
 import { createLassoMask } from "@/domain/selection/LassoRasterize";
 
@@ -142,11 +145,22 @@ export function createSelectionFromMagicWand(
 
   altKey: boolean,
 
+  project?: Project,
+
+  getPixelCache?: (layerId: string) => ReferenceLayerPixelData | null,
+
 ): SelectionState {
 
   const combineMode = resolveCombineMode(shiftKey, altKey);
 
-  const incoming = floodSelectMask(grid, seed, {
+  const targetColor =
+    project && getPixelCache
+      ? resolveMagicWandTargetColor(project, grid, seed, getPixelCache)
+      : grid.inBounds(seed.x, seed.y)
+        ? grid.getPixel(seed.x, seed.y)
+        : 0;
+
+  const incoming = floodSelectMaskByTargetColor(grid, seed, targetColor, {
 
     tolerance: settings.magicWandTolerance,
 

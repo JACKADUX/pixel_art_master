@@ -6,7 +6,12 @@ import { buildReferenceColorPalette } from "@/domain/layer/ReferenceLayerPalette
 
 import type { ReferenceLayer } from "@/domain/layer/Layer";
 
-import { renderReferenceLayer, renderReferenceLayerGrid } from "@/infrastructure/canvas/ReferenceLayerRenderer";
+import { gridColorRgbString } from "@/domain/appSettings/AppSettings";
+
+import {
+  renderReferenceLayer,
+  renderReferenceLayerGrid,
+} from "@/infrastructure/canvas/ReferenceLayerRenderer";
 
 import { getReferenceImage } from "@/infrastructure/canvas/ReferenceImageCache";
 
@@ -57,6 +62,9 @@ export function ReferenceLayerOverlay({
 
   const moveReferenceLayer = useAppStore((s) => s.moveReferenceLayer);
   const canvasDisplayMode = useAppStore((s) => s.canvasDisplayMode);
+  const appSettings = useAppStore((s) => s.appSettings);
+  const activeTool = useAppStore((s) => s.activeTool);
+  const pointerDown = useAppStore((s) => s.pointerDown);
 
   const pickColorAt = useAppStore((s) => s.pickColorAt);
 
@@ -82,7 +90,8 @@ export function ReferenceLayerOverlay({
 
   const displayWidth = layer.crop ? layer.crop.width * zoom : 0;
   const displayHeight = layer.crop ? layer.crop.height * zoom : 0;
-  const imageAcceptsPointer = isActive || altHeld;
+  const selectionToolActive = activeTool === "select";
+  const imageAcceptsPointer = isActive || altHeld || selectionToolActive;
 
   useEffect(() => {
     oklabRendererRef.current = new OklabDisplayGlRenderer();
@@ -93,6 +102,12 @@ export function ReferenceLayerOverlay({
       glCanvasRef.current = null;
     };
   }, []);
+
+  const gridAppearance = {
+    colorRgb: gridColorRgbString(appSettings.gridColorHex),
+    lineWidth: appSettings.gridLineWidth,
+    subGridEnabled: appSettings.subGridEnabled,
+  };
 
   const render = useCallback(async () => {
 
@@ -156,12 +171,12 @@ export function ReferenceLayerOverlay({
             canvasDisplayMode,
           );
           ctx.drawImage(glCanvas, 0, 0, displayWidth, displayHeight);
-          renderReferenceLayerGrid(ctx, crop, zoom, layer.grid);
+          renderReferenceLayerGrid(ctx, crop, zoom, layer.grid, gridAppearance);
           return;
         }
       }
 
-      renderReferenceLayer(ctx, image, crop, zoom, layer.grid);
+      renderReferenceLayer(ctx, image, crop, zoom, layer.grid, gridAppearance);
 
     } catch {
 
@@ -169,7 +184,7 @@ export function ReferenceLayerOverlay({
 
     }
 
-  }, [layer, zoom, displayWidth, displayHeight, canvasDisplayMode]);
+  }, [layer, zoom, displayWidth, displayHeight, canvasDisplayMode, gridAppearance]);
 
 
 
@@ -248,6 +263,52 @@ export function ReferenceLayerOverlay({
         },
 
         colorSlotFromMouseButton(e.button),
+
+      );
+
+      return;
+
+    }
+
+
+
+    if (selectionToolActive && e.button === 0) {
+
+      e.preventDefault();
+
+      e.stopPropagation();
+
+      const canvas = canvasRef.current;
+
+      if (!canvas || !layer.crop) return;
+
+      const rect = canvas.getBoundingClientRect();
+
+      const localX = Math.floor((e.clientX - rect.left) / zoom);
+
+      const localY = Math.floor((e.clientY - rect.top) / zoom);
+
+      pointerDown(
+
+        {
+
+          x: layer.position.x + localX,
+
+          y: layer.position.y + localY,
+
+        },
+
+        "primary",
+
+        {
+
+          shiftKey: e.shiftKey,
+
+          altKey: e.altKey,
+
+          spaceKey: e.getModifierState("Space"),
+
+        },
 
       );
 
@@ -373,9 +434,11 @@ export function ReferenceLayerOverlay({
             ? " cursor-grabbing"
             : altHeld
               ? " cursor-eyedropper"
-              : isActive
-                ? " cursor-move"
-                : ""
+              : selectionToolActive
+                ? " cursor-crosshair"
+                : isActive
+                  ? " cursor-move"
+                  : ""
         }`}
         style={{
           imageRendering: "pixelated",

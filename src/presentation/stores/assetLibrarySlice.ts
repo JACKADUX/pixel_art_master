@@ -90,7 +90,7 @@ export interface AssetLibrarySliceActions {
   setAssetLibraryDrawerHeight: (height: number) => void;
   refreshAssetLibrary: () => Promise<void>;
   setSelectedAssetFolder: (folderId: string) => void;
-  setSelectedAsset: (assetId: string) => void;
+  setSelectedAsset: (assetId: string | null) => void;
   createAssetFolderAction: (parentId: string | null) => Promise<void>;
   renameAssetFolderAction: (folderId: string, name: string) => Promise<void>;
   importAssetFromClipboardAction: () => Promise<void>;

@@ -19,11 +19,13 @@ import {
 } from "@/domain/viewport/ViewportPan";
 import type { CanvasDisplayMode } from "@/domain/color/CanvasDisplayMode";
 import { OklabDisplayGlRenderer } from "@/infrastructure/canvas/OklabDisplayGlRenderer";
+import { ensureImageData } from "@/infrastructure/image/ImageDataCodec";
 import {
   applyWheelZoomRatio,
   computeInitialFitZoom,
   formatZoomLabel,
 } from "./imagePreviewUtils";
+import { canvasClientToImage } from "./useImagePreviewViewport";
 
 interface ZoomAnchor {
   logicalPoint: CanvasPoint;
@@ -41,6 +43,8 @@ export interface ImagePreviewWorkspaceProps {
   /** Mouse button for drag-pan: 0 = left, 1 = middle (default) */
   panMouseButton?: number;
   displayMode?: CanvasDisplayMode;
+  pickMode?: boolean;
+  onPickPixel?: (x: number, y: number) => void;
 }
 
 export function ImagePreviewWorkspace({
@@ -52,6 +56,8 @@ export function ImagePreviewWorkspace({
   className = "",
   panMouseButton = 1,
   displayMode = "normal",
+  pickMode = false,
+  onPickPixel,
 }: ImagePreviewWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -139,7 +145,7 @@ export function ImagePreviewWorkspace({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
-    ctx.putImageData(imageData, 0, 0);
+    ctx.putImageData(ensureImageData(imageData), 0, 0);
   }, [imageData, imageWidth, imageHeight, displayWidth, displayHeight, displayMode]);
 
   useLayoutEffect(() => {
@@ -368,9 +374,24 @@ export function ImagePreviewWorkspace({
   }, [isPanning, applyPanMove, stopPanning, panMouseButton]);
 
   const handleContainerMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (pickMode) return;
     if (event.button !== panMouseButton) return;
     event.preventDefault();
     startPanning(event.clientX, event.clientY);
+  };
+
+  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!pickMode || event.button !== 0 || !imageData || !canvasRef.current) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const { x, y } = canvasClientToImage(
+      event.clientX,
+      event.clientY,
+      canvasRef.current,
+      zoomRef.current,
+    );
+    if (x < 0 || y < 0 || x >= imageWidth || y >= imageHeight) return;
+    onPickPixel?.(x, y);
   };
 
   const handleAuxClick = (event: React.MouseEvent) => {
@@ -398,7 +419,7 @@ export function ImagePreviewWorkspace({
       <div
         ref={containerRef}
         className={`relative min-h-0 flex-1 overflow-auto overscroll-none bg-zinc-950${
-          isPanning ? " cursor-grabbing" : ""
+          isPanning ? " cursor-grabbing" : pickMode ? " cursor-crosshair" : ""
         }`}
         onMouseDown={handleContainerMouseDown}
         onAuxClick={handleAuxClick}
@@ -429,8 +450,13 @@ export function ImagePreviewWorkspace({
               >
                 <canvas
                   ref={canvasRef}
+                  onMouseDown={handleCanvasMouseDown}
                   className={`block touch-none select-none border border-zinc-800 bg-zinc-900${
-                    isPanning ? " cursor-grabbing" : " cursor-grab"
+                    pickMode
+                      ? " cursor-crosshair"
+                      : isPanning
+                        ? " cursor-grabbing"
+                        : " cursor-grab"
                   }`}
                   style={{ imageRendering: pixelated ? "pixelated" : "auto" }}
                   draggable={false}

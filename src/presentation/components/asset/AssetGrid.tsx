@@ -1,7 +1,6 @@
 import { listAssetsInFolder, type AssetLibraryIndex } from "@/domain/asset/AssetLibrary";
 import type { AssetRecord } from "@/domain/asset/AssetRecord";
 import { useAssetImageUrl } from "@/presentation/hooks/useAssetImageUrl";
-import { AssetImportMenu } from "./AssetImportMenu";
 
 interface AssetGridProps {
   library: AssetLibraryIndex;
@@ -9,15 +8,12 @@ interface AssetGridProps {
   selectedFolderId: string;
   selectedAssetId: string | null;
   draggingAssetId: string | null;
-  onSelectAsset: (assetId: string) => void;
+  onSelectAsset: (assetId: string | null) => void;
   onRequestDeleteAsset: (assetId: string) => void;
   onOpenAssetViewer: (assetId: string) => void;
   onOpenAssetContextMenu: (assetId: string, clientX: number, clientY: number) => void;
   onBeginAssetPointerDrag: (e: React.PointerEvent, assetId: string) => void;
   onConsumeSuppressClick: () => boolean;
-  onImportClipboard: () => void;
-  onImportFile: () => void;
-  onStartCanvasCapture: () => void;
 }
 
 function AssetThumbnail({
@@ -60,22 +56,17 @@ export function AssetGrid({
   onOpenAssetContextMenu,
   onBeginAssetPointerDrag,
   onConsumeSuppressClick,
-  onImportClipboard,
-  onImportFile,
-  onStartCanvasCapture,
 }: AssetGridProps) {
   const assets = listAssetsInFolder(library, selectedFolderId);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 border-b border-zinc-700 p-2">
-        <AssetImportMenu
-          onImportClipboard={onImportClipboard}
-          onImportFile={onImportFile}
-          onStartCanvasCapture={onStartCanvasCapture}
-        />
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto p-2">
+      <div
+        className="min-h-0 flex-1 overflow-auto p-2"
+        onClick={() => {
+          if (selectedAssetId) onSelectAsset(null);
+        }}
+      >
         {assets.length === 0 ? (
           <p className="text-xs text-zinc-500">此文件夹暂无资产</p>
         ) : (
@@ -102,7 +93,8 @@ export function AssetGrid({
                 </button>
                 <div
                   onPointerDown={(e) => onBeginAssetPointerDrag(e, asset.id)}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     if (onConsumeSuppressClick()) return;
                     onSelectAsset(asset.id);
                   }}

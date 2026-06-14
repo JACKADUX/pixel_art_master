@@ -5,6 +5,7 @@ export {
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   ComputerDesktopIcon,
+  Cog6ToothIcon,
   DocumentDuplicateIcon,
   DocumentPlusIcon,
   FolderOpenIcon,
@@ -13,4 +14,5 @@ export {
   PhotoIcon,
   PlayIcon,
   RectangleStackIcon,
+  SwatchIcon,
 } from "@heroicons/react/24/outline";

@@ -6,6 +6,7 @@ import { useAppStore } from "../../stores/appStore";
 import { AssetDetailPanel } from "./AssetDetailPanel";
 import { AssetFolderTree } from "./AssetFolderTree";
 import { AssetGrid } from "./AssetGrid";
+import { AssetImportMenu } from "./AssetImportMenu";
 import { AssetImageViewerModal } from "./AssetImageViewerModal";
 import { useAssetPointerDrag } from "../../hooks/useAssetPointerDrag";
 
@@ -15,7 +16,7 @@ interface AssetLibraryContentProps {
   selectedFolderId: string;
   selectedAssetId: string | null;
   onSelectFolder: (folderId: string) => void;
-  onSelectAsset: (assetId: string) => void;
+  onSelectAsset: (assetId: string | null) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folderId: string, name: string) => void;
   onRequestDeleteFolder: (folderId: string) => void;
@@ -63,6 +64,7 @@ export function AssetLibraryContent({
   const importAssetToNewDrawingLayer = useAppStore((s) => s.importAssetToNewDrawingLayer);
   const importAssetToNewReferenceLayer = useAppStore((s) => s.importAssetToNewReferenceLayer);
   const importAssetColorsToPalette = useAppStore((s) => s.importAssetColorsToPalette);
+  const sendAssetToToolPage = useAppStore((s) => s.sendAssetToToolPage);
 
   const [contextMenu, setContextMenu] = useState<{
     assetId: string;
@@ -80,6 +82,7 @@ export function AssetLibraryContent({
       onImportDrawingLayer: (assetId) => void importAssetToNewDrawingLayer(assetId),
       onImportReferenceLayer: (assetId) => void importAssetToNewReferenceLayer(assetId),
       onImportColors: (assetId) => void importAssetColorsToPalette(assetId),
+      onSendToToolPage: (assetId, toolPageId) => void sendAssetToToolPage(assetId, toolPageId),
     });
   }, [
     contextMenuAsset,
@@ -87,6 +90,7 @@ export function AssetLibraryContent({
     importAssetToNewDrawingLayer,
     importAssetToNewReferenceLayer,
     importAssetColorsToPalette,
+    sendAssetToToolPage,
   ]);
 
   const openAssetContextMenu = (assetId: string, clientX: number, clientY: number) => {
@@ -104,8 +108,12 @@ export function AssetLibraryContent({
     <>
     <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="flex h-full min-h-0 w-40 shrink-0 flex-col overflow-hidden border-r border-zinc-700">
-        <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5 text-[10px] text-zinc-500">
-          文件夹
+        <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5">
+          <AssetImportMenu
+            onImportClipboard={onImportClipboard}
+            onImportFile={onImportFile}
+            onStartCanvasCapture={onStartCanvasCapture}
+          />
         </div>
         <div className="min-h-0 flex-1 overflow-hidden">
         <AssetFolderTree
@@ -133,30 +141,29 @@ export function AssetLibraryContent({
           onOpenAssetContextMenu={openAssetContextMenu}
           onBeginAssetPointerDrag={beginAssetPointerDrag}
           onConsumeSuppressClick={consumeSuppressClick}
-          onImportClipboard={onImportClipboard}
-          onImportFile={onImportFile}
-          onStartCanvasCapture={onStartCanvasCapture}
         />
       </div>
 
-      <div className="flex h-full min-h-0 w-56 shrink-0 flex-col overflow-hidden border-l border-zinc-700">
-        <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5 text-[10px] text-zinc-500">
-          详情
+      {selectedAssetId && (
+        <div className="flex h-full min-h-0 w-56 shrink-0 flex-col overflow-hidden border-l border-zinc-700">
+          <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5 text-[10px] text-zinc-500">
+            详情
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+            <AssetDetailPanel
+              library={library}
+              workspacePath={workspacePath}
+              selectedAssetId={selectedAssetId}
+              onUpdateAsset={onUpdateAsset}
+              onDeleteAsset={onDeleteAsset}
+              onOpenAssetViewer={openAssetImageViewer}
+              onOpenAssetContextMenu={openAssetContextMenu}
+              onCreateCategory={onCreateCategory}
+              onCreateTag={onCreateTag}
+            />
+          </div>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <AssetDetailPanel
-          library={library}
-          workspacePath={workspacePath}
-          selectedAssetId={selectedAssetId}
-          onUpdateAsset={onUpdateAsset}
-          onDeleteAsset={onDeleteAsset}
-          onOpenAssetViewer={openAssetImageViewer}
-          onOpenAssetContextMenu={openAssetContextMenu}
-          onCreateCategory={onCreateCategory}
-          onCreateTag={onCreateTag}
-        />
-        </div>
-      </div>
+      )}
     </div>
     <AssetImageViewerModal
       open={assetImageViewerAssetId !== null}

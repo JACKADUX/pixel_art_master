@@ -1,10 +1,12 @@
 import type { AssetRecord } from "@/domain/asset/AssetRecord";
 import type { MenuItem } from "../components/MenuDropdown";
+import { TOOL_PAGES, type ToolPageId } from "./toolPagesConfig";
 
 export interface AssetContextMenuActions {
   onImportDrawingLayer: (assetId: string) => void;
   onImportReferenceLayer: (assetId: string) => void;
   onImportColors: (assetId: string) => void;
+  onSendToToolPage: (assetId: string, toolPageId: ToolPageId) => void;
 }
 
 export function buildAssetContextMenuItems(
@@ -30,6 +32,16 @@ export function buildAssetContextMenuItems(
       label: "导入颜色到项目色板",
       disabled: !hasProject,
       onClick: () => actions.onImportColors(asset.id),
+    },
+    { type: "separator" },
+    {
+      type: "submenu",
+      label: "发送到工具",
+      items: TOOL_PAGES.map((tool) => ({
+        type: "action" as const,
+        label: tool.label,
+        onClick: () => actions.onSendToToolPage(asset.id, tool.id),
+      })),
     },
   ];
 }

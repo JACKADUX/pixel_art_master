@@ -1,10 +1,25 @@
+export function rgbaBufferToImageData(
+  width: number,
+  height: number,
+  data: Uint8ClampedArray,
+): ImageData {
+  return new ImageData(new Uint8ClampedArray(data), width, height);
+}
+
+export function ensureImageData(imageData: ImageData): ImageData {
+  if (typeof ImageData !== "undefined" && imageData instanceof ImageData) {
+    return imageData;
+  }
+  return rgbaBufferToImageData(imageData.width, imageData.height, imageData.data);
+}
+
 export function encodeImageDataToPngBase64(imageData: ImageData): string {
   const canvas = document.createElement("canvas");
   canvas.width = imageData.width;
   canvas.height = imageData.height;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Failed to get canvas context");
-  ctx.putImageData(imageData, 0, 0);
+  ctx.putImageData(ensureImageData(imageData), 0, 0);
   const dataUrl = canvas.toDataURL("image/png");
   const base64 = dataUrl.split(",")[1];
   if (!base64) throw new Error("Failed to encode image");

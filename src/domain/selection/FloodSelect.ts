@@ -24,14 +24,53 @@ export function floodSelectMask(
   seed: Point,
   options: FloodSelectOptions,
 ): SelectionMask {
-  const mask = createEmptyMask(grid.width, grid.height);
-  if (!grid.inBounds(seed.x, seed.y)) return mask;
+  if (!grid.inBounds(seed.x, seed.y)) {
+    return createEmptyMask(grid.width, grid.height);
+  }
+  return floodSelectMaskByTargetColor(grid, seed, grid.getPixel(seed.x, seed.y), options);
+}
 
-  const target = grid.getPixel(seed.x, seed.y);
+function collectContiguousSeeds(
+  grid: PixelGrid,
+  seed: Point,
+  targetColor: PixelColor,
+  tolerance: number,
+): Point[] {
+  if (!grid.inBounds(seed.x, seed.y)) return [];
+
+  if (colorDistance(grid.getPixel(seed.x, seed.y), targetColor) <= tolerance) {
+    return [seed];
+  }
+
+  const neighbors: Point[] = [
+    { x: seed.x + 1, y: seed.y },
+    { x: seed.x - 1, y: seed.y },
+    { x: seed.x, y: seed.y + 1 },
+    { x: seed.x, y: seed.y - 1 },
+  ];
+
+  return neighbors.filter(
+    (point) =>
+      grid.inBounds(point.x, point.y) &&
+      colorDistance(grid.getPixel(point.x, point.y), targetColor) <= tolerance,
+  );
+}
+
+export function floodSelectMaskByTargetColor(
+  grid: PixelGrid,
+  seed: Point,
+  targetColor: PixelColor,
+  options: FloodSelectOptions,
+): SelectionMask {
+  const mask = createEmptyMask(grid.width, grid.height);
   const { tolerance, contiguous } = options;
 
+  if (contiguous && !grid.inBounds(seed.x, seed.y)) {
+    return mask;
+  }
+
   if (contiguous) {
-    const queue: Point[] = [seed];
+    const queue = collectContiguousSeeds(grid, seed, targetColor, tolerance);
     const visited = new Set<string>();
 
     while (queue.length > 0) {
@@ -42,7 +81,7 @@ export function floodSelectMask(
 
       if (!grid.inBounds(current.x, current.y)) continue;
       const pixel = grid.getPixel(current.x, current.y);
-      if (colorDistance(pixel, target) > tolerance) continue;
+      if (colorDistance(pixel, targetColor) > tolerance) continue;
 
       setMaskPixel(mask, current.x, current.y, true);
       queue.push(
@@ -55,7 +94,7 @@ export function floodSelectMask(
   } else {
     for (let y = 0; y < grid.height; y++) {
       for (let x = 0; x < grid.width; x++) {
-        if (colorDistance(grid.getPixel(x, y), target) <= tolerance) {
+        if (colorDistance(grid.getPixel(x, y), targetColor) <= tolerance) {
           setMaskPixel(mask, x, y, true);
         }
       }

@@ -64,6 +64,8 @@ import {
 } from "@/presentation/controllers/canvasInteraction";
 
 import { usePixelRestoreStore } from "@/presentation/stores/pixelRestoreStore";
+import { useColorEditStore } from "@/presentation/stores/colorEditStore";
+import type { ToolPageId } from "@/presentation/config/toolPagesConfig";
 
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
 
@@ -227,6 +229,19 @@ import {
   type AssetLibrarySliceActions,
   type AssetLibrarySliceState,
 } from "@/presentation/stores/assetLibrarySlice";
+import {
+  createSettingsSlice,
+  type SettingsSliceActions,
+  type SettingsSliceState,
+} from "@/presentation/stores/settingsSlice";
+import {
+  createAppSettingsSlice,
+  subscribeAppSettingsPersistence,
+  applyAppSettingsGridDefaults,
+  type AppSettingsSliceActions,
+  type AppSettingsSliceState,
+} from "@/presentation/stores/appSettingsSlice";
+import { appSettingsRepository } from "@/infrastructure/storage/LocalAppSettingsRepository";
 
 import { captureService } from "@/infrastructure/tauri/TauriCaptureService";
 
@@ -319,7 +334,7 @@ export interface FloatingColorPickerState {
   edgeAnchor: PanelEdgeAnchor;
 }
 
-interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions {
+interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, SettingsSliceState, SettingsSliceActions, AppSettingsSliceState, AppSettingsSliceActions {
 
   project: Project | null;
 
@@ -632,6 +647,10 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions {
 
   openPixelRestorePage: () => void;
 
+  openColorEditPage: () => void;
+
+  sendAssetToToolPage: (assetId: string, toolPageId: ToolPageId) => Promise<void>;
+
   exportRestoredImageToAssetLibrary: (imageData: ImageData) => Promise<void>;
 
   openCanvasSizeModal: () => void;
@@ -701,9 +720,23 @@ export const useAppStore = create<AppState>((set, get) => {
     },
   );
 
+  const settingsSlice = createSettingsSlice(
+    set as Parameters<typeof createSettingsSlice>[0],
+  );
+
+  const appSettingsSlice = createAppSettingsSlice(
+    set as Parameters<typeof createAppSettingsSlice>[0],
+    get,
+    appSettingsRepository,
+  );
+
   return {
 
   ...assetLibrarySlice,
+
+  ...settingsSlice,
+
+  ...appSettingsSlice,
 
   project: createEmptyProject(),
 
@@ -970,9 +1003,11 @@ export const useAppStore = create<AppState>((set, get) => {
 
     get().historyStack.clear();
 
+    const appSettings = get().appSettings;
+
     set({
 
-      project: createEmptyProject(),
+      project: applyAppSettingsGridDefaults(createEmptyProject(), appSettings),
 
       manualScaleOverride: null,
 
@@ -2106,6 +2141,7 @@ export const useAppStore = create<AppState>((set, get) => {
         selection,
         modifiers,
         historyStack,
+        getReferencePixelCache: getReferenceLayerPixelCache,
       });
       if (result.grid) get().syncActiveLayer(result.grid);
       set({
@@ -3098,6 +3134,45 @@ export const useAppStore = create<AppState>((set, get) => {
     usePixelRestoreStore.getState().openPage();
   },
 
+  openColorEditPage: () => {
+    useColorEditStore.getState().reset();
+    useColorEditStore.getState().openPage();
+  },
+
+  sendAssetToToolPage: async (assetId, toolPageId) => {
+    const { projectsWorkspacePath, assetLibrary } = get();
+    if (!projectsWorkspacePath || !assetLibrary) {
+      toast.error("无法访问资产库");
+      return;
+    }
+    const asset = findAssetById(assetLibrary, assetId);
+    if (!asset) {
+      toast.error("资产不存在");
+      return;
+    }
+    const imageData = await loadAssetImageAsImageData(
+      projectsWorkspacePath,
+      asset.imageFile,
+    );
+    if (!imageData) {
+      toast.error("无法加载资产图像");
+      return;
+    }
+
+    if (toolPageId === "pixelRestore") {
+      const store = usePixelRestoreStore.getState();
+      store.reset();
+      store.openPage();
+      store.importFromImageData(imageData);
+      return;
+    }
+
+    const store = useColorEditStore.getState();
+    store.reset();
+    store.openPage();
+    store.importFromImageData(imageData);
+  },
+
 
 
   exportRestoredImageToAssetLibrary: async (imageData) => {
@@ -3525,5 +3600,12 @@ useAppStore.subscribe(() => {
     );
     preferencesSaveTimer = null;
   }, 300);
+});
+
+useAppStore.subscribe(() => {
+  subscribeAppSettingsPersistence(
+    () => ({ appSettings: useAppStore.getState().appSettings }),
+    appSettingsRepository,
+  );
 });
 

@@ -1,0 +1,27 @@
+import type { ComponentType } from "react";
+import { CanvasSettingsSection } from "./CanvasSettingsSection";
+import { GeneralSettingsSection } from "./GeneralSettingsSection";
+
+export type SettingsSectionId = "general" | "canvas";
+
+export interface SettingsSectionDefinition {
+  id: SettingsSectionId;
+  label: string;
+  description: string;
+  component: ComponentType;
+}
+
+export const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
+  {
+    id: "general",
+    label: "通用",
+    description: "项目目录、自动保存与界面选项",
+    component: GeneralSettingsSection,
+  },
+  {
+    id: "canvas",
+    label: "画布",
+    description: "网格与透明背景棋盘格显示",
+    component: CanvasSettingsSection,
+  },
+];

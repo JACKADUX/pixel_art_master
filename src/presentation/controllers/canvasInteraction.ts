@@ -80,6 +80,7 @@ export function handleSelectPointerDown(options: {
   selection: SelectionState | null;
   modifiers: ModifierKeys;
   historyStack: HistoryStack;
+  getReferencePixelCache?: (layerId: string) => ReferenceLayerPixelData | null;
 }): {
   selection: SelectionState | null;
   selectionDrag: SelectionDragState | null;
@@ -88,7 +89,16 @@ export function handleSelectPointerDown(options: {
   grid?: PixelGrid;
   pushHistory?: boolean;
 } {
-  const { project, grid, point, settings, selection, modifiers, historyStack } = options;
+  const {
+    project,
+    grid,
+    point,
+    settings,
+    selection,
+    modifiers,
+    historyStack,
+    getReferencePixelCache,
+  } = options;
 
   if (settings.selectionMode === "magicWand") {
     pushHistory(historyStack, project, selection);
@@ -99,6 +109,8 @@ export function handleSelectPointerDown(options: {
       selection,
       modifiers.shiftKey,
       modifiers.altKey,
+      project,
+      getReferencePixelCache,
     );
     return {
       selection: next,

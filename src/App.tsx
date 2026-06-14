@@ -9,14 +9,18 @@ import { ToolPropertiesBar } from "./presentation/components/ToolPropertiesBar";
 import { ProjectManagerModal } from "./presentation/components/ProjectManagerModal";
 import { CanvasSizeModal } from "./presentation/components/CanvasSizeModal";
 import { PixelRestorePage } from "./presentation/components/pixelRestore/PixelRestorePage";
+import { ColorEditPage } from "./presentation/components/colorEdit/ColorEditPage";
+import { SettingsModal } from "./presentation/components/settings/SettingsModal";
 import { ToastContainer } from "./presentation/components/ToastContainer";
 import { TopBar } from "./presentation/components/TopBar";
 import { useAppShortcuts } from "./presentation/hooks/useAppShortcuts";
+import { useAutoSaveProject } from "./presentation/hooks/useAutoSaveProject";
 import { useAppStore } from "./presentation/stores/appStore";
 import "./App.css";
 
 function App() {
   useAppShortcuts();
+  useAutoSaveProject();
   const init = useAppStore((s) => s.init);
 
   useEffect(() => {
@@ -39,7 +43,9 @@ function App() {
       <ProjectManagerModal />
       <AssetLibraryModal />
       <CanvasSizeModal />
+      <SettingsModal />
       <PixelRestorePage />
+      <ColorEditPage />
       <ToastContainer />
     </div>
   );

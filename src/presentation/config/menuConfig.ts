@@ -6,11 +6,13 @@ import {
   ArrowUturnRightIcon,
   ArrowsPointingOutIcon,
   DocumentDuplicateIcon,
+  Cog6ToothIcon,
   DocumentPlusIcon,
   FolderOpenIcon,
   MapPinIcon,
   PhotoIcon,
   RectangleStackIcon,
+  SwatchIcon,
 } from "../icons/ActionIcons";
 
 export const SHORTCUT_LABELS = {
@@ -55,7 +57,9 @@ export interface MenuActions {
   cutSelection: () => void;
   pasteSelection: () => void;
   openPixelRestorePage: () => void;
+  openColorEditPage: () => void;
   openAssetLibrary: () => void;
+  openSettingsModal: () => void;
 }
 
 export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
@@ -174,6 +178,13 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           shortcut: SHORTCUT_LABELS.paste,
           onClick: actions.pasteSelection,
         },
+        { type: "separator" },
+        {
+          type: "action",
+          label: "设置…",
+          icon: Cog6ToothIcon,
+          onClick: actions.openSettingsModal,
+        },
       ],
     },
     {
@@ -185,6 +196,12 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           label: "像素还原…",
           icon: ArrowPathIcon,
           onClick: actions.openPixelRestorePage,
+        },
+        {
+          type: "action",
+          label: "颜色编辑…",
+          icon: SwatchIcon,
+          onClick: actions.openColorEditPage,
         },
       ],
     },

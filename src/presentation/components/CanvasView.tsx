@@ -18,6 +18,7 @@ import {
   isMiddleMouseButton,
   isMiddleMousePressed,
 } from "@/domain/viewport/ViewportPan";
+import { gridColorRgbString } from "@/domain/appSettings/AppSettings";
 import { renderTransparencyCheckerboard } from "@/infrastructure/canvas/CanvasBackgroundRenderer";
 import { renderCanvasGrid } from "@/infrastructure/canvas/CanvasGridRenderer";
 import { renderPixelGrid1x } from "@/infrastructure/canvas/PixelGridCanvasRenderer";
@@ -146,6 +147,7 @@ export function CanvasView() {
   const adaptFloatingPanelsToViewport = useAppStore((s) => s.adaptFloatingPanelsToViewport);
   const mousePositionOverlayVisible = useAppStore((s) => s.mousePositionOverlayVisible);
   const canvasDisplayMode = useAppStore((s) => s.canvasDisplayMode);
+  const appSettings = useAppStore((s) => s.appSettings);
   const setActiveReferenceLayer = useAppStore((s) => s.setActiveReferenceLayer);
   const openCropEditor = useAppStore((s) => s.openCropEditor);
   const toggleReferenceGrid = useAppStore((s) => s.toggleReferenceGrid);
@@ -323,7 +325,11 @@ export function CanvasView() {
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
 
-    renderTransparencyCheckerboard(ctx, composite.width, composite.height, zoom);
+    renderTransparencyCheckerboard(ctx, composite.width, composite.height, zoom, {
+      tileSize: appSettings.checkerboardTileSize,
+      lightColor: appSettings.checkerboardLightHex,
+      darkColor: appSettings.checkerboardDarkHex,
+    });
 
     const offscreen = document.createElement("canvas");
     offscreen.width = composite.width;
@@ -405,15 +411,20 @@ export function CanvasView() {
           composite.width,
           composite.height,
           zoom,
-          primary,
-          secondary,
+          {
+            primary,
+            secondary,
+            colorRgb: gridColorRgbString(appSettings.gridColorHex),
+            lineWidth: appSettings.gridLineWidth,
+            subGridEnabled: appSettings.subGridEnabled,
+          },
         );
       }
     } else if (gridCanvas) {
       const gridCtx = gridCanvas.getContext("2d");
       gridCtx?.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
     }
-  }, [project, composite, displayWidth, displayHeight, zoom, selection, canvasDisplayMode]);
+  }, [project, composite, displayWidth, displayHeight, zoom, selection, canvasDisplayMode, appSettings]);
 
   const brushPreview = useMemo(() => {
     if (activeTool !== "brush" && activeTool !== "eraser") return null;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { rgba } from "@/domain/canvas/PixelColor";
-import { floodSelectMask } from "@/domain/selection/FloodSelect";
+import { floodSelectMask, floodSelectMaskByTargetColor } from "@/domain/selection/FloodSelect";
 import { isMaskSelected } from "@/domain/selection/SelectionMask";
 
 describe("FloodSelect", () => {
@@ -17,6 +17,24 @@ describe("FloodSelect", () => {
     });
 
     expect(isMaskSelected(mask, 1, 1)).toBe(true);
+    expect(isMaskSelected(mask, 2, 1)).toBe(true);
+    expect(isMaskSelected(mask, 3, 3)).toBe(false);
+  });
+
+  it("selects by explicit target color instead of seed pixel", () => {
+    const grid = PixelGrid.createEmpty(4, 4);
+    grid.setPixel(1, 1, rgba(0, 255, 0));
+    grid.setPixel(2, 1, rgba(255, 0, 0));
+    grid.setPixel(3, 3, rgba(255, 0, 0));
+
+    const mask = floodSelectMaskByTargetColor(
+      grid,
+      { x: 1, y: 1 },
+      rgba(255, 0, 0),
+      { tolerance: 0, contiguous: true },
+    );
+
+    expect(isMaskSelected(mask, 1, 1)).toBe(false);
     expect(isMaskSelected(mask, 2, 1)).toBe(true);
     expect(isMaskSelected(mask, 3, 3)).toBe(false);
   });

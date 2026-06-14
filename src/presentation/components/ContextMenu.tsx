@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckIcon } from "@heroicons/react/24/outline";
+import { CheckIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import type { MenuItem } from "./MenuDropdown";
 
 const MENU_MIN_WIDTH = 160;
@@ -15,6 +15,7 @@ interface ContextMenuProps {
 export function ContextMenu({ position, items, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [clampedPosition, setClampedPosition] = useState(position);
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
 
   const updatePosition = useCallback(() => {
     const menu = menuRef.current;
@@ -109,7 +110,57 @@ export function ContextMenu({ position, items, onClose }: ContextMenuProps) {
         }
 
         if (item.type === "submenu") {
-          return null;
+          const Icon = item.icon;
+          const isSubOpen = openSubmenu === item.label;
+
+          return (
+            <div
+              key={item.label}
+              className="relative"
+              onMouseEnter={() => setOpenSubmenu(item.label)}
+              onMouseLeave={() => setOpenSubmenu(null)}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                aria-haspopup="menu"
+                aria-expanded={isSubOpen}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition ${
+                  isSubOpen
+                    ? "bg-zinc-800 text-zinc-100"
+                    : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                }`}
+              >
+                {Icon ? (
+                  <Icon className="h-4 w-4 shrink-0 text-zinc-400" />
+                ) : (
+                  <span className="w-4 shrink-0" />
+                )}
+                <span className="flex-1">{item.label}</span>
+                <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+              </button>
+
+              {isSubOpen && (
+                <div
+                  role="menu"
+                  className="absolute left-full top-0 z-50 ml-0.5 min-w-[140px] rounded border border-zinc-600 bg-zinc-900 py-1 shadow-xl"
+                >
+                  {item.items.map((subItem) => (
+                    <button
+                      key={subItem.label}
+                      type="button"
+                      role="menuitem"
+                      disabled={subItem.disabled}
+                      onClick={() => handleItemClick(subItem.onClick)}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <span className="flex-1">{subItem.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
         }
 
         const Icon = item.icon;

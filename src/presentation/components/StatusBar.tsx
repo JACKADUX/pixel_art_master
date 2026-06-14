@@ -52,6 +52,7 @@ export function StatusBar() {
   const assetLibraryDrawerExpanded = useAppStore((s) => s.assetLibraryDrawerExpanded);
   const canUndo = useAppStore((s) => s.historyStack.canUndo);
   const canRedo = useAppStore((s) => s.historyStack.canRedo);
+  const pomodoroVisible = useAppStore((s) => s.appSettings.pomodoroVisible);
 
   if (!project) return null;
 
@@ -132,7 +133,7 @@ export function StatusBar() {
       </button>
 
       <div className="ml-auto flex items-center gap-3">
-        <PomodoroTimer />
+        {pomodoroVisible && <PomodoroTimer />}
         <div className="flex items-center gap-0.5 border-l border-zinc-700 pl-2">
           <StatusBarIconButton
             title={`撤销 (${SHORTCUT_LABELS.undo})`}

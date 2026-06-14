@@ -22,6 +22,10 @@ import {
   isMiddleMousePressed,
 } from "@/domain/viewport/ViewportPan";
 import { getReferenceImage } from "@/infrastructure/canvas/ReferenceImageCache";
+import {
+  DEFAULT_APP_SETTINGS,
+  gridColorRgbString,
+} from "@/domain/appSettings/AppSettings";
 import { renderCanvasGrid } from "@/infrastructure/canvas/CanvasGridRenderer";
 import {
   blitWithDisplayMode,
@@ -318,7 +322,13 @@ export function ReferenceCropModal() {
     ctx.clearRect(0, 0, displayWidth, displayHeight);
     if (!showPixelGrid) return;
 
-    renderCanvasGrid(ctx, imageSize.width, imageSize.height, zoom, 1, 1);
+    renderCanvasGrid(ctx, imageSize.width, imageSize.height, zoom, {
+      primary: 1,
+      secondary: 1,
+      colorRgb: gridColorRgbString(DEFAULT_APP_SETTINGS.gridColorHex),
+      lineWidth: DEFAULT_APP_SETTINGS.gridLineWidth,
+      subGridEnabled: false,
+    });
   }, [imageSize, displayWidth, displayHeight, zoom, showPixelGrid]);
 
   useLayoutEffect(() => {
