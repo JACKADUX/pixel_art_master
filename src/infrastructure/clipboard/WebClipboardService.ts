@@ -1,4 +1,5 @@
 import type { IClipboardService } from "@/application/ports/IClipboardService";
+import { readClipboardImageData } from "./ClipboardImageReader";
 
 export const webClipboardService: IClipboardService = {
   async copyImage(pngBlob: Blob): Promise<void> {
@@ -13,26 +14,6 @@ export const webClipboardService: IClipboardService = {
   },
 
   async readImage(): Promise<ImageData | null> {
-    if (!navigator.clipboard?.read) return null;
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        for (const type of item.types) {
-          if (!type.startsWith("image/")) continue;
-          const blob = await item.getType(type);
-          const bitmap = await createImageBitmap(blob);
-          const canvas = document.createElement("canvas");
-          canvas.width = bitmap.width;
-          canvas.height = bitmap.height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) return null;
-          ctx.drawImage(bitmap, 0, 0);
-          return ctx.getImageData(0, 0, canvas.width, canvas.height);
-        }
-      }
-    } catch {
-      return null;
-    }
-    return null;
+    return readClipboardImageData();
   },
 };

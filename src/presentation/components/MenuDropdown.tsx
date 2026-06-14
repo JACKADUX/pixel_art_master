@@ -19,6 +19,17 @@ export type MenuItem =
       checked: boolean;
       onClick: () => void;
     }
+  | {
+      type: "submenu";
+      label: string;
+      icon?: IconComponent;
+      items: Array<{
+        type: "action";
+        label: string;
+        onClick: () => void;
+        disabled?: boolean;
+      }>;
+    }
   | { type: "separator" };
 
 export interface MenuGroup {
@@ -76,6 +87,10 @@ export function MenuDropdown({ label, open, onToggle, onClose, items }: MenuDrop
                   <span className="flex-1">{item.label}</span>
                 </button>
               );
+            }
+
+            if (item.type === "submenu") {
+              return null;
             }
 
             const Icon = item.icon;

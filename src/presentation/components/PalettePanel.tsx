@@ -1,13 +1,13 @@
 import { useCallback, useState } from "react";
-import { PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { PlusIcon } from "@heroicons/react/24/outline";
 import { toHexAlpha } from "@/domain/canvas/PixelColor";
 import {
   PALETTE_OKLAB_MAP_MAX_COLORS,
 } from "@/domain/palette/PaletteOklabLayout";
 import { useAppStore } from "../stores/appStore";
 import { PaletteGridView } from "./PaletteGridView";
+import { PaletteMoreMenu } from "./PaletteMoreMenu";
 import { PaletteOklabMapView } from "./PaletteOklabMapView";
-import { ReferencePaletteImportMenu } from "./ReferencePaletteImportMenu";
 
 function buildSwatchBackground(hex: string): string {
   return `
@@ -22,7 +22,6 @@ export function PalettePanel() {
   const backgroundColor = useAppStore((s) => s.backgroundColor);
   const setColorSlot = useAppStore((s) => s.setColorSlot);
   const paletteViewMode = useAppStore((s) => s.paletteViewMode);
-  const setPaletteViewMode = useAppStore((s) => s.setPaletteViewMode);
   const addColorToPalette = useAppStore((s) => s.addColorToPalette);
   const removeColorsFromPalette = useAppStore((s) => s.removeColorsFromPalette);
 
@@ -74,60 +73,25 @@ export function PalettePanel() {
         <h3 className="text-sm font-medium text-zinc-300">色板 ({colors.length})</h3>
         <div className="flex items-center gap-1.5">
           {!removeMode && (
-            <>
-              <button
-                type="button"
-                title="将当前前景色加入色板"
-                onClick={() => addColorToPalette(foregroundColor)}
-                className="flex items-center gap-1 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
-              >
-                <span
-                  className="h-3.5 w-3.5 shrink-0 rounded-sm border border-zinc-600"
-                  style={{ background: buildSwatchBackground(foregroundHex) }}
-                />
-                <PlusIcon className="h-3 w-3" />
-                <span>添加</span>
-              </button>
-              <ReferencePaletteImportMenu />
-              {colors.length > 0 && (
-                <button
-                  type="button"
-                  title="选择色块并移除"
-                  onClick={() => setRemoveMode(true)}
-                  className="flex items-center gap-1 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
-                >
-                  <TrashIcon className="h-3 w-3" />
-                  <span>移除</span>
-                </button>
-              )}
-            </>
+            <button
+              type="button"
+              title="将当前前景色加入色板"
+              onClick={() => addColorToPalette(foregroundColor)}
+              className="flex items-center gap-1 rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-300 transition hover:border-zinc-500 hover:bg-zinc-800"
+            >
+              <span
+                className="h-3.5 w-3.5 shrink-0 rounded-sm border border-zinc-600"
+                style={{ background: buildSwatchBackground(foregroundHex) }}
+              />
+              <PlusIcon className="h-3 w-3" />
+              <span>添加</span>
+            </button>
           )}
-          {colors.length > 0 && (
-            <div className="flex rounded border border-zinc-700 text-[10px]">
-              <button
-                type="button"
-                onClick={() => setPaletteViewMode("grid")}
-                className={`px-2 py-0.5 transition ${
-                  paletteViewMode === "grid"
-                    ? "bg-zinc-700 text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                网格
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaletteViewMode("oklabMap")}
-                className={`px-2 py-0.5 transition ${
-                  paletteViewMode === "oklabMap"
-                    ? "bg-zinc-700 text-zinc-100"
-                    : "text-zinc-500 hover:text-zinc-300"
-                }`}
-              >
-                色域图
-              </button>
-            </div>
-          )}
+          <PaletteMoreMenu
+            colorsCount={colors.length}
+            removeMode={removeMode}
+            onEnterRemoveMode={() => setRemoveMode(true)}
+          />
         </div>
       </div>
 

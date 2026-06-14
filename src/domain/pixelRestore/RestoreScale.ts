@@ -1,4 +1,4 @@
-export const MIN_RESTORE_SCALE = 2;
+export const MIN_RESTORE_SCALE = 1;
 export const MAX_RESTORE_SCALE = 16;
 
 export interface RestoreScale {

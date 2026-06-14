@@ -5,13 +5,16 @@ import {
   type AssetLibraryIndex,
 } from "@/domain/asset/AssetLibrary";
 import type { AssetFolder } from "@/domain/asset/AssetFolder";
+import { FOLDER_DROP_TARGET_ATTR } from "./assetPointerDrag";
 
 interface AssetFolderTreeProps {
   library: AssetLibraryIndex;
   selectedFolderId: string;
+  hoverFolderId: string | null;
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folderId: string, name: string) => void;
+  onRequestDeleteFolder: (folderId: string) => void;
 }
 
 interface TreeNodeProps {
@@ -19,9 +22,11 @@ interface TreeNodeProps {
   library: AssetLibraryIndex;
   depth: number;
   selectedFolderId: string;
+  hoverFolderId: string | null;
   onSelectFolder: (folderId: string) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folderId: string, name: string) => void;
+  onRequestDeleteFolder: (folderId: string) => void;
 }
 
 function TreeNode({
@@ -29,9 +34,11 @@ function TreeNode({
   library,
   depth,
   selectedFolderId,
+  hoverFolderId,
   onSelectFolder,
   onCreateFolder,
   onRenameFolder,
+  onRequestDeleteFolder,
 }: TreeNodeProps) {
   const folderId = folder?.id ?? ROOT_FOLDER_ID;
   const [expanded, setExpanded] = useState(true);
@@ -43,6 +50,7 @@ function TreeNode({
     : listChildFolders(library, null);
   const label = folder?.name ?? "根目录";
   const isSelected = selectedFolderId === folderId;
+  const isHoverTarget = hoverFolderId === folderId;
 
   const handleStartRename = (f: AssetFolder) => {
     setEditingId(f.id);
@@ -58,8 +66,13 @@ function TreeNode({
   return (
     <div>
       <div
+        {...{ [FOLDER_DROP_TARGET_ATTR]: folderId }}
         className={`group flex items-center gap-1 rounded px-1 py-0.5 ${
-          isSelected ? "bg-zinc-700 text-zinc-100" : "text-zinc-400 hover:bg-zinc-800"
+          isHoverTarget
+            ? "bg-blue-900/50 ring-1 ring-blue-500"
+            : isSelected
+              ? "bg-zinc-700 text-zinc-100"
+              : "text-zinc-400 hover:bg-zinc-800"
         }`}
         style={{ paddingLeft: `${depth * 12 + 4}px` }}
       >
@@ -106,6 +119,16 @@ function TreeNode({
         >
           +
         </button>
+        {folder && (
+          <button
+            type="button"
+            title="删除文件夹"
+            onClick={() => onRequestDeleteFolder(folder.id)}
+            className="hidden h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-red-900 hover:text-red-300 group-hover:flex"
+          >
+            ×
+          </button>
+        )}
       </div>
 
       {expanded &&
@@ -116,9 +139,11 @@ function TreeNode({
             library={library}
             depth={depth + 1}
             selectedFolderId={selectedFolderId}
+            hoverFolderId={hoverFolderId}
             onSelectFolder={onSelectFolder}
             onCreateFolder={onCreateFolder}
             onRenameFolder={onRenameFolder}
+            onRequestDeleteFolder={onRequestDeleteFolder}
           />
         ))}
     </div>
@@ -128,9 +153,11 @@ function TreeNode({
 export function AssetFolderTree({
   library,
   selectedFolderId,
+  hoverFolderId,
   onSelectFolder,
   onCreateFolder,
   onRenameFolder,
+  onRequestDeleteFolder,
 }: AssetFolderTreeProps) {
   return (
     <div className="min-h-0 flex-1 overflow-auto p-2">
@@ -139,9 +166,11 @@ export function AssetFolderTree({
         library={library}
         depth={0}
         selectedFolderId={selectedFolderId}
+        hoverFolderId={hoverFolderId}
         onSelectFolder={onSelectFolder}
         onCreateFolder={onCreateFolder}
         onRenameFolder={onRenameFolder}
+        onRequestDeleteFolder={onRequestDeleteFolder}
       />
     </div>
   );

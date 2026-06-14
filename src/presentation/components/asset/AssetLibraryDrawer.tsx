@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useAppStore } from "../../stores/appStore";
 import { AssetLibraryContent } from "./AssetLibraryContent";
+import { AssetFolderDeleteDialog } from "./AssetFolderDeleteDialog";
+import { AssetMoveConfirmDialog } from "./AssetMoveConfirmDialog";
+import { ConfirmDialog } from "../ConfirmDialog";
 
 const MIN_DRAWER_HEIGHT = 120;
 const MAX_DRAWER_HEIGHT_RATIO = 0.7;
@@ -13,6 +16,9 @@ export function AssetLibraryDrawer() {
   const loading = useAppStore((s) => s.assetLibraryLoading);
   const selectedFolderId = useAppStore((s) => s.selectedAssetFolderId);
   const selectedAssetId = useAppStore((s) => s.selectedAssetId);
+  const deleteAssetFolderTarget = useAppStore((s) => s.deleteAssetFolderTarget);
+  const deleteAssetTarget = useAppStore((s) => s.deleteAssetTarget);
+  const moveAssetTarget = useAppStore((s) => s.moveAssetTarget);
 
   const toggleAssetLibraryDrawer = useAppStore((s) => s.toggleAssetLibraryDrawer);
   const setAssetLibraryDrawerHeight = useAppStore((s) => s.setAssetLibraryDrawerHeight);
@@ -21,11 +27,19 @@ export function AssetLibraryDrawer() {
   const setSelectedAsset = useAppStore((s) => s.setSelectedAsset);
   const createAssetFolderAction = useAppStore((s) => s.createAssetFolderAction);
   const renameAssetFolderAction = useAppStore((s) => s.renameAssetFolderAction);
+  const requestDeleteAssetFolder = useAppStore((s) => s.requestDeleteAssetFolder);
+  const cancelDeleteAssetFolder = useAppStore((s) => s.cancelDeleteAssetFolder);
+  const confirmDeleteAssetFolder = useAppStore((s) => s.confirmDeleteAssetFolder);
+  const requestDeleteAssetRecord = useAppStore((s) => s.requestDeleteAssetRecord);
+  const cancelDeleteAssetRecord = useAppStore((s) => s.cancelDeleteAssetRecord);
+  const confirmDeleteAssetRecord = useAppStore((s) => s.confirmDeleteAssetRecord);
+  const requestMoveAssetRecord = useAppStore((s) => s.requestMoveAssetRecord);
+  const cancelMoveAssetRecord = useAppStore((s) => s.cancelMoveAssetRecord);
+  const confirmMoveAssetRecord = useAppStore((s) => s.confirmMoveAssetRecord);
   const importAssetFromClipboardAction = useAppStore((s) => s.importAssetFromClipboardAction);
   const importAssetFromFileAction = useAppStore((s) => s.importAssetFromFileAction);
   const startAssetCanvasCapture = useAppStore((s) => s.startAssetCanvasCapture);
   const updateAssetRecordAction = useAppStore((s) => s.updateAssetRecordAction);
-  const deleteAssetRecordAction = useAppStore((s) => s.deleteAssetRecordAction);
   const createAssetCategoryAction = useAppStore((s) => s.createAssetCategoryAction);
   const createAssetTagAction = useAppStore((s) => s.createAssetTagAction);
   const openAssetLibraryModal = useAppStore((s) => s.openAssetLibraryModal);
@@ -67,6 +81,7 @@ export function AssetLibraryDrawer() {
   const height = expanded ? drawerHeight : 32;
 
   return (
+    <>
     <div
       className="flex shrink-0 flex-col border-t border-zinc-700 bg-zinc-900"
       style={{ height }}
@@ -101,7 +116,7 @@ export function AssetLibraryDrawer() {
       </div>
 
       {expanded && workspacePath && (
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {loading || !library ? (
             <div className="flex h-full items-center justify-center text-xs text-zinc-500">
               加载中...
@@ -118,13 +133,15 @@ export function AssetLibraryDrawer() {
               onRenameFolder={(folderId, name) =>
                 void renameAssetFolderAction(folderId, name)
               }
+              onRequestDeleteFolder={requestDeleteAssetFolder}
               onImportClipboard={() => void importAssetFromClipboardAction()}
               onImportFile={() => void importAssetFromFileAction()}
               onStartCanvasCapture={() => startAssetCanvasCapture()}
               onUpdateAsset={(assetId, updates) =>
                 void updateAssetRecordAction(assetId, updates)
               }
-              onDeleteAsset={(assetId) => void deleteAssetRecordAction(assetId)}
+              onDeleteAsset={(assetId) => requestDeleteAssetRecord(assetId)}
+              onRequestMoveAsset={requestMoveAssetRecord}
               onCreateCategory={(name) => void createAssetCategoryAction(name)}
               onCreateTag={(name) => void createAssetTagAction(name)}
             />
@@ -132,5 +149,31 @@ export function AssetLibraryDrawer() {
         </div>
       )}
     </div>
+    <AssetFolderDeleteDialog
+      open={deleteAssetFolderTarget !== null}
+      folderName={deleteAssetFolderTarget?.folderName ?? ""}
+      assetCount={deleteAssetFolderTarget?.assetCount ?? 0}
+      childFolderCount={deleteAssetFolderTarget?.childFolderCount ?? 0}
+      onConfirm={(disposition) => void confirmDeleteAssetFolder(disposition)}
+      onCancel={cancelDeleteAssetFolder}
+    />
+    <ConfirmDialog
+      open={deleteAssetTarget !== null}
+      title="删除资产"
+      message={`确定删除资产「${deleteAssetTarget?.title ?? ""}」吗？此操作不可恢复。`}
+      confirmLabel="删除"
+      danger
+      onConfirm={() => void confirmDeleteAssetRecord()}
+      onCancel={cancelDeleteAssetRecord}
+    />
+    <AssetMoveConfirmDialog
+      open={moveAssetTarget !== null}
+      assetTitle={moveAssetTarget?.title ?? ""}
+      fromFolderLabel={moveAssetTarget?.fromFolderLabel ?? ""}
+      toFolderLabel={moveAssetTarget?.toFolderLabel ?? ""}
+      onConfirm={() => void confirmMoveAssetRecord()}
+      onCancel={cancelMoveAssetRecord}
+    />
+    </>
   );
 }

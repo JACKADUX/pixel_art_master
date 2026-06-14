@@ -106,16 +106,21 @@ export class OklabDisplayGlRenderer {
   private textureLocation: WebGLUniformLocation | null = null;
   private lastSource: TexImageSourceLike | null = null;
   private useCpuFallback = false;
+  private boundCanvas: HTMLCanvasElement | null = null;
 
   setSource(source: TexImageSourceLike): void {
     this.lastSource = source;
     if (this.useCpuFallback) return;
 
     const gl = this.ensureGl();
-    if (!gl) {
-      this.useCpuFallback = true;
-      return;
-    }
+    if (!gl) return;
+
+    this.uploadTexture(source);
+  }
+
+  private uploadTexture(source: TexImageSourceLike): void {
+    const gl = this.gl;
+    if (!gl || this.useCpuFallback) return;
 
     const { width, height } = readSourceSize(source);
 
@@ -196,6 +201,27 @@ export class OklabDisplayGlRenderer {
     this.textureLocation = null;
     this.lastSource = null;
     this.useCpuFallback = false;
+    this.boundCanvas = null;
+  }
+
+  private releaseGlResources(): void {
+    if (this.gl) {
+      const gl = this.gl;
+      if (this.texture) gl.deleteTexture(this.texture);
+      if (this.positionBuffer) gl.deleteBuffer(this.positionBuffer);
+      if (this.texCoordBuffer) gl.deleteBuffer(this.texCoordBuffer);
+      if (this.vao) gl.deleteVertexArray(this.vao);
+      if (this.program) gl.deleteProgram(this.program);
+    }
+    this.gl = null;
+    this.program = null;
+    this.texture = null;
+    this.vao = null;
+    this.positionBuffer = null;
+    this.texCoordBuffer = null;
+    this.modeLocation = null;
+    this.textureLocation = null;
+    this.boundCanvas = null;
   }
 
   private ensureGl(): WebGL2RenderingContext | null {
@@ -203,9 +229,13 @@ export class OklabDisplayGlRenderer {
     return null;
   }
 
-  /** Bind WebGL to a canvas element. Call once when the image canvas is mounted. */
+  /** Bind WebGL to a canvas element. Re-inits when the canvas element changes. */
   initCanvas(canvas: HTMLCanvasElement): boolean {
-    if (this.gl) return true;
+    if (this.gl && this.boundCanvas === canvas) return true;
+
+    if (this.gl) {
+      this.releaseGlResources();
+    }
 
     const gl = canvas.getContext("webgl2", {
       alpha: true,
@@ -250,6 +280,12 @@ export class OklabDisplayGlRenderer {
       this.texCoordBuffer = texCoordBuffer;
       this.modeLocation = gl.getUniformLocation(program, "u_mode");
       this.textureLocation = gl.getUniformLocation(program, "u_texture");
+      this.boundCanvas = canvas;
+
+      if (this.lastSource) {
+        this.uploadTexture(this.lastSource);
+      }
+
       return true;
     } catch (err) {
       console.warn("OklabDisplayGlRenderer: init failed, using CPU fallback", err);

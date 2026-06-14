@@ -16,7 +16,51 @@ export function useAppShortcuts() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isTextEntryElement(document.activeElement)) return;
 
+      const pixelRestore = usePixelRestoreStore.getState();
+      if (pixelRestore.open) {
+        if (
+          pixelRestore.restoreMode === "gridScale" &&
+          ((pixelRestore.gridScaleType === "singleCell" && pixelRestore.gridSeedCell) ||
+            (pixelRestore.gridScaleType === "region" && pixelRestore.gridRegion)) &&
+          (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key) ||
+            event.key === "Enter")
+        ) {
+          return;
+        }
+      }
+
       const store = useAppStore.getState();
+      const capturePhase = store.assetCapturePhase;
+
+      if (capturePhase === "adjusting") {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          store.cancelAssetCanvasCapture();
+          return;
+        }
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void store.confirmAssetCanvasCapture();
+          return;
+        }
+        const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+        if (arrowKeys.includes(event.key)) {
+          event.preventDefault();
+          const dx = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+          const dy = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+          const corner = event.shiftKey ? "bottomRight" : "topLeft";
+          store.adjustAssetCaptureRect(dx, dy, corner);
+          return;
+        }
+        return;
+      }
+
+      if (capturePhase === "dragging" && event.key === "Escape") {
+        event.preventDefault();
+        store.cancelAssetCanvasCapture();
+        return;
+      }
+
       const { selection } = store;
       const hasSelection = selection !== null && !isSelectionEmpty(selection);
       const hasFloatingSelection = selection?.floating != null;

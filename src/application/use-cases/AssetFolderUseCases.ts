@@ -3,15 +3,16 @@ import {
   addFolder,
   addCategoryToLibrary,
   addTagToLibrary,
-  isFolderEmpty,
+  type AssetFolderDeletionDisposition,
   removeCategoryFromLibrary,
-  removeFolderFromLibrary,
+  removeFolderTreeFromLibrary,
   removeTagFromLibrary,
   renameCategoryInLibrary,
   renameFolderInLibrary,
   renameTagInLibrary,
   type AssetLibraryIndex,
 } from "@/domain/asset/AssetLibrary";
+import { buildAssetImagePath } from "@/domain/asset/AssetLibraryPaths";
 import { saveAssetLibrary } from "./LoadAssetLibrary";
 
 export async function createAssetFolder(
@@ -38,15 +39,24 @@ export async function renameAssetFolderUseCase(
   return updated;
 }
 
-export async function deleteAssetFolder(
+export async function deleteAssetFolderTree(
   repository: IAssetLibraryRepository,
   workspacePath: string,
   library: AssetLibraryIndex,
   folderId: string,
-): Promise<AssetLibraryIndex | null> {
-  if (!isFolderEmpty(library, folderId)) return null;
-  const updated = removeFolderFromLibrary(library, folderId);
-  if (!updated) return null;
+  disposition: AssetFolderDeletionDisposition,
+): Promise<AssetLibraryIndex> {
+  const { library: updated, removedAssets } = removeFolderTreeFromLibrary(
+    library,
+    folderId,
+    disposition,
+  );
+
+  for (const asset of removedAssets) {
+    const imagePath = buildAssetImagePath(workspacePath, asset.id);
+    await repository.deleteImage(imagePath);
+  }
+
   await saveAssetLibrary(repository, workspacePath, updated);
   return updated;
 }

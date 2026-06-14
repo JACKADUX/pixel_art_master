@@ -3,6 +3,12 @@ import { PixelGrid as PG } from "../canvas/PixelGrid";
 import type { SelectionRect } from "../selection/SelectionRect";
 import { normalizeRect } from "../selection/SelectionRect";
 
+export type AssetCaptureSource = "activeLayer" | "composite";
+
+export type AssetCapturePhase = "idle" | "dragging" | "adjusting";
+
+const MIN_CAPTURE_SIZE = 1;
+
 export function extractRectFromGrid(grid: PixelGrid, rect: SelectionRect): PixelGrid | null {
   if (rect.width <= 0 || rect.height <= 0) return null;
 
@@ -30,4 +36,60 @@ export function normalizeCaptureRect(
   toY: number,
 ): SelectionRect {
   return normalizeRect(fromX, fromY, toX, toY);
+}
+
+export function clampCaptureRectToBounds(
+  rect: SelectionRect,
+  canvasWidth: number,
+  canvasHeight: number,
+): SelectionRect {
+  const x = Math.max(0, Math.min(rect.x, canvasWidth - MIN_CAPTURE_SIZE));
+  const y = Math.max(0, Math.min(rect.y, canvasHeight - MIN_CAPTURE_SIZE));
+  const maxWidth = canvasWidth - x;
+  const maxHeight = canvasHeight - y;
+  const width = Math.max(MIN_CAPTURE_SIZE, Math.min(rect.width, maxWidth));
+  const height = Math.max(MIN_CAPTURE_SIZE, Math.min(rect.height, maxHeight));
+  return { x, y, width, height };
+}
+
+export function adjustCaptureRectTopLeft(
+  rect: SelectionRect,
+  dx: number,
+  dy: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): SelectionRect {
+  const bottomRightX = rect.x + rect.width;
+  const bottomRightY = rect.y + rect.height;
+  let x = rect.x + dx;
+  let y = rect.y + dy;
+  x = Math.max(0, Math.min(x, bottomRightX - MIN_CAPTURE_SIZE));
+  y = Math.max(0, Math.min(y, bottomRightY - MIN_CAPTURE_SIZE));
+  const adjusted = {
+    x,
+    y,
+    width: bottomRightX - x,
+    height: bottomRightY - y,
+  };
+  return clampCaptureRectToBounds(adjusted, canvasWidth, canvasHeight);
+}
+
+export function adjustCaptureRectBottomRight(
+  rect: SelectionRect,
+  dx: number,
+  dy: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): SelectionRect {
+  const maxWidth = canvasWidth - rect.x;
+  const maxHeight = canvasHeight - rect.y;
+  const width = Math.max(
+    MIN_CAPTURE_SIZE,
+    Math.min(rect.width + dx, maxWidth),
+  );
+  const height = Math.max(
+    MIN_CAPTURE_SIZE,
+    Math.min(rect.height + dy, maxHeight),
+  );
+  return { x: rect.x, y: rect.y, width, height };
 }

@@ -56,7 +56,6 @@ export interface EditorPreferences {
   foregroundColor: PixelColor;
   backgroundColor: PixelColor;
   zoom: number;
-  rightPanelTab: "palette" | "notes";
   paletteViewMode: "grid" | "oklabMap";
   colorPickerMode: ColorMode;
   colorPickerLayoutOrientation: ColorPickerLayoutOrientation;
@@ -101,7 +100,6 @@ const SELECTION_MODES: SelectionMode[] = ["rectangle", "ellipse", "lasso", "magi
 const TRANSFORM_MODES: TransformMode[] = ["move", "scale", "rotate"];
 const COLOR_MODES: ColorMode[] = ["hsl", "oklab"];
 const COLOR_SLOTS: EditorColorSlot[] = ["foreground", "background"];
-const PANEL_TABS = ["palette", "notes"] as const;
 const PALETTE_VIEW_MODES = ["grid", "oklabMap"] as const;
 const CANVAS_DISPLAY_MODES = ["normal", "oklabLightness"] as const;
 
@@ -111,7 +109,6 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   foregroundColor: rgba(255, 0, 0),
   backgroundColor: TRANSPARENT,
   zoom: 8,
-  rightPanelTab: "palette",
   paletteViewMode: "grid",
   colorPickerMode: "hsl",
   colorPickerLayoutOrientation: "vertical",
@@ -143,7 +140,6 @@ export interface EditorPreferencesSource {
   foregroundColor: PixelColor;
   backgroundColor: PixelColor;
   zoom: number;
-  rightPanelTab: "palette" | "notes";
   paletteViewMode: "grid" | "oklabMap";
   colorPickerMode: ColorMode;
   colorPickerLayoutOrientation: ColorPickerLayoutOrientation;
@@ -308,9 +304,6 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
   const activeTool = TOOL_TYPES.includes(raw.activeTool as ToolType)
     ? (raw.activeTool as ToolType)
     : defaults.activeTool;
-  const rightPanelTab = PANEL_TABS.includes(raw.rightPanelTab as (typeof PANEL_TABS)[number])
-    ? (raw.rightPanelTab as (typeof PANEL_TABS)[number])
-    : defaults.rightPanelTab;
   const paletteViewMode = PALETTE_VIEW_MODES.includes(
     raw.paletteViewMode as (typeof PALETTE_VIEW_MODES)[number],
   )
@@ -336,7 +329,6 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
     foregroundColor: parsePixelColor(raw.foregroundColor, defaults.foregroundColor),
     backgroundColor: parsePixelColor(raw.backgroundColor, defaults.backgroundColor),
     zoom: clampNumber(raw.zoom, MIN_ZOOM, MAX_ZOOM, defaults.zoom),
-    rightPanelTab,
     paletteViewMode,
     colorPickerMode,
     colorPickerLayoutOrientation,
@@ -381,7 +373,6 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
     foregroundColor: source.foregroundColor,
     backgroundColor: source.backgroundColor,
     zoom: clampNumber(source.zoom, MIN_ZOOM, MAX_ZOOM, DEFAULT_EDITOR_PREFERENCES.zoom),
-    rightPanelTab: source.rightPanelTab,
     paletteViewMode: source.paletteViewMode,
     colorPickerMode: source.colorPickerMode,
     colorPickerLayoutOrientation: source.colorPickerLayoutOrientation,

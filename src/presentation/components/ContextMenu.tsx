@@ -108,6 +108,10 @@ export function ContextMenu({ position, items, onClose }: ContextMenuProps) {
           );
         }
 
+        if (item.type === "submenu") {
+          return null;
+        }
+
         const Icon = item.icon;
         return (
           <button

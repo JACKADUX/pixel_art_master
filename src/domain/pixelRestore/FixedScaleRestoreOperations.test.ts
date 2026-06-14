@@ -10,6 +10,14 @@ import {
 describe("FixedScaleRestoreOperations", () => {
   const source = { width: 128, height: 96 };
 
+  it("accepts scale 1 as no-downscale", () => {
+    const scale = createRestoreScale(1);
+    expect(validateFixedScaleRestore(source, scale)).toEqual({
+      width: 128,
+      height: 96,
+    });
+  });
+
   it("computes output size from source and scale", () => {
     const scale = createRestoreScale(4);
     expect(computeRestoreOutputSize(source, scale)).toEqual({

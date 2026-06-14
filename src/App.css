@@ -75,3 +75,24 @@ body,
   padding: 0.1em 0.3em;
   border-radius: 2px;
 }
+
+@layer utilities {
+  .cursor-eyedropper {
+    cursor:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23fff' stroke='%23000' stroke-width='0.8' d='M2 18l2-2 8-8 2 2-8 8-2 2H2v-2z'/%3E%3Cpath fill='%23fff' stroke='%23000' stroke-width='0.8' d='M11 3l6 6-1.5 1.5L9.5 4.5 11 3z'/%3E%3Ccircle cx='15.5' cy='4.5' r='1.5' fill='%23fff' stroke='%23000' stroke-width='0.8'/%3E%3C/svg%3E")
+        2 18,
+      crosshair;
+  }
+
+  .cursor-capture {
+    cursor:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='none' stroke='%23fff' stroke-width='1.8' d='M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5'/%3E%3Cpath fill='none' stroke='%23000' stroke-width='0.8' d='M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5'/%3E%3C/svg%3E")
+        12 12,
+      crosshair;
+  }
+
+  .asset-drag-source img {
+    -webkit-user-drag: none;
+    user-drag: none;
+  }
+}

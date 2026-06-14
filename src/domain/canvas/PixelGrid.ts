@@ -1,7 +1,7 @@
 import type { CanvasSize } from "./CanvasSize";
 import { createCanvasSize, pixelCount } from "./CanvasSize";
 import type { PixelColor } from "./PixelColor";
-import { rgba, toRgbaComponents, TRANSPARENT } from "./PixelColor";
+import { getAlpha, rgba, toRgbaComponents, TRANSPARENT } from "./PixelColor";
 
 export class PixelGrid {
   readonly width: number;
@@ -59,6 +59,16 @@ export class PixelGrid {
 
   inBounds(x: number, y: number): boolean {
     return x >= 0 && y >= 0 && x < this.width && y < this.height;
+  }
+
+  blitOnto(source: PixelGrid, offsetX: number, offsetY: number): void {
+    for (let y = 0; y < source.height; y++) {
+      for (let x = 0; x < source.width; x++) {
+        const color = source.getPixel(x, y);
+        if (getAlpha(color) === 0) continue;
+        this.setPixel(offsetX + x, offsetY + y, color);
+      }
+    }
   }
 
   clone(): PixelGrid {

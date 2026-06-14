@@ -87,6 +87,62 @@ export function renameFolderInLibrary(
   };
 }
 
+export function listDescendantFolderIds(
+  library: AssetLibraryIndex,
+  folderId: string,
+): string[] {
+  const ids: string[] = [folderId];
+  for (let i = 0; i < ids.length; i += 1) {
+    const parentId = ids[i];
+    for (const folder of library.folders) {
+      if (folder.parentId === parentId && !ids.includes(folder.id)) {
+        ids.push(folder.id);
+      }
+    }
+  }
+  return ids;
+}
+
+export function countAssetsInFolders(
+  library: AssetLibraryIndex,
+  folderIds: string[],
+): number {
+  return library.assets.filter((asset) => folderIds.includes(asset.folderId)).length;
+}
+
+export type AssetFolderDeletionDisposition = "deleteAssets" | "moveAssetsToRoot";
+
+export function removeFolderTreeFromLibrary(
+  library: AssetLibraryIndex,
+  folderId: string,
+  disposition: AssetFolderDeletionDisposition,
+): { library: AssetLibraryIndex; removedAssets: AssetRecord[] } {
+  const folderIds = listDescendantFolderIds(library, folderId);
+  const removedAssets = library.assets.filter((asset) =>
+    folderIds.includes(asset.folderId),
+  );
+
+  let assets = library.assets;
+  if (disposition === "deleteAssets") {
+    assets = assets.filter((asset) => !folderIds.includes(asset.folderId));
+  } else {
+    assets = assets.map((asset) =>
+      folderIds.includes(asset.folderId)
+        ? moveAssetToFolder(asset, ROOT_FOLDER_ID)
+        : asset,
+    );
+  }
+
+  return {
+    library: {
+      ...library,
+      folders: library.folders.filter((folder) => !folderIds.includes(folder.id)),
+      assets,
+    },
+    removedAssets: disposition === "deleteAssets" ? removedAssets : [],
+  };
+}
+
 export function removeFolderFromLibrary(
   library: AssetLibraryIndex,
   folderId: string,

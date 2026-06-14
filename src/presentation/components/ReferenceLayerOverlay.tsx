@@ -372,7 +372,7 @@ export function ReferenceLayerOverlay({
           isDragging
             ? " cursor-grabbing"
             : altHeld
-              ? " cursor-crosshair"
+              ? " cursor-eyedropper"
               : isActive
                 ? " cursor-move"
                 : ""

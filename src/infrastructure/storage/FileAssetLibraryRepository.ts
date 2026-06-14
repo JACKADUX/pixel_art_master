@@ -49,6 +49,8 @@ export class FileAssetLibraryRepository implements IAssetLibraryRepository {
   }
 
   async writeImage(imagePath: string, pngBytes: Uint8Array): Promise<void> {
+    const dir = imagePath.replace(/[/\\][^/\\]+$/, "");
+    await mkdir(dir, { recursive: true });
     await writeFile(imagePath, pngBytes);
   }
 

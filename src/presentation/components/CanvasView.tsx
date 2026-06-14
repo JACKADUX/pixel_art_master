@@ -47,6 +47,7 @@ import {
 } from "@/domain/viewport/OverlayLabelLayout";
 import { buildReferenceLayerContextMenuItems } from "../config/referenceLayerContextMenu";
 import { useAppStore, type ColorSlot, type DrawingButton } from "../stores/appStore";
+import { useAltKeyHeld } from "../hooks/useAltKeyHeld";
 import { useBrushSizeHint } from "../hooks/useBrushSizeHint";
 import { useMousePositionOverlay } from "../hooks/useMousePositionOverlay";
 import { releaseKeyboardFocus, isTextEntryElement } from "../utils/editableFocus";
@@ -131,11 +132,15 @@ export function CanvasView() {
   const brushLineAnchor = useAppStore((s) => s.brushLineAnchor);
   const getCompositeGrid = useAppStore((s) => s.getCompositeGrid);
   const isCapturing = useAppStore((s) => s.isCapturing);
-  const assetCaptureMode = useAppStore((s) => s.assetCaptureMode);
-  const assetCapturePreviewRect = useAppStore((s) => s.assetCapturePreviewRect);
+  const assetCapturePhase = useAppStore((s) => s.assetCapturePhase);
+  const assetCaptureRect = useAppStore((s) => s.assetCaptureRect);
+  const assetCaptureSource = useAppStore((s) => s.assetCaptureSource);
   const assetCapturePointerDown = useAppStore((s) => s.assetCapturePointerDown);
   const assetCapturePointerMove = useAppStore((s) => s.assetCapturePointerMove);
   const assetCapturePointerUp = useAppStore((s) => s.assetCapturePointerUp);
+  const cancelAssetCanvasCapture = useAppStore((s) => s.cancelAssetCanvasCapture);
+  const confirmAssetCanvasCapture = useAppStore((s) => s.confirmAssetCanvasCapture);
+  const setAssetCaptureSource = useAppStore((s) => s.setAssetCaptureSource);
   const setViewportContainer = useAppStore((s) => s.setViewportContainer);
   const syncViewportSnapshot = useAppStore((s) => s.syncViewportSnapshot);
   const adaptFloatingPanelsToViewport = useAppStore((s) => s.adaptFloatingPanelsToViewport);
@@ -147,6 +152,7 @@ export function CanvasView() {
   const importImageToReferenceLayer = useAppStore((s) => s.importImageToReferenceLayer);
 
   const [isPanning, setIsPanning] = useState(false);
+  const altHeld = useAltKeyHeld();
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [hoverPoint, setHoverPoint] = useState<CanvasPoint | null>(null);
   const [referenceContextMenu, setReferenceContextMenu] = useState<{
@@ -160,7 +166,7 @@ export function CanvasView() {
   const [marchPhase, setMarchPhase] = useState(0);
   const marchFrameRef = useRef<number | null>(null);
 
-  const { hint: brushSizeHint, show: showBrushSizeHint, handleMouseMove: handleBrushHintMouseMove } =
+  const { hint: brushSizeHint, show: showBrushSizeHint, hide: hideBrushSizeHint, handleMouseMove: handleBrushHintMouseMove } =
     useBrushSizeHint();
   const {
     overlay: mousePositionOverlay,
@@ -176,14 +182,18 @@ export function CanvasView() {
   const displayWidth = composite ? composite.width * zoom : 0;
   const displayHeight = composite ? composite.height * zoom : 0;
 
+  const isAssetCaptureDragging = assetCapturePhase === "dragging";
+  const isAssetCaptureAdjusting = assetCapturePhase === "adjusting";
+  const isAssetCaptureActive = assetCapturePhase !== "idle";
+
   const boundsLabelRect = useMemo(() => {
     if (
-      assetCaptureMode &&
-      assetCapturePreviewRect &&
-      assetCapturePreviewRect.width > 0 &&
-      assetCapturePreviewRect.height > 0
+      isAssetCaptureActive &&
+      assetCaptureRect &&
+      assetCaptureRect.width > 0 &&
+      assetCaptureRect.height > 0
     ) {
-      return assetCapturePreviewRect;
+      return assetCaptureRect;
     }
     if (
       activeTool === "select" &&
@@ -207,8 +217,8 @@ export function CanvasView() {
     }
     return null;
   }, [
-    assetCaptureMode,
-    assetCapturePreviewRect,
+    isAssetCaptureActive,
+    assetCaptureRect,
     activeTool,
     drawStart,
     isDrawing,
@@ -433,9 +443,17 @@ export function CanvasView() {
 
     ctx.clearRect(0, 0, displayWidth, displayHeight);
 
+    const capturePreviewRect =
+      isAssetCaptureActive &&
+      assetCaptureRect &&
+      assetCaptureRect.width > 0 &&
+      assetCaptureRect.height > 0
+        ? assetCaptureRect
+        : null;
+
     renderSelectionOverlay(ctx, {
-      selection: selectionDrag?.layerPan ? null : selection,
-      previewRect: selectionPreviewRect,
+      selection: capturePreviewRect ? null : selectionDrag?.layerPan ? null : selection,
+      previewRect: capturePreviewRect ?? selectionPreviewRect,
       lassoPoints,
       phase: marchPhase,
       zoom,
@@ -447,7 +465,7 @@ export function CanvasView() {
       renderTransformHandles(ctx, { selection, zoom, phase: marchPhase });
     }
 
-    if (brushPreview && hoverPoint && !isPanning) {
+    if (brushPreview && hoverPoint && !isPanning && !isAssetCaptureActive) {
       if (
         activeTool === "brush" &&
         shiftKeyHeld &&
@@ -477,6 +495,7 @@ export function CanvasView() {
     }
   }, [
     activeTool,
+    assetCaptureRect,
     brushLineAnchor,
     brushPreview,
     composite,
@@ -484,6 +503,7 @@ export function CanvasView() {
     displayHeight,
     foregroundColor,
     hoverPoint,
+    isAssetCaptureActive,
     isPanning,
     lassoPoints,
     marchPhase,
@@ -736,6 +756,9 @@ export function CanvasView() {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
+      const { assetCapturePhase } = useAppStore.getState();
+      if (assetCapturePhase !== "idle") return;
+
       if (e.ctrlKey) {
         const { activeTool: tool, toolSettings: settings } = useAppStore.getState();
         if (tool === "brush" || tool === "eraser") {
@@ -871,7 +894,7 @@ export function CanvasView() {
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || (activeTool !== "brush" && activeTool !== "eraser")) return;
+    if (!container || (activeTool !== "brush" && activeTool !== "eraser") || isAssetCaptureActive) return;
 
     const handleMove = (e: MouseEvent) => {
       if (isPanningRef.current) return;
@@ -880,7 +903,7 @@ export function CanvasView() {
 
     container.addEventListener("mousemove", handleMove);
     return () => container.removeEventListener("mousemove", handleMove);
-  }, [activeTool, updateHoverFromClient]);
+  }, [activeTool, isAssetCaptureActive, updateHoverFromClient]);
 
   useEffect(() => {
     if (!mousePositionOverlayVisible) {
@@ -967,6 +990,53 @@ export function CanvasView() {
     containerRef.current?.focus({ preventScroll: true });
   }, []);
 
+  useEffect(() => {
+    if (!isAssetCaptureActive) return;
+    setHoverPoint(null);
+    hideBrushSizeHint();
+  }, [isAssetCaptureActive, hideBrushSizeHint]);
+
+  useEffect(() => {
+    if (!isAssetCaptureAdjusting) return;
+    focusCanvasKeyboard();
+  }, [isAssetCaptureAdjusting, focusCanvasKeyboard]);
+
+  useEffect(() => {
+    if (!isAssetCaptureAdjusting) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTextEntryElement(document.activeElement)) return;
+
+      const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+      if (!arrowKeys.includes(e.key) && e.key !== "Enter" && e.key !== "Escape") {
+        return;
+      }
+
+      const store = useAppStore.getState();
+      if (store.assetCapturePhase !== "adjusting") return;
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        store.cancelAssetCanvasCapture();
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void store.confirmAssetCanvasCapture();
+        return;
+      }
+
+      e.preventDefault();
+      const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+      const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+      const corner = e.shiftKey ? "bottomRight" : "topLeft";
+      store.adjustAssetCaptureRect(dx, dy, corner);
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [isAssetCaptureAdjusting]);
+
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     focusCanvasKeyboard();
     if (isMiddleMouseButton(e.button)) {
@@ -974,7 +1044,7 @@ export function CanvasView() {
       startPanning(e.clientX, e.clientY);
       return;
     }
-    if (assetCaptureMode) {
+    if (isAssetCaptureDragging) {
       e.preventDefault();
       assetCapturePointerDown(toPixel(e));
       return;
@@ -998,10 +1068,11 @@ export function CanvasView() {
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanningRef.current) return;
     const point = toPixel(e);
-    if (assetCaptureMode) {
+    if (isAssetCaptureDragging) {
       assetCapturePointerMove(point);
       return;
     }
+    if (isAssetCaptureActive) return;
     updateHoverFromClient(e.clientX, e.clientY);
     const button = drawingButton;
     const modifiers = {
@@ -1023,8 +1094,8 @@ export function CanvasView() {
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isPanningRef.current) return;
-    if (assetCaptureMode) {
-      void assetCapturePointerUp(toPixel(e));
+    if (isAssetCaptureDragging) {
+      assetCapturePointerUp(toPixel(e));
       return;
     }
     const button = buttonFromMouseButton(e.button);
@@ -1048,7 +1119,7 @@ export function CanvasView() {
   };
 
   const assetCaptureTracking =
-    assetCaptureMode && assetCapturePreviewRect !== null;
+    isAssetCaptureDragging && assetCaptureRect !== null;
 
   const documentPointerTracking =
     assetCaptureTracking ||
@@ -1069,10 +1140,10 @@ export function CanvasView() {
         activeTool: tool,
         selectionDrag: drag,
         isDrawing: drawing,
-        assetCaptureMode: captureMode,
+        assetCapturePhase: capturePhase,
       } = useAppStore.getState();
 
-      if (captureMode) {
+      if (capturePhase === "dragging") {
         const canvas = canvasRef.current;
         if (!canvas) return;
         const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
@@ -1105,10 +1176,10 @@ export function CanvasView() {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const { assetCaptureMode: captureMode } = useAppStore.getState();
-      if (captureMode) {
+      const { assetCapturePhase: capturePhase } = useAppStore.getState();
+      if (capturePhase === "dragging") {
         const point = clientToPixel(e.clientX, e.clientY, canvas, zoomRef.current);
-        void useAppStore.getState().assetCapturePointerUp(point);
+        useAppStore.getState().assetCapturePointerUp(point);
         return;
       }
 
@@ -1199,7 +1270,7 @@ export function CanvasView() {
         ref={containerRef}
         tabIndex={-1}
         className={`relative min-h-0 min-w-0 flex-1 overflow-auto bg-zinc-800 outline-none${
-          isPanning ? " cursor-grabbing" : ""
+          isPanning ? " cursor-grabbing" : isAssetCaptureActive ? " cursor-capture" : ""
         }`}
         onMouseDown={handleContainerMouseDown}
         onKeyDown={preventSpaceScroll}
@@ -1229,7 +1300,15 @@ export function CanvasView() {
             >
               <canvas
                 ref={canvasRef}
-                className={`block${isPanning ? " cursor-grabbing" : " cursor-crosshair"}`}
+                className={`block${
+                  isPanning
+                    ? " cursor-grabbing"
+                    : isAssetCaptureActive
+                      ? " cursor-capture"
+                      : altHeld
+                        ? " cursor-eyedropper"
+                        : " cursor-crosshair"
+                }`}
                 style={{ imageRendering: "pixelated" }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
@@ -1288,12 +1367,59 @@ export function CanvasView() {
           <p className="text-sm text-zinc-300">正在截图...</p>
         </div>
       )}
-      {assetCaptureMode && (
+      {isAssetCaptureDragging && (
         <div className="pointer-events-none absolute left-4 top-4 z-20 rounded bg-zinc-900/90 px-3 py-2 text-xs text-zinc-200">
-          资产截图模式：拖拽框选区域，Esc 取消
+          资产截图：拖拽框选区域，Esc 取消
         </div>
       )}
-      {brushSizeHint && <CanvasBrushSizeHint hint={brushSizeHint} />}
+      {isAssetCaptureAdjusting && assetCaptureRect && (
+        <div className="absolute left-4 top-4 z-20 rounded border border-zinc-600 bg-zinc-900/95 px-3 py-2 text-xs text-zinc-200 shadow-lg">
+          <p className="mb-2 text-[10px] text-zinc-500">
+            {assetCaptureRect.width}×{assetCaptureRect.height} · 方向键调左上角 · Shift+方向键调右下角 · Enter 确认 · Esc 取消
+          </p>
+          <div className="mb-2 flex gap-1">
+            <button
+              type="button"
+              onClick={() => setAssetCaptureSource("activeLayer")}
+              className={`rounded px-2 py-0.5 text-[10px] ${
+                assetCaptureSource === "activeLayer"
+                  ? "bg-blue-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+              }`}
+            >
+              当前图层
+            </button>
+            <button
+              type="button"
+              onClick={() => setAssetCaptureSource("composite")}
+              className={`rounded px-2 py-0.5 text-[10px] ${
+                assetCaptureSource === "composite"
+                  ? "bg-blue-600 text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+              }`}
+            >
+              完整图像
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void confirmAssetCanvasCapture()}
+              className="rounded bg-blue-600 px-2 py-1 text-[10px] text-white hover:bg-blue-700"
+            >
+              确认
+            </button>
+            <button
+              type="button"
+              onClick={cancelAssetCanvasCapture}
+              className="rounded bg-zinc-800 px-2 py-1 text-[10px] text-zinc-300 hover:bg-zinc-700"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+      {brushSizeHint && !isAssetCaptureActive && <CanvasBrushSizeHint hint={brushSizeHint} />}
       {mousePositionOverlay && (
         <>
           <CanvasMousePositionGridHighlight hint={mousePositionOverlay} />

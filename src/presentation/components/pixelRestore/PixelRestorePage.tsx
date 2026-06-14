@@ -3,48 +3,89 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { MonitorPicker } from "../MonitorPicker";
 import { usePixelRestoreStore } from "../../stores/pixelRestoreStore";
 import { useAppStore } from "../../stores/appStore";
-import { FixedScaleControls } from "./FixedScaleControls";
+import { GridRestoreSourcePreview } from "./GridRestoreSourcePreview";
 import { PixelRestorePreview } from "./PixelRestorePreview";
+import { RestoreToolPanel } from "./RestoreToolPanel";
 
 export function PixelRestorePage() {
   const openPage = usePixelRestoreStore((s) => s.open);
-  const sourceImageData = usePixelRestoreStore((s) => s.sourceImageData);
-  const detectedScale = usePixelRestoreStore((s) => s.detectedScale);
-  const selectedScale = usePixelRestoreStore((s) => s.selectedScale);
   const resultImageData = usePixelRestoreStore((s) => s.resultImageData);
   const loading = usePixelRestoreStore((s) => s.loading);
-  const error = usePixelRestoreStore((s) => s.error);
   const monitorPickerOpen = usePixelRestoreStore((s) => s.monitorPickerOpen);
   const availableMonitors = usePixelRestoreStore((s) => s.availableMonitors);
+  const restoreMode = usePixelRestoreStore((s) => s.restoreMode);
+  const gridScaleType = usePixelRestoreStore((s) => s.gridScaleType);
+  const gridSeedCell = usePixelRestoreStore((s) => s.gridSeedCell);
+  const gridRegion = usePixelRestoreStore((s) => s.gridRegion);
   const closePage = usePixelRestoreStore((s) => s.closePage);
   const importFromPath = usePixelRestoreStore((s) => s.importFromPath);
   const importFromClipboard = usePixelRestoreStore((s) => s.importFromClipboard);
   const screenCapture = usePixelRestoreStore((s) => s.screenCapture);
   const captureFromMonitor = usePixelRestoreStore((s) => s.captureFromMonitor);
   const closeMonitorPicker = usePixelRestoreStore((s) => s.closeMonitorPicker);
-  const setScale = usePixelRestoreStore((s) => s.setScale);
+  const adjustGridSeed = usePixelRestoreStore((s) => s.adjustGridSeed);
+  const adjustGridRegion = usePixelRestoreStore((s) => s.adjustGridRegion);
+  const applyGridRestoreResult = usePixelRestoreStore((s) => s.applyGridRestoreResult);
 
-  const project = useAppStore((s) => s.project);
-  const exportRestoredImageToReference = useAppStore(
-    (s) => s.exportRestoredImageToReference,
+  const projectsWorkspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const exportRestoredImageToAssetLibrary = useAppStore(
+    (s) => s.exportRestoredImageToAssetLibrary,
   );
+
+  const hasGridSelection =
+    gridScaleType === "singleCell" ? gridSeedCell !== null : gridRegion !== null;
 
   useEffect(() => {
     if (!openPage) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const ctrl = event.ctrlKey || event.metaKey;
-      if (!ctrl || (event.key !== "v" && event.key !== "V")) return;
-      if (event.target instanceof HTMLInputElement) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+        return;
+      }
 
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      void importFromClipboard();
+      const ctrl = event.ctrlKey || event.metaKey;
+      if (ctrl && (event.key === "v" || event.key === "V")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void importFromClipboard();
+        return;
+      }
+
+      if (restoreMode !== "gridScale" || !hasGridSelection) return;
+
+      const arrowKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+      if (arrowKeys.includes(event.key)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const dx = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+        const dy = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+        if (gridScaleType === "region") {
+          adjustGridRegion(dx, dy, event.shiftKey);
+        } else {
+          adjustGridSeed(dx, dy, event.shiftKey);
+        }
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        applyGridRestoreResult();
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [openPage, importFromClipboard]);
+  }, [
+    openPage,
+    importFromClipboard,
+    restoreMode,
+    gridScaleType,
+    hasGridSelection,
+    adjustGridSeed,
+    adjustGridRegion,
+    applyGridRestoreResult,
+  ]);
 
   if (!openPage) return null;
 
@@ -61,7 +102,7 @@ export function PixelRestorePage() {
 
   const handleExport = () => {
     if (!resultImageData) return;
-    void exportRestoredImageToReference(resultImageData);
+    void exportRestoredImageToAssetLibrary(resultImageData);
   };
 
   return (
@@ -77,7 +118,7 @@ export function PixelRestorePage() {
           </button>
           <h1 className="text-sm font-medium text-zinc-200">像素还原工具</h1>
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-[10px] text-zinc-600">Ctrl+V 粘贴图像</span>
+            <span className="text-[10px] text-zinc-600">Ctrl+V 粘贴 · 滚轮缩放 · 中键平移</span>
             <button
               type="button"
               onClick={() => void screenCapture()}
@@ -99,25 +140,12 @@ export function PixelRestorePage() {
 
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_16rem] overflow-hidden">
           <div className="grid min-h-0 grid-rows-2 divide-y divide-zinc-800 border-r border-zinc-800">
-            <PixelRestorePreview
-              imageData={sourceImageData}
-              label="原图"
-            />
-            <PixelRestorePreview
-              imageData={resultImageData}
-              label="结果"
-              pixelated
-            />
+            <GridRestoreSourcePreview />
+            <PixelRestorePreview imageData={resultImageData} label="结果" />
           </div>
 
-          <FixedScaleControls
-            detectedScale={detectedScale}
-            selectedScale={selectedScale}
-            sourceWidth={sourceImageData?.width ?? 0}
-            sourceHeight={sourceImageData?.height ?? 0}
-            error={error}
-            canExport={project !== null && resultImageData !== null}
-            onScaleChange={setScale}
+          <RestoreToolPanel
+            canExport={projectsWorkspacePath !== null && resultImageData !== null}
             onExport={handleExport}
           />
         </div>

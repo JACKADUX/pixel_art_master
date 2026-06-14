@@ -77,7 +77,14 @@ import {
 
 } from "@/application/use-cases/ReplaceProjectFromImage";
 
-import { importImageDataToReferenceLayer } from "@/application/use-cases/ImportToReferenceLayer";
+import { importAssetFromImageData } from "@/application/use-cases/ImportAssetFromImageData";
+import { loadAssetLibrary } from "@/application/use-cases/LoadAssetLibrary";
+import {
+  importAssetColorsToPalette,
+  importAssetGridToNewDrawingLayer,
+  importAssetImageDataToNewReferenceLayer,
+} from "@/application/use-cases/ImportAssetToProject";
+import { imageDataToPixelGrid } from "@/application/use-cases/ClipboardUseCases";
 
 import {
 
@@ -130,16 +137,6 @@ import {
 
 } from "@/application/use-cases/ResolveProjectSavePath";
 
-import {
-
-  addNote,
-
-  deleteNote,
-
-  updateProjectNote,
-
-} from "@/application/use-cases/NoteUseCases";
-
 import { saveProject } from "@/application/use-cases/SaveProject";
 import { resizeCanvas } from "@/application/use-cases/ResizeCanvas";
 
@@ -161,7 +158,10 @@ import {
   extractEditorPreferences,
 } from "@/domain/preferences/EditorPreferences";
 
+import { findAssetById, ROOT_FOLDER_ID } from "@/domain/asset/AssetLibrary";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
+import { loadAssetImageAsImageData } from "@/infrastructure/storage/AssetImageLoader";
+import { toast } from "@/presentation/stores/toastStore";
 
 import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 
@@ -181,8 +181,6 @@ import {
 } from "@/domain/project/Project";
 
 import type { CropRect, LayerPosition } from "@/domain/layer/Layer";
-
-import type { Note } from "@/domain/note/Note";
 
 import type { ProjectSummary } from "@/domain/project/ProjectSummary";
 
@@ -353,8 +351,6 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions {
 
   detectedScale: number;
 
-  rightPanelTab: "palette" | "notes";
-
   layersPanelTab: "drawing" | "reference";
 
   paletteViewMode: "grid" | "oklabMap";
@@ -366,10 +362,6 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions {
   sidebarWidth: number;
 
   splitPaneRatio: number;
-
-  editingNoteId: string | null;
-
-  draftNote: string;
 
   isCapturing: boolean;
 
@@ -586,8 +578,6 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions {
 
   pickColorAt: (point: Point, slot: ColorSlot) => void;
 
-  setRightPanelTab: (tab: "palette" | "notes") => void;
-
   setLayersPanelTab: (tab: "drawing" | "reference") => void;
 
   setPaletteViewMode: (mode: "grid" | "oklabMap") => void;
@@ -605,6 +595,12 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions {
   removeColorsFromPalette: (hexes: string[]) => void;
 
   importReferenceLayerColors: (scope: ReferenceColorImportScope) => Promise<void>;
+
+  importAssetToNewDrawingLayer: (assetId: string) => Promise<void>;
+
+  importAssetToNewReferenceLayer: (assetId: string) => Promise<void>;
+
+  importAssetColorsToPalette: (assetId: string) => Promise<void>;
 
   setActiveLayer: (layerId: string) => void;
 
@@ -636,25 +632,13 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions {
 
   openPixelRestorePage: () => void;
 
-  exportRestoredImageToReference: (imageData: ImageData) => Promise<void>;
+  exportRestoredImageToAssetLibrary: (imageData: ImageData) => Promise<void>;
 
   openCanvasSizeModal: () => void;
 
   closeCanvasSizeModal: () => void;
 
   applyCanvasSize: (width: number, height: number) => void;
-
-  setDraftNote: (content: string) => void;
-
-  saveDraftNote: () => void;
-
-  selectNote: (note: Note) => void;
-
-  updateSelectedNote: () => void;
-
-  removeNote: (noteId: string) => void;
-
-  newNoteDraft: () => void;
 
   getCompositeGrid: () => PixelGrid | null;
 
@@ -751,8 +735,6 @@ export const useAppStore = create<AppState>((set, get) => {
 
   detectedScale: 1,
 
-  rightPanelTab: "palette",
-
   layersPanelTab: "drawing",
 
   paletteViewMode: "grid",
@@ -764,10 +746,6 @@ export const useAppStore = create<AppState>((set, get) => {
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
 
   splitPaneRatio: DEFAULT_SPLIT_PANE_RATIO,
-
-  editingNoteId: null,
-
-  draftNote: "",
 
   isCapturing: false,
 
@@ -859,8 +837,6 @@ export const useAppStore = create<AppState>((set, get) => {
 
         zoom: prefs.zoom,
 
-        rightPanelTab: prefs.rightPanelTab,
-
         paletteViewMode: prefs.paletteViewMode,
 
         colorPickerMode: prefs.colorPickerMode,
@@ -948,10 +924,6 @@ export const useAppStore = create<AppState>((set, get) => {
 
         detectedScale: lastProject.canvas.scaleFactor,
 
-        editingNoteId: null,
-
-        draftNote: "",
-
         projectManagerOpen: false,
 
         deleteConfirmTarget: null,
@@ -1006,10 +978,6 @@ export const useAppStore = create<AppState>((set, get) => {
 
       detectedScale: 1,
 
-      editingNoteId: null,
-
-      draftNote: "",
-
       projectManagerOpen: false,
 
       deleteConfirmTarget: null,
@@ -1059,10 +1027,6 @@ export const useAppStore = create<AppState>((set, get) => {
       manualScaleOverride: null,
 
       detectedScale: project.canvas.scaleFactor,
-
-      editingNoteId: null,
-
-      draftNote: "",
 
       projectManagerOpen: false,
 
@@ -2669,8 +2633,6 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
-
   setLayersPanelTab: (tab) => set({ layersPanelTab: tab }),
 
   setPaletteViewMode: (mode) => set({ paletteViewMode: mode }),
@@ -2782,6 +2744,115 @@ export const useAppStore = create<AppState>((set, get) => {
 
     set({ project: nextProject });
 
+  },
+
+  importAssetToNewDrawingLayer: async (assetId) => {
+    const { project, projectsWorkspacePath, assetLibrary } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    if (!projectsWorkspacePath || !assetLibrary) {
+      toast.error("无法访问资产库");
+      return;
+    }
+    const asset = findAssetById(assetLibrary, assetId);
+    if (!asset) {
+      toast.error("资产不存在");
+      return;
+    }
+    const imageData = await loadAssetImageAsImageData(
+      projectsWorkspacePath,
+      asset.imageFile,
+    );
+    if (!imageData) {
+      toast.error("无法加载资产图像");
+      return;
+    }
+    try {
+      const grid = imageDataToPixelGrid(imageData);
+      const updated = importAssetGridToNewDrawingLayer(project, grid, asset.title);
+      set({ project: updated });
+      toast.info("已导入到新图层");
+    } catch {
+      toast.error("导入到图层失败");
+    }
+  },
+
+  importAssetToNewReferenceLayer: async (assetId) => {
+    const { project, projectsWorkspacePath, assetLibrary } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    if (!projectsWorkspacePath || !assetLibrary) {
+      toast.error("无法访问资产库");
+      return;
+    }
+    const asset = findAssetById(assetLibrary, assetId);
+    if (!asset) {
+      toast.error("资产不存在");
+      return;
+    }
+    const imageData = await loadAssetImageAsImageData(
+      projectsWorkspacePath,
+      asset.imageFile,
+    );
+    if (!imageData) {
+      toast.error("无法加载资产图像");
+      return;
+    }
+    try {
+      const result = importAssetImageDataToNewReferenceLayer(
+        project,
+        imageData,
+        asset.title,
+      );
+      set({
+        project: result.project,
+        cropEditorLayerId: result.openCropEditor ? result.layerId : null,
+      });
+      toast.info("已导入到参考图层");
+    } catch {
+      toast.error("导入到参考图层失败");
+    }
+  },
+
+  importAssetColorsToPalette: async (assetId) => {
+    const { project, projectsWorkspacePath, assetLibrary } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    if (!projectsWorkspacePath || !assetLibrary) {
+      toast.error("无法访问资产库");
+      return;
+    }
+    const asset = findAssetById(assetLibrary, assetId);
+    if (!asset) {
+      toast.error("资产不存在");
+      return;
+    }
+    const imageData = await loadAssetImageAsImageData(
+      projectsWorkspacePath,
+      asset.imageFile,
+    );
+    if (!imageData) {
+      toast.error("无法加载资产图像");
+      return;
+    }
+    try {
+      const grid = imageDataToPixelGrid(imageData);
+      const { project: updated, addedCount } = importAssetColorsToPalette(project, grid);
+      set({ project: updated });
+      if (addedCount > 0) {
+        toast.info(`已导入 ${addedCount} 个颜色到色板`);
+      } else {
+        toast.info("色板中已包含这些颜色");
+      }
+    } catch {
+      toast.error("导入颜色失败");
+    }
   },
 
 
@@ -2909,7 +2980,17 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  openCropEditor: (layerId) => set({ cropEditorLayerId: layerId }),
+  openCropEditor: (layerId) => {
+    const { project } = get();
+    if (!project) {
+      set({ cropEditorLayerId: layerId });
+      return;
+    }
+    set({
+      cropEditorLayerId: layerId,
+      project: setActiveReferenceLayer(project, layerId),
+    });
+  },
 
 
 
@@ -2990,7 +3071,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
         set({
 
-          project: result.project,
+          project: setActiveReferenceLayer(result.project, result.layerId),
 
           cropEditorLayerId: result.openCropEditor ? result.layerId : null,
 
@@ -3019,23 +3100,42 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  exportRestoredImageToReference: async (imageData) => {
-    const { project } = get();
-    if (!project) return;
+  exportRestoredImageToAssetLibrary: async (imageData) => {
+    const path = get().projectsWorkspacePath ?? projectsWorkspaceStore.getPath();
+    if (!path) {
+      toast.info("请先选择项目文件夹");
+      return;
+    }
+    const accessible = await ensureWorkspaceAccess(projectsWorkspaceStore);
+    if (!accessible) {
+      toast.error("无法访问项目目录，请重新授权");
+      return;
+    }
+
+    let library = get().assetLibrary;
+    if (!library) {
+      library = await loadAssetLibrary(assetLibraryRepository, accessible);
+    }
 
     try {
-      const result = importImageDataToReferenceLayer(
-        project,
+      const result = await importAssetFromImageData(
+        assetLibraryRepository,
+        accessible,
+        library,
+        ROOT_FOLDER_ID,
         imageData,
         `像素还原 ${new Date().toLocaleString()}`,
       );
       set({
-        project: result.project,
-        cropEditorLayerId: result.openCropEditor ? result.layerId : null,
+        assetLibrary: result.library,
+        selectedAssetId: result.asset.id,
+        selectedAssetFolderId: ROOT_FOLDER_ID,
+        assetLibraryDrawerExpanded: true,
       });
+      toast.info("已导出到资产库");
       usePixelRestoreStore.getState().closePage();
     } catch {
-      set({ captureError: "导出到参考层失败，请重试" });
+      toast.error("导出到资产库失败，请重试");
     }
   },
 
@@ -3067,68 +3167,6 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  setDraftNote: (content) => set({ draftNote: content }),
-
-
-
-  saveDraftNote: () => {
-
-    const { project, draftNote, editingNoteId } = get();
-
-    if (!project || !draftNote.trim()) return;
-
-    let updated: Project;
-
-    if (editingNoteId) {
-
-      updated = updateProjectNote(project, editingNoteId, draftNote);
-
-    } else {
-
-      updated = addNote(project, draftNote);
-
-    }
-
-    set({ project: updated, draftNote: "", editingNoteId: null });
-
-  },
-
-
-
-  selectNote: (note) =>
-
-    set({ editingNoteId: note.id, draftNote: note.content, rightPanelTab: "notes" }),
-
-
-
-  updateSelectedNote: () => get().saveDraftNote(),
-
-
-
-  removeNote: (noteId) => {
-
-    const { project, editingNoteId } = get();
-
-    if (!project) return;
-
-    set({
-
-      project: deleteNote(project, noteId),
-
-      editingNoteId: editingNoteId === noteId ? null : editingNoteId,
-
-      draftNote: editingNoteId === noteId ? "" : get().draftNote,
-
-    });
-
-  },
-
-
-
-  newNoteDraft: () => set({ editingNoteId: null, draftNote: "" }),
-
-
-
   getCompositeGrid: () => {
 
     const { project } = get();
@@ -3147,7 +3185,11 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!project) return null;
 
-    return getActiveLayerGridFromProject(project);
+    try {
+      return getActiveLayerGridFromProject(project);
+    } catch {
+      return null;
+    }
 
   },
 
@@ -3330,10 +3372,6 @@ export const useAppStore = create<AppState>((set, get) => {
         manualScaleOverride: null,
 
         detectedScale: project.canvas.scaleFactor,
-
-        editingNoteId: null,
-
-        draftNote: "",
 
         projectManagerOpen: false,
 

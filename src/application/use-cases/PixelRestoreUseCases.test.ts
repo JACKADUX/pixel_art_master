@@ -65,6 +65,17 @@ describe("PixelRestoreUseCases", () => {
     expect(processor.downscale).toHaveBeenCalledWith(imageData, 4);
   });
 
+  it("applies scale 1 without changing dimensions", () => {
+    const imageData = createImageData(128, 96);
+    const processor = createMockProcessor(4);
+    const result = applyFixedScaleRestore(processor, imageData, 1);
+    expect(result.appliedScale).toBe(1);
+    expect(result.outputSize).toEqual({ width: 128, height: 96 });
+    expect(result.resultImageData.width).toBe(128);
+    expect(result.resultImageData.height).toBe(96);
+    expect(processor.downscale).toHaveBeenCalledWith(imageData, 1);
+  });
+
   it("throws when scale does not divide source dimensions", () => {
     const imageData = createImageData(128, 96);
     const processor = createMockProcessor(4);

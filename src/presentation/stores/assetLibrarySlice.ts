@@ -6,6 +6,7 @@ import {
   createAssetCategory,
   createAssetFolder,
   createAssetTag,
+  deleteAssetFolderTree,
   renameAssetFolderUseCase,
 } from "@/application/use-cases/AssetFolderUseCases";
 import {
@@ -18,8 +19,22 @@ import { importAssetFromClipboard } from "@/application/use-cases/ImportAssetFro
 import { importAssetFromFileDialog } from "@/application/use-cases/ImportAssetFromFile";
 import { loadAssetLibrary } from "@/application/use-cases/LoadAssetLibrary";
 import { normalizeCaptureRect } from "@/domain/asset/AssetCaptureRect";
+import type {
+  AssetCapturePhase,
+  AssetCaptureSource,
+} from "@/domain/asset/AssetCaptureRect";
+import {
+  adjustCaptureRectBottomRight,
+  adjustCaptureRectTopLeft,
+} from "@/domain/asset/AssetCaptureRect";
 import {
   ROOT_FOLDER_ID,
+  countAssetsInFolders,
+  findAssetById,
+  findFolderById,
+  getFolderPathLabel,
+  listDescendantFolderIds,
+  type AssetFolderDeletionDisposition,
   type AssetLibraryIndex,
 } from "@/domain/asset/AssetLibrary";
 import type { SelectionRect } from "@/domain/selection/SelectionRect";
@@ -27,6 +42,27 @@ import type { Point } from "@/domain/tool/ITool";
 import { toast } from "@/presentation/stores/toastStore";
 
 import { DEFAULT_ASSET_DRAWER_HEIGHT } from "@/domain/preferences/EditorPreferences";
+
+export interface AssetFolderDeleteTarget {
+  folderId: string;
+  folderName: string;
+  assetCount: number;
+  childFolderCount: number;
+}
+
+export interface AssetDeleteTarget {
+  assetId: string;
+  title: string;
+}
+
+export interface AssetMoveTarget {
+  assetId: string;
+  title: string;
+  fromFolderId: string;
+  toFolderId: string;
+  fromFolderLabel: string;
+  toFolderLabel: string;
+}
 
 export interface AssetLibrarySliceState {
   assetLibraryModalOpen: boolean;
@@ -36,10 +72,15 @@ export interface AssetLibrarySliceState {
   assetLibraryLoading: boolean;
   selectedAssetFolderId: string;
   selectedAssetId: string | null;
-  assetCaptureMode: boolean;
+  assetCapturePhase: AssetCapturePhase;
   assetCaptureFolderId: string;
   assetCaptureStart: Point | null;
-  assetCapturePreviewRect: SelectionRect | null;
+  assetCaptureRect: SelectionRect | null;
+  assetCaptureSource: AssetCaptureSource;
+  deleteAssetFolderTarget: AssetFolderDeleteTarget | null;
+  deleteAssetTarget: AssetDeleteTarget | null;
+  moveAssetTarget: AssetMoveTarget | null;
+  assetImageViewerAssetId: string | null;
 }
 
 export interface AssetLibrarySliceActions {
@@ -58,7 +99,14 @@ export interface AssetLibrarySliceActions {
   cancelAssetCanvasCapture: () => void;
   assetCapturePointerDown: (point: Point) => void;
   assetCapturePointerMove: (point: Point) => void;
-  assetCapturePointerUp: (point: Point) => Promise<void>;
+  assetCapturePointerUp: (point: Point) => void;
+  adjustAssetCaptureRect: (
+    dx: number,
+    dy: number,
+    corner: "topLeft" | "bottomRight",
+  ) => void;
+  setAssetCaptureSource: (source: AssetCaptureSource) => void;
+  confirmAssetCanvasCapture: () => Promise<void>;
   updateAssetRecordAction: (
     assetId: string,
     updates: {
@@ -66,11 +114,23 @@ export interface AssetLibrarySliceActions {
       notes?: string;
       categoryId?: string | null;
       tagIds?: string[];
+      folderId?: string;
     },
   ) => Promise<void>;
   deleteAssetRecordAction: (assetId: string) => Promise<void>;
+  requestDeleteAssetRecord: (assetId: string) => void;
+  cancelDeleteAssetRecord: () => void;
+  confirmDeleteAssetRecord: () => Promise<void>;
+  requestMoveAssetRecord: (assetId: string, targetFolderId: string) => void;
+  cancelMoveAssetRecord: () => void;
+  confirmMoveAssetRecord: () => Promise<void>;
   createAssetCategoryAction: (name: string) => Promise<void>;
   createAssetTagAction: (name: string) => Promise<void>;
+  requestDeleteAssetFolder: (folderId: string) => void;
+  cancelDeleteAssetFolder: () => void;
+  confirmDeleteAssetFolder: (disposition: AssetFolderDeletionDisposition) => Promise<void>;
+  openAssetImageViewer: (assetId: string) => void;
+  closeAssetImageViewer: () => void;
 }
 
 type AssetLibrarySet = (
@@ -82,6 +142,8 @@ type AssetLibrarySet = (
 type AssetLibraryGet = () => AssetLibrarySliceState & {
   projectsWorkspacePath: string | null;
   getCompositeGrid: () => import("@/domain/canvas/PixelGrid").PixelGrid | null;
+  getActiveLayerGrid: () => import("@/domain/canvas/PixelGrid").PixelGrid | null;
+  deleteAssetRecordAction: (assetId: string) => Promise<void>;
 };
 
 export function createAssetLibraryInitialState(): AssetLibrarySliceState {
@@ -93,10 +155,15 @@ export function createAssetLibraryInitialState(): AssetLibrarySliceState {
     assetLibraryLoading: false,
     selectedAssetFolderId: ROOT_FOLDER_ID,
     selectedAssetId: null,
-    assetCaptureMode: false,
+    assetCapturePhase: "idle",
     assetCaptureFolderId: ROOT_FOLDER_ID,
     assetCaptureStart: null,
-    assetCapturePreviewRect: null,
+    assetCaptureRect: null,
+    assetCaptureSource: "activeLayer",
+    deleteAssetFolderTarget: null,
+    deleteAssetTarget: null,
+    moveAssetTarget: null,
+    assetImageViewerAssetId: null,
   };
 }
 
@@ -252,25 +319,27 @@ export function createAssetLibrarySlice(
       const folderId = get().selectedAssetFolderId;
       set({
         assetLibraryModalOpen: false,
-        assetCaptureMode: true,
+        assetCapturePhase: "dragging",
         assetCaptureFolderId: folderId,
         assetCaptureStart: null,
-        assetCapturePreviewRect: null,
+        assetCaptureRect: null,
+        assetCaptureSource: "activeLayer",
       });
       toast.info("在画布上拖拽框选区域，Esc 取消");
     },
 
     cancelAssetCanvasCapture: () =>
       set({
-        assetCaptureMode: false,
+        assetCapturePhase: "idle",
         assetCaptureStart: null,
-        assetCapturePreviewRect: null,
+        assetCaptureRect: null,
       }),
 
     assetCapturePointerDown: (point) => {
+      if (get().assetCapturePhase !== "dragging") return;
       set({
         assetCaptureStart: point,
-        assetCapturePreviewRect: {
+        assetCaptureRect: {
           x: point.x,
           y: point.y,
           width: 1,
@@ -281,9 +350,9 @@ export function createAssetLibrarySlice(
 
     assetCapturePointerMove: (point) => {
       const start = get().assetCaptureStart;
-      if (!start) return;
+      if (!start || get().assetCapturePhase !== "dragging") return;
       set({
-        assetCapturePreviewRect: normalizeCaptureRect(
+        assetCaptureRect: normalizeCaptureRect(
           start.x,
           start.y,
           point.x,
@@ -292,23 +361,69 @@ export function createAssetLibrarySlice(
       });
     },
 
-    assetCapturePointerUp: async (point) => {
+    assetCapturePointerUp: (point) => {
       const start = get().assetCaptureStart;
-      if (!start) return;
+      if (!start || get().assetCapturePhase !== "dragging") return;
       const rect = normalizeCaptureRect(start.x, start.y, point.x, point.y);
+      if (rect.width < 1 || rect.height < 1) {
+        set({
+          assetCapturePhase: "idle",
+          assetCaptureStart: null,
+          assetCaptureRect: null,
+        });
+        return;
+      }
       set({
-        assetCaptureMode: false,
+        assetCapturePhase: "adjusting",
         assetCaptureStart: null,
-        assetCapturePreviewRect: null,
+        assetCaptureRect: rect,
       });
+    },
+
+    adjustAssetCaptureRect: (dx, dy, corner) => {
+      const { assetCapturePhase, assetCaptureRect } = get();
+      if (assetCapturePhase !== "adjusting" || !assetCaptureRect) return;
+
+      const composite = get().getCompositeGrid();
+      if (!composite) return;
+
+      const next =
+        corner === "topLeft"
+          ? adjustCaptureRectTopLeft(
+              assetCaptureRect,
+              dx,
+              dy,
+              composite.width,
+              composite.height,
+            )
+          : adjustCaptureRectBottomRight(
+              assetCaptureRect,
+              dx,
+              dy,
+              composite.width,
+              composite.height,
+            );
+      set({ assetCaptureRect: next });
+    },
+
+    setAssetCaptureSource: (source) => set({ assetCaptureSource: source }),
+
+    confirmAssetCanvasCapture: async () => {
+      const { assetCapturePhase, assetCaptureRect, assetCaptureSource } = get();
+      if (assetCapturePhase !== "adjusting" || !assetCaptureRect) return;
+
+      const grid =
+        assetCaptureSource === "composite"
+          ? get().getCompositeGrid()
+          : get().getActiveLayerGrid();
+      if (!grid) {
+        toast.error("无法读取画布图层");
+        return;
+      }
 
       const workspacePath = await resolveWorkspace();
       let library = get().assetLibrary;
-      const composite = get().getCompositeGrid();
-      if (!workspacePath || !composite) {
-        toast.error("无法保存截图");
-        return;
-      }
+      if (!workspacePath) return;
       if (!library) {
         library = await loadAssetLibrary(deps.assetRepository, workspacePath);
       }
@@ -319,8 +434,8 @@ export function createAssetLibrarySlice(
           workspacePath,
           library,
           get().assetCaptureFolderId,
-          composite,
-          rect,
+          grid,
+          assetCaptureRect,
         );
         if (!result) {
           toast.error("框选区域无效");
@@ -331,6 +446,9 @@ export function createAssetLibrarySlice(
           selectedAssetId: result.asset.id,
           selectedAssetFolderId: get().assetCaptureFolderId,
           assetLibraryDrawerExpanded: true,
+          assetCapturePhase: "idle",
+          assetCaptureStart: null,
+          assetCaptureRect: null,
         });
         toast.info("已保存到资产库");
       } catch {
@@ -371,10 +489,83 @@ export function createAssetLibrarySlice(
           assetLibrary: updated,
           selectedAssetId:
             get().selectedAssetId === assetId ? null : get().selectedAssetId,
+          deleteAssetTarget: null,
         });
         toast.info("已删除资产");
       } catch {
         toast.error("删除资产失败");
+      }
+    },
+
+    requestDeleteAssetRecord: (assetId) => {
+      const library = get().assetLibrary;
+      if (!library) return;
+      const asset = findAssetById(library, assetId);
+      if (!asset) return;
+      set({
+        deleteAssetTarget: { assetId, title: asset.title },
+      });
+    },
+
+    cancelDeleteAssetRecord: () => set({ deleteAssetTarget: null }),
+
+    confirmDeleteAssetRecord: async () => {
+      const target = get().deleteAssetTarget;
+      if (!target) return;
+      await get().deleteAssetRecordAction(target.assetId);
+    },
+
+    requestMoveAssetRecord: (assetId, targetFolderId) => {
+      const library = get().assetLibrary;
+      if (!library) return;
+      const asset = findAssetById(library, assetId);
+      if (!asset) return;
+      if (asset.folderId === targetFolderId) return;
+
+      const formatFolderLabel = (folderId: string) =>
+        folderId === ROOT_FOLDER_ID
+          ? "根目录"
+          : getFolderPathLabel(library, folderId);
+
+      set({
+        moveAssetTarget: {
+          assetId,
+          title: asset.title,
+          fromFolderId: asset.folderId,
+          toFolderId: targetFolderId,
+          fromFolderLabel: formatFolderLabel(asset.folderId),
+          toFolderLabel: formatFolderLabel(targetFolderId),
+        },
+      });
+    },
+
+    cancelMoveAssetRecord: () => set({ moveAssetTarget: null }),
+
+    confirmMoveAssetRecord: async () => {
+      const target = get().moveAssetTarget;
+      if (!target) return;
+
+      const workspacePath = await resolveWorkspace();
+      const library = get().assetLibrary;
+      if (!workspacePath || !library) return;
+
+      try {
+        const updated = await updateAssetRecord(
+          deps.assetRepository,
+          workspacePath,
+          library,
+          target.assetId,
+          { folderId: target.toFolderId },
+        );
+        set({
+          assetLibrary: updated,
+          moveAssetTarget: null,
+          selectedAssetFolderId: target.toFolderId,
+        });
+        toast.info("资产已移动");
+      } catch {
+        toast.error("移动资产失败");
+        set({ moveAssetTarget: null });
       }
     },
 
@@ -436,5 +627,71 @@ export function createAssetLibrarySlice(
         toast.error("创建标签失败");
       }
     },
+
+    requestDeleteAssetFolder: (folderId) => {
+      const library = get().assetLibrary;
+      if (!library) return;
+      const folder = findFolderById(library, folderId);
+      if (!folder) return;
+      const folderIds = listDescendantFolderIds(library, folderId);
+      set({
+        deleteAssetFolderTarget: {
+          folderId,
+          folderName: folder.name,
+          assetCount: countAssetsInFolders(library, folderIds),
+          childFolderCount: folderIds.length - 1,
+        },
+      });
+    },
+
+    cancelDeleteAssetFolder: () => set({ deleteAssetFolderTarget: null }),
+
+    confirmDeleteAssetFolder: async (disposition) => {
+      const target = get().deleteAssetFolderTarget;
+      const library = get().assetLibrary;
+      if (!target || !library) return;
+
+      const workspacePath = await resolveWorkspace();
+      if (!workspacePath) return;
+
+      try {
+        const updated = await deleteAssetFolderTree(
+          deps.assetRepository,
+          workspacePath,
+          library,
+          target.folderId,
+          disposition,
+        );
+        const selectedFolderId = get().selectedAssetFolderId;
+        const folderIds = listDescendantFolderIds(library, target.folderId);
+        const nextFolderId = folderIds.includes(selectedFolderId)
+          ? ROOT_FOLDER_ID
+          : selectedFolderId;
+        const selectedAssetId =
+          disposition === "deleteAssets" &&
+          get().selectedAssetId &&
+          library.assets.some(
+            (a) =>
+              a.id === get().selectedAssetId &&
+              folderIds.includes(a.folderId),
+          )
+            ? null
+            : get().selectedAssetId;
+
+        set({
+          assetLibrary: updated,
+          deleteAssetFolderTarget: null,
+          selectedAssetFolderId: nextFolderId,
+          selectedAssetId,
+        });
+        toast.info("文件夹已删除");
+      } catch {
+        toast.error("删除文件夹失败");
+      }
+    },
+
+    openAssetImageViewer: (assetId) => set({ assetImageViewerAssetId: assetId }),
+
+    closeAssetImageViewer: () => set({ assetImageViewerAssetId: null }),
   };
 }

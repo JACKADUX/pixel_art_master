@@ -8,6 +8,8 @@ import { useAppStore } from "../stores/appStore";
 
 import { EyeIcon, EyeOffIcon, TrashIcon } from "./LayerPanelIcons";
 
+const DRAG_THRESHOLD_PX = 4;
+
 function computeDropDisplayIndex(
   clientY: number,
   listElement: HTMLElement,
@@ -43,6 +45,9 @@ export function ReferenceLayersPanel() {
   const listRef = useRef<HTMLUListElement>(null);
   const draggingRef = useRef<number | null>(null);
   const dropDisplayIndexRef = useRef<number | null>(null);
+  const pendingDragRef = useRef<{ displayIndex: number; startX: number; startY: number } | null>(
+    null,
+  );
 
   const handleStartRename = (layerId: string, currentName: string) => {
     setEditingId(layerId);
@@ -68,6 +73,7 @@ export function ReferenceLayersPanel() {
   );
 
   const stopDragging = useCallback(() => {
+    pendingDragRef.current = null;
     draggingRef.current = null;
     dropDisplayIndexRef.current = null;
     setIsDragging(false);
@@ -83,25 +89,35 @@ export function ReferenceLayersPanel() {
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    draggingRef.current = displayIndex;
-    dropDisplayIndexRef.current = displayIndex;
-    setIsDragging(true);
-    setDraggingDisplayIndex(displayIndex);
-    setDropDisplayIndex(displayIndex);
+    pendingDragRef.current = { displayIndex, startX: e.clientX, startY: e.clientY };
     e.currentTarget.setPointerCapture(e.pointerId);
     document.body.style.userSelect = "none";
-    document.body.style.cursor = "grabbing";
   };
 
   useEffect(() => {
-    if (!isDragging || !project) return;
+    if (!project) return;
 
     const referenceLayers = project.canvas.layers.filter((layer) => layer.type === "reference");
     const referenceCount = referenceLayers.length;
     const reversedLayers = [...referenceLayers].reverse();
 
     const onPointerMove = (e: PointerEvent) => {
-      if (!listRef.current || draggingRef.current === null) return;
+      const pending = pendingDragRef.current;
+      if (pending && !isDragging) {
+        const dx = e.clientX - pending.startX;
+        const dy = e.clientY - pending.startY;
+        if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+
+        draggingRef.current = pending.displayIndex;
+        dropDisplayIndexRef.current = pending.displayIndex;
+        setIsDragging(true);
+        setDraggingDisplayIndex(pending.displayIndex);
+        setDropDisplayIndex(pending.displayIndex);
+        document.body.style.cursor = "grabbing";
+        pendingDragRef.current = null;
+      }
+
+      if (!isDragging || !listRef.current || draggingRef.current === null) return;
       const draggedLayer = reversedLayers[draggingRef.current];
       if (!draggedLayer) return;
       const rawIndex = computeDropDisplayIndex(e.clientY, listRef.current);
@@ -111,6 +127,14 @@ export function ReferenceLayersPanel() {
     };
 
     const onPointerUp = () => {
+      if (pendingDragRef.current) {
+        pendingDragRef.current = null;
+        document.body.style.userSelect = "";
+        return;
+      }
+
+      if (!isDragging) return;
+
       const from = draggingRef.current;
       const to = dropDisplayIndexRef.current;
       if (from !== null && to !== null) {
@@ -165,7 +189,16 @@ export function ReferenceLayersPanel() {
                       <div className="mb-1 h-0.5 rounded-full bg-blue-500" aria-hidden />
                     )}
                   <div
-                    className={`flex w-full min-w-0 items-center gap-1.5 rounded border px-2 py-1.5 transition ${
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setActiveReferenceLayer(layer.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setActiveReferenceLayer(layer.id);
+                      }
+                    }}
+                    className={`flex w-full min-w-0 cursor-pointer items-center gap-1.5 rounded border px-2 py-1.5 transition ${
                       isBeingDragged ? "opacity-50" : ""
                     } ${
                       isActive
@@ -185,17 +218,21 @@ export function ReferenceLayersPanel() {
                     <button
                       type="button"
                       title={layer.visible ? "隐藏图层" : "显示图层"}
-                      onClick={() => toggleLayerVisibility(layer.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleLayerVisibility(layer.id);
+                      }}
                       className="shrink-0 text-zinc-400 hover:text-zinc-200"
                     >
                       {layer.visible ? <EyeIcon /> : <EyeOffIcon />}
                     </button>
 
-                    <button
-                      type="button"
+                    <div
                       className="min-w-0 flex-1 text-left"
-                      onClick={() => setActiveReferenceLayer(layer.id)}
-                      onDoubleClick={() => handleStartRename(layer.id, layer.name)}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        handleStartRename(layer.id, layer.name);
+                      }}
                     >
                       {editingId === layer.id ? (
                         <input
@@ -216,9 +253,12 @@ export function ReferenceLayersPanel() {
                           {layer.name}
                         </span>
                       )}
-                    </button>
+                    </div>
 
-                    <div className="flex shrink-0 flex-col gap-0.5">
+                    <div
+                      className="flex shrink-0 flex-col gap-0.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {!layer.imageData ? (
                         <button
                           type="button"
@@ -261,7 +301,10 @@ export function ReferenceLayersPanel() {
                       <button
                         type="button"
                         title="删除图层"
-                        onClick={() => removeLayer(layer.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeLayer(layer.id);
+                        }}
                         className="shrink-0 text-zinc-500 hover:text-red-400"
                       >
                         <TrashIcon />

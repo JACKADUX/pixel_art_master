@@ -1,7 +1,13 @@
-import { ROOT_FOLDER_ID, type AssetLibraryIndex } from "@/domain/asset/AssetLibrary";
+import { useMemo, useState } from "react";
+import { findAssetById, type AssetLibraryIndex } from "@/domain/asset/AssetLibrary";
+import { ContextMenu } from "../ContextMenu";
+import { buildAssetContextMenuItems } from "../../config/assetContextMenu";
+import { useAppStore } from "../../stores/appStore";
 import { AssetDetailPanel } from "./AssetDetailPanel";
 import { AssetFolderTree } from "./AssetFolderTree";
 import { AssetGrid } from "./AssetGrid";
+import { AssetImageViewerModal } from "./AssetImageViewerModal";
+import { useAssetPointerDrag } from "../../hooks/useAssetPointerDrag";
 
 interface AssetLibraryContentProps {
   library: AssetLibraryIndex;
@@ -12,6 +18,7 @@ interface AssetLibraryContentProps {
   onSelectAsset: (assetId: string) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folderId: string, name: string) => void;
+  onRequestDeleteFolder: (folderId: string) => void;
   onImportClipboard: () => void;
   onImportFile: () => void;
   onStartCanvasCapture: () => void;
@@ -25,6 +32,7 @@ interface AssetLibraryContentProps {
     },
   ) => void;
   onDeleteAsset: (assetId: string) => void;
+  onRequestMoveAsset: (assetId: string, targetFolderId: string) => void;
   onCreateCategory: (name: string) => void;
   onCreateTag: (name: string) => void;
 }
@@ -38,65 +46,134 @@ export function AssetLibraryContent({
   onSelectAsset,
   onCreateFolder,
   onRenameFolder,
+  onRequestDeleteFolder,
   onImportClipboard,
   onImportFile,
   onStartCanvasCapture,
   onUpdateAsset,
   onDeleteAsset,
+  onRequestMoveAsset,
   onCreateCategory,
   onCreateTag,
 }: AssetLibraryContentProps) {
+  const assetImageViewerAssetId = useAppStore((s) => s.assetImageViewerAssetId);
+  const openAssetImageViewer = useAppStore((s) => s.openAssetImageViewer);
+  const closeAssetImageViewer = useAppStore((s) => s.closeAssetImageViewer);
+  const hasProject = useAppStore((s) => s.project !== null);
+  const importAssetToNewDrawingLayer = useAppStore((s) => s.importAssetToNewDrawingLayer);
+  const importAssetToNewReferenceLayer = useAppStore((s) => s.importAssetToNewReferenceLayer);
+  const importAssetColorsToPalette = useAppStore((s) => s.importAssetColorsToPalette);
+
+  const [contextMenu, setContextMenu] = useState<{
+    assetId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  const contextMenuAsset = contextMenu
+    ? findAssetById(library, contextMenu.assetId)
+    : null;
+
+  const contextMenuItems = useMemo(() => {
+    if (!contextMenuAsset) return [];
+    return buildAssetContextMenuItems(contextMenuAsset, hasProject, {
+      onImportDrawingLayer: (assetId) => void importAssetToNewDrawingLayer(assetId),
+      onImportReferenceLayer: (assetId) => void importAssetToNewReferenceLayer(assetId),
+      onImportColors: (assetId) => void importAssetColorsToPalette(assetId),
+    });
+  }, [
+    contextMenuAsset,
+    hasProject,
+    importAssetToNewDrawingLayer,
+    importAssetToNewReferenceLayer,
+    importAssetColorsToPalette,
+  ]);
+
+  const openAssetContextMenu = (assetId: string, clientX: number, clientY: number) => {
+    setContextMenu({ assetId, x: clientX, y: clientY });
+  };
+
+  const {
+    draggingAssetId,
+    hoverFolderId,
+    beginAssetPointerDrag,
+    consumeSuppressClick,
+  } = useAssetPointerDrag(onRequestMoveAsset);
+
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden">
-      <div className="flex w-40 shrink-0 flex-col border-r border-zinc-700">
+    <>
+    <div className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div className="flex h-full min-h-0 w-40 shrink-0 flex-col overflow-hidden border-r border-zinc-700">
         <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5 text-[10px] text-zinc-500">
           文件夹
         </div>
+        <div className="min-h-0 flex-1 overflow-hidden">
         <AssetFolderTree
           library={library}
           selectedFolderId={selectedFolderId}
+          hoverFolderId={hoverFolderId}
           onSelectFolder={onSelectFolder}
           onCreateFolder={onCreateFolder}
           onRenameFolder={onRenameFolder}
+          onRequestDeleteFolder={onRequestDeleteFolder}
         />
-        <button
-          type="button"
-          onClick={() => onCreateFolder(null)}
-          className="shrink-0 border-t border-zinc-700 px-2 py-1.5 text-[10px] text-blue-400 hover:bg-zinc-800"
-        >
-          + 根级文件夹
-        </button>
+        </div>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col border-r border-zinc-700">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <AssetGrid
           library={library}
           workspacePath={workspacePath}
           selectedFolderId={selectedFolderId}
           selectedAssetId={selectedAssetId}
+          draggingAssetId={draggingAssetId}
           onSelectAsset={onSelectAsset}
+          onRequestDeleteAsset={onDeleteAsset}
+          onOpenAssetViewer={openAssetImageViewer}
+          onOpenAssetContextMenu={openAssetContextMenu}
+          onBeginAssetPointerDrag={beginAssetPointerDrag}
+          onConsumeSuppressClick={consumeSuppressClick}
           onImportClipboard={onImportClipboard}
           onImportFile={onImportFile}
           onStartCanvasCapture={onStartCanvasCapture}
         />
       </div>
 
-      <div className="flex w-56 shrink-0 flex-col min-h-0">
+      <div className="flex h-full min-h-0 w-56 shrink-0 flex-col overflow-hidden border-l border-zinc-700">
         <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5 text-[10px] text-zinc-500">
           详情
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         <AssetDetailPanel
           library={library}
           workspacePath={workspacePath}
           selectedAssetId={selectedAssetId}
           onUpdateAsset={onUpdateAsset}
           onDeleteAsset={onDeleteAsset}
+          onOpenAssetViewer={openAssetImageViewer}
+          onOpenAssetContextMenu={openAssetContextMenu}
           onCreateCategory={onCreateCategory}
           onCreateTag={onCreateTag}
         />
+        </div>
       </div>
     </div>
+    <AssetImageViewerModal
+      open={assetImageViewerAssetId !== null}
+      workspacePath={workspacePath}
+      library={library}
+      assetId={assetImageViewerAssetId}
+      onClose={closeAssetImageViewer}
+    />
+    {contextMenu && contextMenuItems.length > 0 && (
+      <ContextMenu
+        position={{ x: contextMenu.x, y: contextMenu.y }}
+        items={contextMenuItems}
+        onClose={() => setContextMenu(null)}
+      />
+    )}
+    </>
   );
 }
 
-export { ROOT_FOLDER_ID };
+export { ROOT_FOLDER_ID } from "@/domain/asset/AssetLibrary";

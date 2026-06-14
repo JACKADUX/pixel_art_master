@@ -3,9 +3,9 @@ import { createPortal } from "react-dom";
 import type { CropRect } from "@/domain/layer/Layer";
 import { clampCropRect, fullImageCrop } from "@/domain/layer/ReferenceLayerOperations";
 import {
+  computeFitContainerStageSize,
   computeInitialScrollPosition,
   computeScrollCompensation,
-  computeWorkspaceStageSize,
   isSameWorkspaceStageLayout,
   WORKSPACE_CONTAINER_FALLBACK_HEIGHT,
   WORKSPACE_CONTAINER_FALLBACK_WIDTH,
@@ -23,7 +23,10 @@ import {
 } from "@/domain/viewport/ViewportPan";
 import { getReferenceImage } from "@/infrastructure/canvas/ReferenceImageCache";
 import { renderCanvasGrid } from "@/infrastructure/canvas/CanvasGridRenderer";
-import { OklabDisplayGlRenderer } from "@/infrastructure/canvas/OklabDisplayGlRenderer";
+import {
+  blitWithDisplayMode,
+  OklabDisplayGlRenderer,
+} from "@/infrastructure/canvas/OklabDisplayGlRenderer";
 import { useAppStore } from "../stores/appStore";
 
 const MIN_CROP = 1;
@@ -132,6 +135,7 @@ export function ReferenceCropModal() {
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const rendererRef = useRef<OklabDisplayGlRenderer | null>(null);
+  const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const zoomRef = useRef(1);
   const isPanningRef = useRef(false);
   const lastPanRef = useRef({ x: 0, y: 0 });
@@ -146,6 +150,13 @@ export function ReferenceCropModal() {
     (l) => l.id === cropEditorLayerId && l.type === "reference",
   );
   const refLayer = layer?.type === "reference" ? layer : null;
+
+  const defaultCrop = useMemo((): CropRect | null => {
+    if (!refLayer?.imageSize) return null;
+    return snapCropRect(
+      clampCropRect(refLayer.crop ?? fullImageCrop(refLayer.imageSize), refLayer.imageSize),
+    );
+  }, [refLayer?.id, refLayer?.imageData, refLayer?.imageSize, refLayer?.crop]);
 
   const [crop, setCrop] = useState<CropRect | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -170,7 +181,7 @@ export function ReferenceCropModal() {
 
   const stageLayout = useMemo(() => {
     if (!imageSize || displayWidth <= 0 || displayHeight <= 0) return null;
-    return computeWorkspaceStageSize(
+    return computeFitContainerStageSize(
       layoutContainerWidth,
       layoutContainerHeight,
       displayWidth,
@@ -179,6 +190,8 @@ export function ReferenceCropModal() {
   }, [imageSize, layoutContainerWidth, layoutContainerHeight, displayWidth, displayHeight]);
 
   stageLayoutRef.current = stageLayout;
+
+  const resolvedCrop = crop ?? defaultCrop;
 
   useEffect(() => {
     centeredSessionRef.current = null;
@@ -189,17 +202,9 @@ export function ReferenceCropModal() {
     setZoom(1);
     setShowPixelGrid(false);
     setShowOklabLightness(false);
-    if (!imageSize) {
-      setCrop(null);
-      return;
-    }
-    setCrop(
-      snapCropRect(
-        clampCropRect(refLayer!.crop ?? fullImageCrop(imageSize), imageSize),
-      ),
-    );
+    setCrop(null);
     setMarquee(null);
-  }, [refLayer?.id, refLayer?.imageData, imageSize, refLayer?.crop]);
+  }, [refLayer?.id, refLayer?.imageData, refLayer?.imageSize, refLayer?.crop]);
 
   useEffect(() => {
     if (!refLayer?.imageData) return;
@@ -207,7 +212,6 @@ export function ReferenceCropModal() {
     void getReferenceImage(refLayer.id, refLayer.imageData).then((img) => {
       if (cancelled) return;
       imageRef.current = img;
-      rendererRef.current?.setSource(img);
       setImageReady(true);
     });
     return () => {
@@ -215,29 +219,52 @@ export function ReferenceCropModal() {
     };
   }, [refLayer?.id, refLayer?.imageData]);
 
-  const displayCrop = marquee ?? crop;
+  const displayCrop = marquee ?? resolvedCrop;
 
   useEffect(() => {
     rendererRef.current = new OklabDisplayGlRenderer();
+    glCanvasRef.current = document.createElement("canvas");
     return () => {
       rendererRef.current?.dispose();
       rendererRef.current = null;
+      glCanvasRef.current = null;
     };
-  }, []);
+  }, [cropEditorLayerId]);
 
   const drawImageLayer = useCallback(() => {
     const canvas = imageCanvasRef.current;
     const image = imageRef.current;
-    const renderer = rendererRef.current;
-    if (!canvas || !image || !imageSize || !renderer) return;
+    if (!canvas || !image || !imageSize) return;
 
-    renderer.initCanvas(canvas);
-    renderer.render(
-      canvas,
-      displayWidth,
-      displayHeight,
-      showOklabLightness ? "oklabLightness" : "normal",
-    );
+    canvas.width = displayWidth;
+    canvas.height = displayHeight;
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, displayWidth, displayHeight);
+
+    if (showOklabLightness) {
+      const renderer = rendererRef.current;
+      const glCanvas = glCanvasRef.current;
+      if (renderer && glCanvas) {
+        blitWithDisplayMode(
+          renderer,
+          glCanvas,
+          image,
+          displayWidth,
+          displayHeight,
+          "oklabLightness",
+        );
+        ctx.drawImage(glCanvas, 0, 0, displayWidth, displayHeight);
+      }
+      return;
+    }
+
+    ctx.drawImage(image, 0, 0, displayWidth, displayHeight);
   }, [imageSize, displayWidth, displayHeight, showOklabLightness]);
 
   const drawCropOverlay = useCallback(() => {
@@ -298,7 +325,7 @@ export function ReferenceCropModal() {
     drawImageLayer();
     drawCropOverlay();
     drawGridOverlay();
-  }, [drawImageLayer, drawCropOverlay, drawGridOverlay, imageReady]);
+  }, [drawImageLayer, drawCropOverlay, drawGridOverlay, imageReady, zoom]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -325,19 +352,54 @@ export function ReferenceCropModal() {
     if (!container || !cropEditorLayerId || !imageSize || !imageReady) return;
     if (centeredSessionRef.current === cropEditorLayerId) return;
 
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    if (containerWidth <= 0 || containerHeight <= 0) return;
+
     const fitZoom = computeInitialFitZoom(
-      container.clientWidth,
-      container.clientHeight,
+      containerWidth,
+      containerHeight,
       imageSize.width,
       imageSize.height,
     );
+    const fittedDisplayWidth = imageSize.width * fitZoom;
+    const fittedDisplayHeight = imageSize.height * fitZoom;
+    const layout = computeFitContainerStageSize(
+      containerWidth,
+      containerHeight,
+      fittedDisplayWidth,
+      fittedDisplayHeight,
+    );
+    const { scrollLeft, scrollTop } = computeInitialScrollPosition(
+      layout.canvasLeft,
+      layout.canvasTop,
+      fittedDisplayWidth,
+      fittedDisplayHeight,
+      containerWidth,
+      containerHeight,
+    );
+
+    didInitialScrollRef.current = false;
+    prevStageLayoutRef.current = null;
+    zoomAnchorRef.current = null;
     setZoom(fitZoom);
     centeredSessionRef.current = cropEditorLayerId;
+
+    requestAnimationFrame(() => {
+      const currentContainer = containerRef.current;
+      if (!currentContainer || centeredSessionRef.current !== cropEditorLayerId) return;
+      currentContainer.scrollLeft = scrollLeft;
+      currentContainer.scrollTop = scrollTop;
+      prevStageLayoutRef.current = layout;
+      didInitialScrollRef.current = true;
+    });
   }, [cropEditorLayerId, imageSize, imageReady, containerSize.width, containerSize.height]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
-    if (!container || !stageLayout || !imageReady || didInitialScrollRef.current) return;
+    if (!container || !stageLayout || !imageReady || !cropEditorLayerId) return;
+    if (centeredSessionRef.current !== cropEditorLayerId) return;
+    if (didInitialScrollRef.current) return;
 
     const { scrollLeft, scrollTop } = computeInitialScrollPosition(
       stageLayout.canvasLeft,
@@ -352,21 +414,28 @@ export function ReferenceCropModal() {
     prevStageLayoutRef.current = stageLayout;
     didInitialScrollRef.current = true;
   }, [
+    cropEditorLayerId,
     stageLayout,
     displayWidth,
     displayHeight,
     layoutContainerWidth,
     layoutContainerHeight,
     imageReady,
+    zoom,
   ]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
     const prev = prevStageLayoutRef.current;
-    if (!container || !stageLayout || !prev) return;
+    if (!container || !stageLayout) return;
     if (centeredSessionRef.current !== cropEditorLayerId) return;
-    if (isSameWorkspaceStageLayout(prev, stageLayout)) return;
     if (zoomAnchorRef.current) return;
+
+    if (!prev) {
+      prevStageLayoutRef.current = stageLayout;
+      return;
+    }
+    if (isSameWorkspaceStageLayout(prev, stageLayout)) return;
 
     const { scrollLeft, scrollTop } = computeScrollCompensation(prev, stageLayout);
     container.scrollLeft += scrollLeft;
@@ -398,11 +467,11 @@ export function ReferenceCropModal() {
 
   const applyCropUpdate = useCallback(
     (updater: (current: CropRect) => CropRect) => {
-      if (!imageSize || !crop) return;
-      setCrop(snapCropRect(clampCropRect(updater(crop), imageSize)));
+      if (!imageSize || !resolvedCrop) return;
+      setCrop(snapCropRect(clampCropRect(updater(resolvedCrop), imageSize)));
       setMarquee(null);
     },
-    [crop, imageSize],
+    [resolvedCrop, imageSize],
   );
 
   const resetCropToFullImage = useCallback(() => {
@@ -460,7 +529,7 @@ export function ReferenceCropModal() {
 
   useLayoutEffect(() => {
     const container = containerRef.current;
-    if (!container || !cropEditorLayerId || !imageSize || !crop || !imageReady) return;
+    if (!container || !cropEditorLayerId || !imageSize || !resolvedCrop || !imageReady) return;
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -493,7 +562,7 @@ export function ReferenceCropModal() {
 
     container.addEventListener("wheel", handleWheel, { passive: false, capture: true });
     return () => container.removeEventListener("wheel", handleWheel, { capture: true });
-  }, [cropEditorLayerId, imageSize, crop, imageReady]);
+  }, [cropEditorLayerId, imageSize, resolvedCrop, imageReady]);
 
   useEffect(() => {
     if (!cropEditorLayerId || !imageSize) return;
@@ -606,16 +675,16 @@ export function ReferenceCropModal() {
     resetCropToFullImage();
   };
 
-  if (!cropEditorLayerId || !refLayer?.imageData || !imageSize || !crop) {
+  if (!cropEditorLayerId || !refLayer?.imageData || !imageSize || !resolvedCrop) {
     return null;
   }
 
-  const activeCrop = marquee ?? crop;
+  const activeCrop = marquee ?? resolvedCrop;
   const cropLabelLeft = activeCrop.x * zoom + (activeCrop.width * zoom) / 2;
   const cropLabelTop = activeCrop.y * zoom + activeCrop.height * zoom + 6;
 
   const handleConfirm = () => {
-    setReferenceCrop(cropEditorLayerId, snapCropRect(crop));
+    setReferenceCrop(cropEditorLayerId, snapCropRect(resolvedCrop));
     closeCropEditor();
   };
 

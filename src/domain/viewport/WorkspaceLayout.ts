@@ -85,6 +85,24 @@ export function computeWorkspaceStageSize(
   };
 }
 
+/** 裁剪/预览等 fit-to-view 场景：stage 不小于容器，画布居中，无额外 pan 边距 */
+export function computeFitContainerStageSize(
+  containerWidth: number,
+  containerHeight: number,
+  canvasDisplayWidth: number,
+  canvasDisplayHeight: number,
+): WorkspaceStageLayout {
+  const stageWidth = Math.max(containerWidth, canvasDisplayWidth);
+  const stageHeight = Math.max(containerHeight, canvasDisplayHeight);
+
+  return {
+    stageWidth,
+    stageHeight,
+    canvasLeft: (stageWidth - canvasDisplayWidth) / 2,
+    canvasTop: (stageHeight - canvasDisplayHeight) / 2,
+  };
+}
+
 export function computeInitialScrollPosition(
   canvasLeft: number,
   canvasTop: number,

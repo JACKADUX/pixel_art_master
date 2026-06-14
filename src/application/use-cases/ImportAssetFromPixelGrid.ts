@@ -25,6 +25,8 @@ export async function importAssetFromPixelGrid(
   grid: PixelGrid,
   title?: string,
 ): Promise<{ library: AssetLibraryIndex; asset: AssetRecord }> {
+  await repository.ensureLibraryStructure(workspacePath);
+
   const metadata = metadataFromPixelGrid(grid);
   const { library: withAsset, asset } = addAssetToLibrary(
     library,

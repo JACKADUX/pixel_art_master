@@ -55,9 +55,8 @@ export const DEFAULT_GRID: GridConfig = {
 
 function createDefaultLayers(width: number, height: number): Layer[] {
   const size = { width, height };
-  const reference = createEmptyReferenceLayer("参考层");
   const drawing = createEmptyDrawingLayer(size, "绘制层");
-  return [reference, drawing];
+  return [drawing];
 }
 
 /** 生成基于创建时间的默认项目名（文件名安全） */
@@ -79,7 +78,6 @@ export function createEmptyProject(name?: string): Project {
   const height = 64;
   const layers = createDefaultLayers(width, height);
   const drawingLayer = layers.find((l) => l.type === "drawing")!;
-  const referenceLayer = layers.find((l) => l.type === "reference")!;
 
   return {
     id: crypto.randomUUID(),
@@ -93,7 +91,7 @@ export function createEmptyProject(name?: string): Project {
       scaleFactor: 1,
       layers,
       activeLayerId: drawingLayer.id,
-      activeReferenceLayerId: referenceLayer.id,
+      activeReferenceLayerId: null,
     },
     palette: Palette.empty(),
     notes: [],

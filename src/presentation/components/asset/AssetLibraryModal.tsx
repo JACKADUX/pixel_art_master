@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { useAppStore } from "../../stores/appStore";
 import { AssetLibraryContent } from "./AssetLibraryContent";
+import { AssetFolderDeleteDialog } from "./AssetFolderDeleteDialog";
+import { AssetMoveConfirmDialog } from "./AssetMoveConfirmDialog";
+import { ConfirmDialog } from "../ConfirmDialog";
 
 export function AssetLibraryModal() {
   const open = useAppStore((s) => s.assetLibraryModalOpen);
@@ -9,6 +12,9 @@ export function AssetLibraryModal() {
   const loading = useAppStore((s) => s.assetLibraryLoading);
   const selectedFolderId = useAppStore((s) => s.selectedAssetFolderId);
   const selectedAssetId = useAppStore((s) => s.selectedAssetId);
+  const deleteAssetFolderTarget = useAppStore((s) => s.deleteAssetFolderTarget);
+  const deleteAssetTarget = useAppStore((s) => s.deleteAssetTarget);
+  const moveAssetTarget = useAppStore((s) => s.moveAssetTarget);
 
   const closeAssetLibraryModal = useAppStore((s) => s.closeAssetLibraryModal);
   const pickProjectsWorkspace = useAppStore((s) => s.pickProjectsWorkspace);
@@ -17,11 +23,19 @@ export function AssetLibraryModal() {
   const setSelectedAsset = useAppStore((s) => s.setSelectedAsset);
   const createAssetFolderAction = useAppStore((s) => s.createAssetFolderAction);
   const renameAssetFolderAction = useAppStore((s) => s.renameAssetFolderAction);
+  const requestDeleteAssetFolder = useAppStore((s) => s.requestDeleteAssetFolder);
+  const cancelDeleteAssetFolder = useAppStore((s) => s.cancelDeleteAssetFolder);
+  const confirmDeleteAssetFolder = useAppStore((s) => s.confirmDeleteAssetFolder);
+  const requestDeleteAssetRecord = useAppStore((s) => s.requestDeleteAssetRecord);
+  const cancelDeleteAssetRecord = useAppStore((s) => s.cancelDeleteAssetRecord);
+  const confirmDeleteAssetRecord = useAppStore((s) => s.confirmDeleteAssetRecord);
+  const requestMoveAssetRecord = useAppStore((s) => s.requestMoveAssetRecord);
+  const cancelMoveAssetRecord = useAppStore((s) => s.cancelMoveAssetRecord);
+  const confirmMoveAssetRecord = useAppStore((s) => s.confirmMoveAssetRecord);
   const importAssetFromClipboardAction = useAppStore((s) => s.importAssetFromClipboardAction);
   const importAssetFromFileAction = useAppStore((s) => s.importAssetFromFileAction);
   const startAssetCanvasCapture = useAppStore((s) => s.startAssetCanvasCapture);
   const updateAssetRecordAction = useAppStore((s) => s.updateAssetRecordAction);
-  const deleteAssetRecordAction = useAppStore((s) => s.deleteAssetRecordAction);
   const createAssetCategoryAction = useAppStore((s) => s.createAssetCategoryAction);
   const createAssetTagAction = useAppStore((s) => s.createAssetTagAction);
 
@@ -34,7 +48,8 @@ export function AssetLibraryModal() {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60">
+    <>
+      <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/60">
       <div className="flex h-[85vh] w-[92vw] max-w-5xl flex-col overflow-hidden rounded-lg border border-zinc-600 bg-zinc-900 shadow-xl">
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-700 px-4 py-3">
           <h2 className="text-sm font-medium text-zinc-200">资产管理</h2>
@@ -65,6 +80,7 @@ export function AssetLibraryModal() {
             加载中...
           </div>
         ) : (
+          <div className="flex min-h-0 flex-1 overflow-hidden">
           <AssetLibraryContent
             library={library}
             workspacePath={workspacePath}
@@ -76,18 +92,47 @@ export function AssetLibraryModal() {
             onRenameFolder={(folderId, name) =>
               void renameAssetFolderAction(folderId, name)
             }
+            onRequestDeleteFolder={requestDeleteAssetFolder}
             onImportClipboard={() => void importAssetFromClipboardAction()}
             onImportFile={() => void importAssetFromFileAction()}
             onStartCanvasCapture={() => startAssetCanvasCapture()}
             onUpdateAsset={(assetId, updates) =>
               void updateAssetRecordAction(assetId, updates)
             }
-            onDeleteAsset={(assetId) => void deleteAssetRecordAction(assetId)}
+            onDeleteAsset={(assetId) => requestDeleteAssetRecord(assetId)}
+            onRequestMoveAsset={requestMoveAssetRecord}
             onCreateCategory={(name) => void createAssetCategoryAction(name)}
             onCreateTag={(name) => void createAssetTagAction(name)}
           />
+          </div>
         )}
       </div>
-    </div>
+      </div>
+      <AssetFolderDeleteDialog
+        open={deleteAssetFolderTarget !== null}
+        folderName={deleteAssetFolderTarget?.folderName ?? ""}
+        assetCount={deleteAssetFolderTarget?.assetCount ?? 0}
+        childFolderCount={deleteAssetFolderTarget?.childFolderCount ?? 0}
+        onConfirm={(disposition) => void confirmDeleteAssetFolder(disposition)}
+        onCancel={cancelDeleteAssetFolder}
+      />
+      <ConfirmDialog
+        open={deleteAssetTarget !== null}
+        title="删除资产"
+        message={`确定删除资产「${deleteAssetTarget?.title ?? ""}」吗？此操作不可恢复。`}
+        confirmLabel="删除"
+        danger
+        onConfirm={() => void confirmDeleteAssetRecord()}
+        onCancel={cancelDeleteAssetRecord}
+      />
+      <AssetMoveConfirmDialog
+        open={moveAssetTarget !== null}
+        assetTitle={moveAssetTarget?.title ?? ""}
+        fromFolderLabel={moveAssetTarget?.fromFolderLabel ?? ""}
+        toFolderLabel={moveAssetTarget?.toFolderLabel ?? ""}
+        onConfirm={() => void confirmMoveAssetRecord()}
+        onCancel={cancelMoveAssetRecord}
+      />
+    </>
   );
 }

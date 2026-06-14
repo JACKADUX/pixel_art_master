@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { findAssetById, type AssetLibraryIndex } from "@/domain/asset/AssetLibrary";
+import { useAssetImageUrl } from "@/presentation/hooks/useAssetImageUrl";
 
 interface AssetDetailPanelProps {
   library: AssetLibraryIndex;
@@ -18,6 +18,8 @@ interface AssetDetailPanelProps {
     },
   ) => void;
   onDeleteAsset: (assetId: string) => void;
+  onOpenAssetViewer: (assetId: string) => void;
+  onOpenAssetContextMenu: (assetId: string, clientX: number, clientY: number) => void;
   onCreateCategory: (name: string) => void;
   onCreateTag: (name: string) => void;
 }
@@ -28,34 +30,31 @@ export function AssetDetailPanel({
   selectedAssetId,
   onUpdateAsset,
   onDeleteAsset,
+  onOpenAssetViewer,
+  onOpenAssetContextMenu,
   onCreateCategory,
   onCreateTag,
 }: AssetDetailPanelProps) {
   const asset = selectedAssetId ? findAssetById(library, selectedAssetId) : null;
+  const previewSrc = useAssetImageUrl(workspacePath, asset?.imageFile);
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newTagName, setNewTagName] = useState("");
-  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
   useEffect(() => {
     if (!asset) {
       setTitle("");
       setNotes("");
-      setPreviewSrc(null);
       return;
     }
     setTitle(asset.title);
     setNotes(asset.notes);
-    const root = workspacePath.replace(/[/\\]+$/, "");
-    const separator = root.includes("\\") ? "\\" : "/";
-    const fullPath = `${root}${separator}.pixelart-assets${separator}${asset.imageFile.replace(/\//g, separator)}`;
-    setPreviewSrc(convertFileSrc(fullPath));
-  }, [asset, workspacePath]);
+  }, [asset]);
 
   if (!asset) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-xs text-zinc-500">
+      <div className="flex min-h-[6rem] items-center justify-center p-4 text-xs text-zinc-500">
         选择资产以查看详情
       </div>
     );
@@ -96,16 +95,26 @@ export function AssetDetailPanel({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3">
+    <div className="p-3">
       {previewSrc && (
-        <div className="mb-3 flex justify-center rounded border border-zinc-700 bg-zinc-950 p-2">
+        <button
+          type="button"
+          title="双击放大查看"
+          onDoubleClick={() => onOpenAssetViewer(asset.id)}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            onOpenAssetContextMenu(asset.id, e.clientX, e.clientY);
+          }}
+          className="mb-3 flex w-full justify-center rounded border border-zinc-700 bg-zinc-950 p-2 hover:border-zinc-600"
+        >
           <img
             src={previewSrc}
             alt={asset.title}
             className="max-h-32 max-w-full object-contain"
             style={{ imageRendering: "pixelated" }}
+            draggable={false}
           />
-        </div>
+        </button>
       )}
 
       <label className="mb-2 block text-[10px] text-zinc-500">标题</label>
@@ -207,7 +216,7 @@ export function AssetDetailPanel({
       <button
         type="button"
         onClick={() => onDeleteAsset(asset.id)}
-        className="mt-auto rounded border border-red-800 px-2 py-1 text-xs text-red-400 hover:bg-red-950"
+        className="mt-3 rounded border border-red-800 px-2 py-1 text-xs text-red-400 hover:bg-red-950"
       >
         删除资产
       </button>
