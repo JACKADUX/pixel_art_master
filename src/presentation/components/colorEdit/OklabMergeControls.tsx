@@ -9,7 +9,6 @@ import {
 } from "@/domain/colorEdit/OklabReduceAlgorithm";
 import { useColorEditStore } from "../../stores/colorEditStore";
 import { ColorPalettePreview } from "./ColorPalettePreview";
-import { DiffusionRegionGroupsPreview } from "./DiffusionRegionGroupsPreview";
 import { ManualMergeAnchorList } from "./ManualMergeAnchorList";
 
 interface OklabMergeControlsProps {
@@ -24,7 +23,9 @@ export function OklabMergeControls({ canExport, onExport }: OklabMergeControlsPr
   const statsAfterNormalized = useColorEditStore((s) => s.statsAfterNormalized);
   const statsAfter = useColorEditStore((s) => s.statsAfter);
   const disabledColors = useColorEditStore((s) => s.disabledColors);
-  const mergeRegionGroups = useColorEditStore((s) => s.mergeRegionGroups);
+  const mergeGroupCount = useColorEditStore((s) => s.mergeGroupCount);
+  const processing = useColorEditStore((s) => s.processing);
+  const cancelProcessing = useColorEditStore((s) => s.cancelProcessing);
   const sourceImageData = useColorEditStore((s) => s.sourceImageData);
   const resultImageData = useColorEditStore((s) => s.resultImageData);
   const error = useColorEditStore((s) => s.error);
@@ -66,8 +67,9 @@ export function OklabMergeControls({ canExport, onExport }: OklabMergeControlsPr
               max={MAX_OKLAB_MERGE_THRESHOLD}
               step={0.001}
               value={oklabMergeThreshold}
+              disabled={processing}
               onChange={(event) => setOklabMergeThreshold(Number.parseFloat(event.target.value))}
-              className="w-full accent-blue-500"
+              className="w-full accent-blue-500 disabled:opacity-50"
             />
           </div>
 
@@ -75,10 +77,11 @@ export function OklabMergeControls({ canExport, onExport }: OklabMergeControlsPr
             <p className="mb-1.5 text-[11px] text-zinc-500">代表色策略</p>
             <select
               value={oklabReduceAlgorithm}
+              disabled={processing}
               onChange={(event) =>
                 setOklabReduceAlgorithm(event.target.value as OklabReduceAlgorithm)
               }
-              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200"
+              className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200 disabled:opacity-50"
             >
               {OKLAB_REDUCE_ALGORITHMS.map((algorithm) => (
                 <option key={algorithm} value={algorithm}>
@@ -88,13 +91,32 @@ export function OklabMergeControls({ canExport, onExport }: OklabMergeControlsPr
             </select>
           </div>
 
-          {hasResult && statsBefore && statsAfter && mergeRegionGroups && (
-            <p className="text-[11px] text-zinc-400">
-              分组 / 颜色数：
-              <span className="ml-1 font-medium text-zinc-200">
-                {mergeRegionGroups.groupCount} 组 · {statsBefore.uniqueCount} →{" "}
-                {statsAfter.uniqueCount}
-              </span>
+          {hasResult && statsBefore && statsAfter && mergeGroupCount !== null && (
+            <div className="flex items-center gap-2">
+              <p className="text-[11px] text-zinc-400">
+                分组 / 颜色数：
+                <span className="ml-1 font-medium text-zinc-200">
+                  {mergeGroupCount} 组 · {statsBefore.uniqueCount} → {statsAfter.uniqueCount}
+                </span>
+                {processing && (
+                  <span className="ml-2 text-[10px] text-zinc-500">处理中…</span>
+                )}
+              </p>
+              {processing && (
+                <button
+                  type="button"
+                  onClick={cancelProcessing}
+                  className="shrink-0 rounded border border-zinc-600 px-2 py-0.5 text-[10px] text-zinc-300 hover:border-red-500 hover:text-red-300"
+                >
+                  中断
+                </button>
+              )}
+            </div>
+          )}
+
+          {statsBefore && statsBefore.uniqueCount > 3000 && (
+            <p className="text-[10px] text-amber-500/90">
+              高唯一色图像（{statsBefore.uniqueCount} 色）：已自动启用 RGB 快速预合并，再进行感知合并。
             </p>
           )}
 
@@ -112,7 +134,6 @@ export function OklabMergeControls({ canExport, onExport }: OklabMergeControlsPr
               stats={statsBefore}
               onColorClick={addManualMergeAnchor}
             />
-            <DiffusionRegionGroupsPreview regionGroups={mergeRegionGroups} />
             <ColorPalettePreview
               label="归一后"
               stats={statsAfterNormalized}

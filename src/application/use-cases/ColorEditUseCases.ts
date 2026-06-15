@@ -1,109 +1,41 @@
-import {
-
-  computeColorPaletteStats,
-
-  type ColorPaletteStats,
-
-} from "@/domain/colorEdit/ColorPaletteStats";
-
+import type {
+  ColorEditProcessorRequest,
+  ColorEditProcessorResult,
+} from "@/application/ports/IColorEditProcessor";
 import type { PixelColor } from "@/domain/canvas/PixelColor";
-import {
-  applyDisabledColors,
-  filterDisabledColorsInPalette,
-} from "@/domain/colorEdit/ColorDisableOperations";
-import type { DiffusionRegionGroups } from "@/domain/colorEdit/DiffusionRegionGroups";
+import type { ColorPaletteStats } from "@/domain/colorEdit/ColorPaletteStats";
 import type { ManualMergeAnchor } from "@/domain/colorEdit/ManualMergeAnchor";
-import { applyManualMergeOverlays } from "@/domain/colorEdit/ManualMergeOperations";
-
-import { applyOklabMerge } from "@/domain/colorEdit/OklabMergeOperations";
-
-import {
-
-  normalizeOklabMergeOptions,
-
-  type OklabMergeOptions,
-
-} from "@/domain/colorEdit/OklabMergeOptions";
-
-import { rgbaBufferToImageData } from "@/infrastructure/image/ImageDataCodec";
-
-
+import type { OklabMergeOptions } from "@/domain/colorEdit/OklabMergeOptions";
+import { colorEditProcessor } from "@/infrastructure/colorEdit/createColorEditProcessor";
 
 export interface ColorEditResult {
-
   resultImageData: ImageData;
-
   statsBefore: ColorPaletteStats;
-
   statsAfterNormalized: ColorPaletteStats;
-
   statsAfter: ColorPaletteStats;
-
-  regionGroups: DiffusionRegionGroups;
-
+  mergeGroupCount: number;
 }
 
-
-
-export function applyOklabMergeEdit(
-
+export async function applyOklabMergeEdit(
   sourceImageData: ImageData,
-
   options?: Partial<OklabMergeOptions>,
-
   manualAnchors?: readonly ManualMergeAnchor[],
-
   disabledColors?: readonly PixelColor[],
-
-): ColorEditResult {
-
-  const normalized = normalizeOklabMergeOptions(options);
-
-  const statsBefore = computeColorPaletteStats(sourceImageData);
-
-  const { imageData: processed, regionGroups } = applyOklabMerge(
-
+  jobId?: number,
+): Promise<ColorEditResult> {
+  const request: ColorEditProcessorRequest = {
     sourceImageData,
-
-    normalized,
-
-  );
-
-  const withManualOverlays = applyManualMergeOverlays(
-    sourceImageData,
-    processed,
-    manualAnchors ?? [],
-  );
-
-  const statsAfterNormalized = computeColorPaletteStats(withManualOverlays);
-  const activeDisabledColors = filterDisabledColorsInPalette(
-    statsAfterNormalized,
-    disabledColors ?? [],
-  );
-
-  const withDisabledColors = applyDisabledColors(
-    withManualOverlays,
-    activeDisabledColors,
-  );
-
-  const resultImageData = rgbaBufferToImageData(
-
-    withDisabledColors.width,
-
-    withDisabledColors.height,
-
-    withDisabledColors.data,
-
-  );
-
-  const statsAfter = computeColorPaletteStats(resultImageData);
-
-  return {
-    resultImageData,
-    statsBefore,
-    statsAfterNormalized,
-    statsAfter,
-    regionGroups,
+    options,
+    manualAnchors,
+    disabledColors,
+    jobId,
   };
-
+  const result: ColorEditProcessorResult = await colorEditProcessor.applyColorEdit(request);
+  return {
+    resultImageData: result.resultImageData,
+    statsBefore: result.statsBefore,
+    statsAfterNormalized: result.statsAfterNormalized,
+    statsAfter: result.statsAfter,
+    mergeGroupCount: result.mergeGroupCount,
+  };
 }

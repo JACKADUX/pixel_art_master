@@ -73,11 +73,11 @@ describe("applyOklabMerge", () => {
       ],
       3,
     );
-    const { imageData, regionGroups } = applyOklabMerge(source, {
+    const { imageData, groupCount } = applyOklabMerge(source, {
       threshold: 0.05,
       reduceAlgorithm: "mode",
     });
-    expect(regionGroups.groupCount).toBe(1);
+    expect(groupCount).toBe(1);
     const first = pixelAt(imageData, 0, 0);
     expect(pixelAt(imageData, 1, 0)).toEqual(first);
     expect(pixelAt(imageData, 2, 0)).toEqual(first);
@@ -91,11 +91,11 @@ describe("applyOklabMerge", () => {
       ],
       2,
     );
-    const { regionGroups } = applyOklabMerge(source, {
+    const { groupCount } = applyOklabMerge(source, {
       threshold: 0.035,
       reduceAlgorithm: "mode",
     });
-    expect(regionGroups.groupCount).toBe(2);
+    expect(groupCount).toBe(2);
   });
 
   it("uses highChroma representative within merged cluster", () => {

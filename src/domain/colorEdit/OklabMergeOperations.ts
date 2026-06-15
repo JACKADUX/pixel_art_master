@@ -1,10 +1,6 @@
 import { getAlpha, rgba, toRgbComponents, type PixelColor } from "../canvas/PixelColor";
 import { pixelColorToOklab } from "../color/ColorConverter";
 import type { OklabColor } from "../color/OklabColor";
-import {
-  buildDiffusionRegionGroups,
-  type DiffusionRegionGroups,
-} from "./DiffusionRegionGroups";
 import { canMergeOklabColors, oklabChroma } from "./OklabMergeDistance";
 import type { OklabMergeOptions } from "./OklabMergeOptions";
 import {
@@ -129,29 +125,9 @@ export function reduceOklabClusterColors(
   }
 }
 
-function buildClusterRegionPixels(
-  palette: readonly PaletteEntry[],
-  clusters: Map<number, number[]>,
-): PixelColor[][] {
-  const regionPixelLists: PixelColor[][] = [];
-
-  for (const memberIndices of clusters.values()) {
-    const pixels: PixelColor[] = [];
-    for (const index of memberIndices) {
-      const entry = palette[index];
-      for (let count = 0; count < entry.pixelCount; count += 1) {
-        pixels.push(entry.color);
-      }
-    }
-    regionPixelLists.push(pixels);
-  }
-
-  return regionPixelLists;
-}
-
 export interface OklabMergeResult {
   imageData: ImageData;
-  regionGroups: DiffusionRegionGroups;
+  groupCount: number;
 }
 
 export function applyOklabMerge(
@@ -165,7 +141,7 @@ export function applyOklabMerge(
   if (colorCount === 0) {
     return {
       imageData,
-      regionGroups: { groupCount: 0, groups: [] },
+      groupCount: 0,
     };
   }
 
@@ -223,9 +199,8 @@ export function applyOklabMerge(
     );
   }
 
-  const regionPixelLists = buildClusterRegionPixels(palette, clusters);
   return {
     imageData: { width, height, data: resultData } as ImageData,
-    regionGroups: buildDiffusionRegionGroups(regionPixelLists),
+    groupCount: clusters.size,
   };
 }
