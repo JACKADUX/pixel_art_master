@@ -12,10 +12,17 @@ import { useGridLayout, useRegionGridLayout } from "./useGridLayout";
 
 interface GridScaleControlsProps {
   canExport: boolean;
+  canSendToColorEdit: boolean;
   onExport: () => void;
+  onSendToColorEdit: () => void;
 }
 
-export function GridScaleControls({ canExport, onExport }: GridScaleControlsProps) {
+export function GridScaleControls({
+  canExport,
+  canSendToColorEdit,
+  onExport,
+  onSendToColorEdit,
+}: GridScaleControlsProps) {
   const sourceImageData = usePixelRestoreStore((s) => s.sourceImageData);
   const gridScaleType = usePixelRestoreStore((s) => s.gridScaleType);
   const gridSeedCell = usePixelRestoreStore((s) => s.gridSeedCell);
@@ -227,14 +234,24 @@ export function GridScaleControls({ canExport, onExport }: GridScaleControlsProp
       </div>
 
       <div className="shrink-0 border-t border-zinc-800 p-4">
-        <button
-          type="button"
-          disabled={!canExport}
-          onClick={onExport}
-          className="w-full rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500"
-        >
-          导出到资产库
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            disabled={!canSendToColorEdit}
+            onClick={onSendToColorEdit}
+            className="w-full rounded bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            发送到颜色编辑
+          </button>
+          <button
+            type="button"
+            disabled={!canExport}
+            onClick={onExport}
+            className="w-full rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500"
+          >
+            导出到资产库
+          </button>
+        </div>
         {!canExport && (
           <p className="mt-2 text-center text-[10px] text-zinc-600">
             请先选择项目文件夹并生成结果

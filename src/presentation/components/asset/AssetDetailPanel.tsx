@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { useCallback, useEffect, useState } from "react";
 import { findAssetById, type AssetLibraryIndex } from "@/domain/asset/AssetLibrary";
+import { isImageAsset, isMarkdownAsset } from "@/domain/asset/AssetRecord";
 import { useAssetImageUrl } from "@/presentation/hooks/useAssetImageUrl";
+import { useAssetNoteContent } from "@/presentation/hooks/useAssetNoteContent";
+import { AssetNotesModal } from "./AssetNotesModal";
+import { AssetNotesSection, type AssetNotesModalMode } from "./AssetNotesSection";
 
 interface AssetDetailPanelProps {
   library: AssetLibraryIndex;
@@ -13,6 +15,7 @@ interface AssetDetailPanelProps {
     updates: {
       title?: string;
       notes?: string;
+      content?: string;
       categoryId?: string | null;
       tagIds?: string[];
     },
@@ -36,21 +39,74 @@ export function AssetDetailPanel({
   onCreateTag,
 }: AssetDetailPanelProps) {
   const asset = selectedAssetId ? findAssetById(library, selectedAssetId) : null;
-  const previewSrc = useAssetImageUrl(workspacePath, asset?.imageFile);
+  const previewSrc = useAssetImageUrl(
+    workspacePath,
+    asset && isImageAsset(asset) ? asset.imageFile : null,
+  );
+  const { content: markdownContent } = useAssetNoteContent(
+    workspacePath,
+    asset && isMarkdownAsset(asset) ? asset.contentFile : null,
+  );
+
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
+  const [content, setContent] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newTagName, setNewTagName] = useState("");
+  const [notesModalOpen, setNotesModalOpen] = useState(false);
+  const [notesModalMode, setNotesModalMode] = useState<AssetNotesModalMode>("view");
 
   useEffect(() => {
     if (!asset) {
       setTitle("");
       setNotes("");
+      setContent("");
       return;
     }
     setTitle(asset.title);
-    setNotes(asset.notes);
-  }, [asset]);
+    if (isImageAsset(asset)) {
+      setNotes(asset.notes);
+    }
+  }, [selectedAssetId, asset?.id, asset?.title, asset && isImageAsset(asset) ? asset.notes : null]);
+
+  useEffect(() => {
+    if (!asset || !isMarkdownAsset(asset)) return;
+    setContent(markdownContent);
+  }, [selectedAssetId, asset?.id, markdownContent]);
+
+  const handleNotesSave = useCallback(
+    (value: string) => {
+      setNotes(value);
+      if (!selectedAssetId) return;
+      onUpdateAsset(selectedAssetId, { notes: value });
+    },
+    [selectedAssetId, onUpdateAsset],
+  );
+
+  const handleContentSave = useCallback(
+    (value: string) => {
+      setContent(value);
+      if (!selectedAssetId) return;
+      onUpdateAsset(selectedAssetId, { content: value });
+    },
+    [selectedAssetId, onUpdateAsset],
+  );
+
+  const handleNotesModalClose = useCallback(
+    (savedValue: string) => {
+      if (!selectedAssetId || !asset) {
+        setNotesModalOpen(false);
+        return;
+      }
+      if (isImageAsset(asset)) {
+        setNotes(savedValue);
+      } else if (isMarkdownAsset(asset)) {
+        setContent(savedValue);
+      }
+      setNotesModalOpen(false);
+    },
+    [selectedAssetId, asset],
+  );
 
   if (!asset) {
     return (
@@ -66,11 +122,13 @@ export function AssetDetailPanel({
     }
   };
 
-  const handleNotesBlur = () => {
-    if (notes !== asset.notes) {
-      onUpdateAsset(asset.id, { notes });
-    }
+  const openNotesModal = (mode: AssetNotesModalMode) => {
+    setNotesModalMode(mode);
+    setNotesModalOpen(true);
   };
+
+  const notesModalValue = isImageAsset(asset) ? notes : content;
+  const notesModalSave = isImageAsset(asset) ? handleNotesSave : handleContentSave;
 
   const toggleTag = (tagId: string) => {
     const has = asset.tagIds.includes(tagId);
@@ -96,7 +154,7 @@ export function AssetDetailPanel({
 
   return (
     <div className="p-3">
-      {previewSrc && (
+      {isImageAsset(asset) && previewSrc && (
         <button
           type="button"
           title="双击放大查看"
@@ -117,6 +175,12 @@ export function AssetDetailPanel({
         </button>
       )}
 
+      {isMarkdownAsset(asset) && (
+        <div className="mb-3 flex items-center justify-center rounded border border-zinc-700 bg-zinc-950 p-4">
+          <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">MD</span>
+        </div>
+      )}
+
       <label className="mb-2 block text-[10px] text-zinc-500">标题</label>
       <input
         value={title}
@@ -126,8 +190,18 @@ export function AssetDetailPanel({
       />
 
       <div className="mb-3 text-[10px] text-zinc-500">
-        尺寸: {asset.width}×{asset.height} · 颜色: {asset.colorCount}
-        <br />
+        {isImageAsset(asset) && (
+          <>
+            尺寸: {asset.width}×{asset.height} · 颜色: {asset.colorCount}
+            <br />
+          </>
+        )}
+        {isMarkdownAsset(asset) && (
+          <>
+            类型: Markdown 笔记
+            <br />
+          </>
+        )}
         创建: {new Date(asset.createdAt).toLocaleString()}
         <br />
         更新: {new Date(asset.updatedAt).toLocaleString()}
@@ -197,21 +271,31 @@ export function AssetDetailPanel({
         </button>
       </div>
 
-      <label className="mb-1 block text-[10px] text-zinc-500">笔记</label>
-      <textarea
-        value={notes}
-        onChange={(e) => setNotes(e.target.value)}
-        onBlur={handleNotesBlur}
-        placeholder="附属笔记（支持 Markdown）..."
-        className="mb-2 h-20 w-full resize-none rounded border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-xs text-zinc-200 outline-none focus:border-blue-500"
-      />
-      {notes && (
-        <div className="mb-3 max-h-24 overflow-auto rounded border border-zinc-700 bg-zinc-950 p-2">
-          <div className="prose prose-invert prose-xs max-w-none text-zinc-300">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{notes}</ReactMarkdown>
-          </div>
-        </div>
+      {isImageAsset(asset) ? (
+        <AssetNotesSection
+          value={notes}
+          onSave={handleNotesSave}
+          onOpenFullscreen={openNotesModal}
+          placeholder="附属笔记（支持 Markdown）…"
+        />
+      ) : (
+        <AssetNotesSection
+          value={content}
+          onSave={handleContentSave}
+          onOpenFullscreen={openNotesModal}
+          label="内容"
+          placeholder="双击编辑 Markdown 内容…"
+        />
       )}
+
+      <AssetNotesModal
+        open={notesModalOpen}
+        title={asset.title}
+        value={notesModalValue}
+        initialMode={notesModalMode}
+        onSave={notesModalSave}
+        onClose={handleNotesModalClose}
+      />
 
       <button
         type="button"

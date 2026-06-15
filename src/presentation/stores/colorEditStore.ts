@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
-import { applyColorMergeEdit } from "@/application/use-cases/ColorEditUseCases";
+import { applyOklabMergeEdit } from "@/application/use-cases/ColorEditUseCases";
 import { loadColorEditPreferences } from "@/application/use-cases/LoadColorEditPreferences";
 import { saveColorEditPreferences } from "@/application/use-cases/SaveColorEditPreferences";
 import {
@@ -9,23 +9,20 @@ import {
   loadSourceImageFromFile,
   loadSourceImageFromPath,
 } from "@/application/use-cases/PixelRestoreUseCases";
-import type { PixelColor } from "@/domain/canvas/PixelColor";
-import { getAlpha, rgba } from "@/domain/canvas/PixelColor";
-import type { ColorEditMode } from "@/domain/colorEdit/ColorEditMode";
 import {
   DEFAULT_COLOR_EDIT_PREFERENCES,
   extractColorEditPreferences,
 } from "@/domain/colorEdit/ColorEditPreferences";
-import type { ColorPaletteStats } from "@/domain/colorEdit/ColorPaletteStats";
+import type { DiffusionRegionGroups } from "@/domain/colorEdit/DiffusionRegionGroups";
+import { clampOklabMergeThreshold } from "@/domain/colorEdit/OklabMergeDistance";
 import {
-  anchorColorKey,
-  clampAnchorDistance,
-  createColorMergeAnchor,
-  type ColorMergeAnchor,
-} from "@/domain/colorEdit/ColorMergeAnchor";
-import { reorderAnchors } from "@/domain/colorEdit/ColorMergeOperations";
+  createManualMergeAnchor,
+  type ManualMergeAnchor,
+} from "@/domain/colorEdit/ManualMergeAnchor";
+import type { OklabReduceAlgorithm } from "@/domain/colorEdit/OklabReduceAlgorithm";
+import type { ColorPaletteStats } from "@/domain/colorEdit/ColorPaletteStats";
 import { computeColorPaletteStats } from "@/domain/colorEdit/ColorPaletteStats";
-import type { UnmatchedPixelBehavior } from "@/domain/colorEdit/UnmatchedPixelBehavior";
+import type { PixelColor } from "@/domain/canvas/PixelColor";
 import { clipboardService } from "@/infrastructure/clipboard/createClipboardService";
 import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
 import { colorEditPreferencesRepository } from "@/infrastructure/storage/LocalColorEditPreferencesRepository";
@@ -37,15 +34,15 @@ interface ColorEditStore {
   resultImageData: ImageData | null;
   statsBefore: ColorPaletteStats | null;
   statsAfter: ColorPaletteStats | null;
+  mergeRegionGroups: DiffusionRegionGroups | null;
   loading: boolean;
   error: string | null;
   monitorPickerOpen: boolean;
   availableMonitors: CapturableMonitor[];
-  editMode: ColorEditMode;
-  defaultAnchorDistance: number;
-  unmatchedPixelBehavior: UnmatchedPixelBehavior;
-  mergeAnchors: ColorMergeAnchor[];
-  pickColorMode: boolean;
+  oklabMergeThreshold: number;
+  oklabReduceAlgorithm: OklabReduceAlgorithm;
+  manualMergeAnchors: ManualMergeAnchor[];
+  sourcePickMode: boolean;
 
   openPage: () => void;
   closePage: () => void;
@@ -57,15 +54,12 @@ interface ColorEditStore {
   screenCapture: () => Promise<void>;
   captureFromMonitor: (monitorId: number) => Promise<void>;
   closeMonitorPicker: () => void;
-  setEditMode: (mode: ColorEditMode) => void;
-  setDefaultAnchorDistance: (distance: number) => void;
-  setUnmatchedPixelBehavior: (behavior: UnmatchedPixelBehavior) => void;
-  addMergeAnchor: (color: PixelColor) => void;
-  removeMergeAnchor: (id: string) => void;
-  setAnchorDistance: (id: string, distance: number) => void;
-  reorderMergeAnchors: (fromIndex: number, toIndex: number) => void;
-  togglePickColorMode: () => void;
-  pickColorFromSource: (color: PixelColor) => void;
+  setOklabMergeThreshold: (threshold: number) => void;
+  setOklabReduceAlgorithm: (algorithm: OklabReduceAlgorithm) => void;
+  setSourcePickMode: (enabled: boolean) => void;
+  addManualMergeAnchor: (color: PixelColor) => void;
+  removeManualMergeAnchor: (id: string) => void;
+  setManualMergeAnchorThreshold: (id: string, threshold: number) => void;
   reprocess: () => void;
 }
 
@@ -78,19 +72,19 @@ const sessionDefaults = {
   resultImageData: null as ImageData | null,
   statsBefore: null as ColorPaletteStats | null,
   statsAfter: null as ColorPaletteStats | null,
+  mergeRegionGroups: null as DiffusionRegionGroups | null,
   loading: false,
   error: null as string | null,
   monitorPickerOpen: false,
   availableMonitors: [] as CapturableMonitor[],
-  mergeAnchors: [] as ColorMergeAnchor[],
-  pickColorMode: false,
+  manualMergeAnchors: [] as ManualMergeAnchor[],
+  sourcePickMode: false,
 };
 
 const initialState = {
   ...sessionDefaults,
-  editMode: loadedPreferences.editMode,
-  defaultAnchorDistance: loadedPreferences.defaultAnchorDistance,
-  unmatchedPixelBehavior: loadedPreferences.unmatchedPixelBehavior,
+  oklabMergeThreshold: loadedPreferences.oklabMergeThreshold,
+  oklabReduceAlgorithm: loadedPreferences.oklabReduceAlgorithm,
 };
 
 let isHydratingPreferences = true;
@@ -98,26 +92,34 @@ let preferencesSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 isHydratingPreferences = false;
 
-function reprocessColorEdit(
-  sourceImageData: ImageData,
-  mergeAnchors: ColorMergeAnchor[],
-  unmatchedPixelBehavior: UnmatchedPixelBehavior,
-) {
+function reprocessColorEdit(state: {
+  sourceImageData: ImageData;
+  oklabMergeThreshold: number;
+  oklabReduceAlgorithm: OklabReduceAlgorithm;
+  manualMergeAnchors: ManualMergeAnchor[];
+}) {
   try {
-    const result = applyColorMergeEdit(sourceImageData, mergeAnchors, {
-      unmatchedPixelBehavior,
-    });
+    const result = applyOklabMergeEdit(
+      state.sourceImageData,
+      {
+        threshold: state.oklabMergeThreshold,
+        reduceAlgorithm: state.oklabReduceAlgorithm,
+      },
+      state.manualMergeAnchors,
+    );
     return {
       resultImageData: result.resultImageData,
       statsBefore: result.statsBefore,
       statsAfter: result.statsAfter,
+      mergeRegionGroups: result.regionGroups,
       error: null as string | null,
     };
   } catch (err) {
     return {
       resultImageData: null,
-      statsBefore: computeColorPaletteStats(sourceImageData),
+      statsBefore: computeColorPaletteStats(state.sourceImageData),
       statsAfter: null,
+      mergeRegionGroups: null,
       error: err instanceof Error ? err.message : "处理失败",
     };
   }
@@ -125,21 +127,28 @@ function reprocessColorEdit(
 
 function applySourceImage(
   sourceImageData: ImageData,
-  unmatchedPixelBehavior: UnmatchedPixelBehavior,
+  state: Pick<
+    ColorEditStore,
+    "oklabMergeThreshold" | "oklabReduceAlgorithm" | "manualMergeAnchors"
+  >,
 ) {
   return {
     sourceImageData,
-    mergeAnchors: [] as ColorMergeAnchor[],
-    pickColorMode: false,
-    ...reprocessColorEdit(sourceImageData, [], unmatchedPixelBehavior),
+    manualMergeAnchors: [] as ManualMergeAnchor[],
+    sourcePickMode: false,
+    ...reprocessColorEdit({
+      sourceImageData,
+      oklabMergeThreshold: state.oklabMergeThreshold,
+      oklabReduceAlgorithm: state.oklabReduceAlgorithm,
+      manualMergeAnchors: [],
+    }),
   };
 }
 
 function pickPreferenceFields(state: ColorEditStore) {
   return extractColorEditPreferences({
-    editMode: state.editMode,
-    defaultAnchorDistance: state.defaultAnchorDistance,
-    unmatchedPixelBehavior: state.unmatchedPixelBehavior,
+    oklabMergeThreshold: state.oklabMergeThreshold,
+    oklabReduceAlgorithm: state.oklabReduceAlgorithm,
   });
 }
 
@@ -148,11 +157,12 @@ function withReprocess(state: ColorEditStore, patch: Partial<ColorEditStore>) {
   if (!next.sourceImageData) return patch;
   return {
     ...patch,
-    ...reprocessColorEdit(
-      next.sourceImageData,
-      next.mergeAnchors,
-      next.unmatchedPixelBehavior,
-    ),
+    ...reprocessColorEdit({
+      sourceImageData: next.sourceImageData,
+      oklabMergeThreshold: next.oklabMergeThreshold,
+      oklabReduceAlgorithm: next.oklabReduceAlgorithm,
+      manualMergeAnchors: next.manualMergeAnchors,
+    }),
   };
 }
 
@@ -161,7 +171,7 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
 
   openPage: () => set({ open: true }),
 
-  closePage: () => set({ open: false, monitorPickerOpen: false, pickColorMode: false }),
+  closePage: () => set({ open: false, monitorPickerOpen: false }),
 
   reset: () => {
     const prefs = pickPreferenceFields(get());
@@ -174,7 +184,7 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
 
   importFromImageData: (imageData) => {
     set({
-      ...applySourceImage(imageData, get().unmatchedPixelBehavior),
+      ...applySourceImage(imageData, get()),
       loading: false,
       error: null,
     });
@@ -185,7 +195,7 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
     try {
       const sourceImageData = await loadSourceImageFromPath(imageProcessor, path);
       set({
-        ...applySourceImage(sourceImageData, get().unmatchedPixelBehavior),
+        ...applySourceImage(sourceImageData, get()),
         loading: false,
       });
     } catch {
@@ -201,7 +211,7 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
     try {
       const sourceImageData = await loadSourceImageFromFile(imageProcessor, file);
       set({
-        ...applySourceImage(sourceImageData, get().unmatchedPixelBehavior),
+        ...applySourceImage(sourceImageData, get()),
         loading: false,
       });
     } catch {
@@ -218,7 +228,7 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
     try {
       const sourceImageData = await loadSourceImageFromClipboard(clipboardService);
       set({
-        ...applySourceImage(sourceImageData, get().unmatchedPixelBehavior),
+        ...applySourceImage(sourceImageData, get()),
         loading: false,
       });
     } catch (err) {
@@ -253,7 +263,7 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
       const path = await captureMonitorToImagePath(captureService, monitorId);
       const sourceImageData = await loadSourceImageFromPath(imageProcessor, path);
       set({
-        ...applySourceImage(sourceImageData, get().unmatchedPixelBehavior),
+        ...applySourceImage(sourceImageData, get()),
         loading: false,
       });
     } catch {
@@ -266,54 +276,61 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
 
   closeMonitorPicker: () => set({ monitorPickerOpen: false }),
 
-  setEditMode: (mode) => set({ editMode: mode }),
-
-  setDefaultAnchorDistance: (distance) => {
-    set({ defaultAnchorDistance: clampAnchorDistance(distance) });
+  setOklabMergeThreshold: (threshold) => {
+    set(withReprocess(get(), { oklabMergeThreshold: clampOklabMergeThreshold(threshold) }));
   },
 
-  setUnmatchedPixelBehavior: (behavior) => {
-    set(withReprocess(get(), { unmatchedPixelBehavior: behavior }));
+  setOklabReduceAlgorithm: (algorithm) => {
+    set(withReprocess(get(), { oklabReduceAlgorithm: algorithm }));
   },
 
-  addMergeAnchor: (color) => {
-    if (getAlpha(color) === 0) return;
-    const key = anchorColorKey(color);
-    if (get().mergeAnchors.some((anchor) => anchorColorKey(anchor.color) === key)) return;
-    const mergeAnchors = [
-      ...get().mergeAnchors,
-      createColorMergeAnchor(color, get().defaultAnchorDistance),
-    ];
-    set(withReprocess(get(), { mergeAnchors }));
-  },
+  setSourcePickMode: (enabled) => set({ sourcePickMode: enabled }),
 
-  removeMergeAnchor: (id) => {
-    const mergeAnchors = get().mergeAnchors.filter((anchor) => anchor.id !== id);
-    set(withReprocess(get(), { mergeAnchors }));
-  },
-
-  setAnchorDistance: (id, distance) => {
-    const mergeAnchors = get().mergeAnchors.map((anchor) =>
-      anchor.id === id ? { ...anchor, distance: clampAnchorDistance(distance) } : anchor,
+  addManualMergeAnchor: (color) => {
+    const state = get();
+    if (state.manualMergeAnchors.some((anchor) => anchor.color === color)) {
+      return;
+    }
+    const anchor = createManualMergeAnchor(color, state.oklabMergeThreshold);
+    set(
+      withReprocess(get(), {
+        manualMergeAnchors: [...state.manualMergeAnchors, anchor],
+      }),
     );
-    set(withReprocess(get(), { mergeAnchors }));
   },
 
-  reorderMergeAnchors: (fromIndex, toIndex) => {
-    const mergeAnchors = reorderAnchors(get().mergeAnchors, fromIndex, toIndex);
-    set(withReprocess(get(), { mergeAnchors }));
+  removeManualMergeAnchor: (id) => {
+    const state = get();
+    set(
+      withReprocess(get(), {
+        manualMergeAnchors: state.manualMergeAnchors.filter((anchor) => anchor.id !== id),
+      }),
+    );
   },
 
-  togglePickColorMode: () => set({ pickColorMode: !get().pickColorMode }),
-
-  pickColorFromSource: (color) => {
-    get().addMergeAnchor(color);
+  setManualMergeAnchorThreshold: (id, threshold) => {
+    const state = get();
+    const clamped = clampOklabMergeThreshold(threshold);
+    set(
+      withReprocess(get(), {
+        manualMergeAnchors: state.manualMergeAnchors.map((anchor) =>
+          anchor.id === id ? { ...anchor, threshold: clamped } : anchor,
+        ),
+      }),
+    );
   },
 
   reprocess: () => {
-    const { sourceImageData, mergeAnchors, unmatchedPixelBehavior } = get();
-    if (!sourceImageData) return;
-    set(reprocessColorEdit(sourceImageData, mergeAnchors, unmatchedPixelBehavior));
+    const state = get();
+    if (!state.sourceImageData) return;
+    set(
+      reprocessColorEdit({
+        sourceImageData: state.sourceImageData,
+        oklabMergeThreshold: state.oklabMergeThreshold,
+        oklabReduceAlgorithm: state.oklabReduceAlgorithm,
+        manualMergeAnchors: state.manualMergeAnchors,
+      }),
+    );
   },
 }));
 
@@ -321,9 +338,8 @@ useColorEditStore.subscribe((state, prev) => {
   if (isHydratingPreferences) return;
 
   if (
-    state.editMode === prev.editMode &&
-    state.defaultAnchorDistance === prev.defaultAnchorDistance &&
-    state.unmatchedPixelBehavior === prev.unmatchedPixelBehavior
+    state.oklabMergeThreshold === prev.oklabMergeThreshold &&
+    state.oklabReduceAlgorithm === prev.oklabReduceAlgorithm
   ) {
     return;
   }
@@ -340,12 +356,3 @@ useColorEditStore.subscribe((state, prev) => {
     preferencesSaveTimer = null;
   }, 300);
 });
-
-export function sampleSourcePixel(x: number, y: number): PixelColor | null {
-  const sourceImageData = useColorEditStore.getState().sourceImageData;
-  if (!sourceImageData) return null;
-  if (x < 0 || y < 0 || x >= sourceImageData.width || y >= sourceImageData.height) return null;
-  const offset = (y * sourceImageData.width + x) * 4;
-  const { data } = sourceImageData;
-  return rgba(data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
-}

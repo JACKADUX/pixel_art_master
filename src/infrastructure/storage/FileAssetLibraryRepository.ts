@@ -4,6 +4,7 @@ import {
   buildAssetImagesDir,
   buildAssetIndexPath,
   buildAssetLibraryRoot,
+  buildAssetNotesDir,
   joinPath,
 } from "@/domain/asset/AssetLibraryPaths";
 import {
@@ -24,8 +25,10 @@ export class FileAssetLibraryRepository implements IAssetLibraryRepository {
   async ensureLibraryStructure(workspacePath: string): Promise<void> {
     const root = buildAssetLibraryRoot(workspacePath);
     const imagesDir = buildAssetImagesDir(workspacePath);
+    const notesDir = buildAssetNotesDir(workspacePath);
     await mkdir(root, { recursive: true });
     await mkdir(imagesDir, { recursive: true });
+    await mkdir(notesDir, { recursive: true });
   }
 
   async loadIndex(workspacePath: string): Promise<AssetLibraryIndex | null> {
@@ -45,6 +48,10 @@ export class FileAssetLibraryRepository implements IAssetLibraryRepository {
   }
 
   resolveImagePath(workspacePath: string, relativePath: string): string {
+    return joinPath(buildAssetLibraryRoot(workspacePath), relativePath);
+  }
+
+  resolveNotePath(workspacePath: string, relativePath: string): string {
     return joinPath(buildAssetLibraryRoot(workspacePath), relativePath);
   }
 
@@ -68,6 +75,24 @@ export class FileAssetLibraryRepository implements IAssetLibraryRepository {
 
   async imageExists(imagePath: string): Promise<boolean> {
     return exists(imagePath);
+  }
+
+  async writeNoteContent(notePath: string, content: string): Promise<void> {
+    const dir = notePath.replace(/[/\\][^/\\]+$/, "");
+    await mkdir(dir, { recursive: true });
+    await writeTextFile(notePath, content);
+  }
+
+  async readNoteContent(notePath: string): Promise<string> {
+    return readTextFile(notePath);
+  }
+
+  async deleteNoteContent(notePath: string): Promise<void> {
+    try {
+      await remove(notePath);
+    } catch {
+      // ignore missing file
+    }
   }
 }
 

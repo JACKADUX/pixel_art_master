@@ -1,4 +1,5 @@
 import type { AssetRecord } from "@/domain/asset/AssetRecord";
+import { isImageAsset } from "@/domain/asset/AssetRecord";
 import type { MenuItem } from "../components/MenuDropdown";
 import { TOOL_PAGES, type ToolPageId } from "./toolPagesConfig";
 
@@ -14,6 +15,10 @@ export function buildAssetContextMenuItems(
   hasProject: boolean,
   actions: AssetContextMenuActions,
 ): MenuItem[] {
+  if (!isImageAsset(asset)) {
+    return [];
+  }
+
   return [
     {
       type: "action",

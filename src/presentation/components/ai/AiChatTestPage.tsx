@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { providerRequiresApiKey } from "@/domain/llm/LlmProvider";
+import { resolveActiveLlmSettings } from "@/domain/llm/LlmSettings";
 import { useAppStore } from "../../stores/appStore";
 import { useAiChatStore } from "../../stores/aiChatStore";
 
@@ -50,7 +51,8 @@ export function AiChatTestPage() {
   const abortStream = useAiChatStore((s) => s.abortStream);
   const clearMessages = useAiChatStore((s) => s.clearMessages);
 
-  const llmSettings = useAppStore((s) => s.llmSettings);
+  const llmSettingsStore = useAppStore((s) => s.llmSettingsStore);
+  const llmSettings = resolveActiveLlmSettings(llmSettingsStore);
   const openSettingsModal = useAppStore((s) => s.openSettingsModal);
 
   const [input, setInput] = useState("");
@@ -78,7 +80,7 @@ export function AiChatTestPage() {
     const text = input.trim();
     if (!text || streaming) return;
     setInput("");
-    void sendMessage(text);
+    void sendMessage(text, llmSettings);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {

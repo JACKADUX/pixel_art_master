@@ -24,11 +24,13 @@ interface AssetLibraryContentProps {
   onImportClipboard: () => void;
   onImportFile: () => void;
   onStartCanvasCapture: () => void;
+  onCreateMarkdownAsset: () => void;
   onUpdateAsset: (
     assetId: string,
     updates: {
       title?: string;
       notes?: string;
+      content?: string;
       categoryId?: string | null;
       tagIds?: string[];
     },
@@ -52,6 +54,7 @@ export function AssetLibraryContent({
   onImportClipboard,
   onImportFile,
   onStartCanvasCapture,
+  onCreateMarkdownAsset,
   onUpdateAsset,
   onDeleteAsset,
   onRequestMoveAsset,
@@ -120,6 +123,7 @@ export function AssetLibraryContent({
               onImportClipboard={onImportClipboard}
               onImportFile={onImportFile}
               onStartCanvasCapture={onStartCanvasCapture}
+              onCreateMarkdownAsset={onCreateMarkdownAsset}
             />
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">

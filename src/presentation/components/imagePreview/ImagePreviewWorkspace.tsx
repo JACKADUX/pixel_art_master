@@ -374,13 +374,17 @@ export function ImagePreviewWorkspace({
   }, [isPanning, applyPanMove, stopPanning, panMouseButton]);
 
   const handleContainerMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (pickMode) return;
     if (event.button !== panMouseButton) return;
     event.preventDefault();
     startPanning(event.clientX, event.clientY);
   };
 
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (event.button === panMouseButton) {
+      event.preventDefault();
+      startPanning(event.clientX, event.clientY);
+      return;
+    }
     if (!pickMode || event.button !== 0 || !imageData || !canvasRef.current) return;
     event.preventDefault();
     event.stopPropagation();
@@ -452,10 +456,10 @@ export function ImagePreviewWorkspace({
                   ref={canvasRef}
                   onMouseDown={handleCanvasMouseDown}
                   className={`block touch-none select-none border border-zinc-800 bg-zinc-900${
-                    pickMode
-                      ? " cursor-crosshair"
-                      : isPanning
-                        ? " cursor-grabbing"
+                    isPanning
+                      ? " cursor-grabbing"
+                      : pickMode
+                        ? " cursor-crosshair"
                         : " cursor-grab"
                   }`}
                   style={{ imageRendering: pixelated ? "pixelated" : "auto" }}

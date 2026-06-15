@@ -12,7 +12,8 @@ import {
   renameTagInLibrary,
   type AssetLibraryIndex,
 } from "@/domain/asset/AssetLibrary";
-import { buildAssetImagePath } from "@/domain/asset/AssetLibraryPaths";
+import { buildAssetImagePath, buildAssetNotePath } from "@/domain/asset/AssetLibraryPaths";
+import { isImageAsset, isMarkdownAsset } from "@/domain/asset/AssetRecord";
 import { saveAssetLibrary } from "./LoadAssetLibrary";
 
 export async function createAssetFolder(
@@ -53,8 +54,13 @@ export async function deleteAssetFolderTree(
   );
 
   for (const asset of removedAssets) {
-    const imagePath = buildAssetImagePath(workspacePath, asset.id);
-    await repository.deleteImage(imagePath);
+    if (isImageAsset(asset)) {
+      const imagePath = buildAssetImagePath(workspacePath, asset.id);
+      await repository.deleteImage(imagePath);
+    } else if (isMarkdownAsset(asset)) {
+      const notePath = buildAssetNotePath(workspacePath, asset.id);
+      await repository.deleteNoteContent(notePath);
+    }
   }
 
   await saveAssetLibrary(repository, workspacePath, updated);

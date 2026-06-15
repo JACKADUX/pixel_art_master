@@ -1,34 +1,84 @@
 import {
+
   computeColorPaletteStats,
+
   type ColorPaletteStats,
+
 } from "@/domain/colorEdit/ColorPaletteStats";
-import { applyColorMerge } from "@/domain/colorEdit/ColorMergeOperations";
-import type { ColorMergeAnchor } from "@/domain/colorEdit/ColorMergeAnchor";
+
+import type { DiffusionRegionGroups } from "@/domain/colorEdit/DiffusionRegionGroups";
+import type { ManualMergeAnchor } from "@/domain/colorEdit/ManualMergeAnchor";
+import { applyManualMergeOverlays } from "@/domain/colorEdit/ManualMergeOperations";
+
+import { applyOklabMerge } from "@/domain/colorEdit/OklabMergeOperations";
+
 import {
-  normalizeColorMergeOptions,
-  type ColorMergeOptions,
-} from "@/domain/colorEdit/ColorMergeOptions";
+
+  normalizeOklabMergeOptions,
+
+  type OklabMergeOptions,
+
+} from "@/domain/colorEdit/OklabMergeOptions";
+
 import { rgbaBufferToImageData } from "@/infrastructure/image/ImageDataCodec";
 
-export interface ColorMergeResult {
+
+
+export interface ColorEditResult {
+
   resultImageData: ImageData;
+
   statsBefore: ColorPaletteStats;
+
   statsAfter: ColorPaletteStats;
+
+  regionGroups: DiffusionRegionGroups;
+
 }
 
-export function applyColorMergeEdit(
+
+
+export function applyOklabMergeEdit(
+
   sourceImageData: ImageData,
-  anchors: readonly ColorMergeAnchor[],
-  options?: Partial<ColorMergeOptions>,
-): ColorMergeResult {
-  const normalized = normalizeColorMergeOptions(options);
+
+  options?: Partial<OklabMergeOptions>,
+
+  manualAnchors?: readonly ManualMergeAnchor[],
+
+): ColorEditResult {
+
+  const normalized = normalizeOklabMergeOptions(options);
+
   const statsBefore = computeColorPaletteStats(sourceImageData);
-  const processed = applyColorMerge(sourceImageData, anchors, normalized);
-  const resultImageData = rgbaBufferToImageData(
-    processed.width,
-    processed.height,
-    processed.data,
+
+  const { imageData: processed, regionGroups } = applyOklabMerge(
+
+    sourceImageData,
+
+    normalized,
+
   );
+
+  const withManualOverlays = applyManualMergeOverlays(
+    sourceImageData,
+    processed,
+    manualAnchors ?? [],
+  );
+
+  const resultImageData = rgbaBufferToImageData(
+
+    withManualOverlays.width,
+
+    withManualOverlays.height,
+
+    withManualOverlays.data,
+
+  );
+
   const statsAfter = computeColorPaletteStats(resultImageData);
-  return { resultImageData, statsBefore, statsAfter };
+
+  return { resultImageData, statsBefore, statsAfter, regionGroups };
+
 }
+

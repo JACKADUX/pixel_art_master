@@ -1,5 +1,5 @@
 import { listAssetsInFolder, type AssetLibraryIndex } from "@/domain/asset/AssetLibrary";
-import type { AssetRecord } from "@/domain/asset/AssetRecord";
+import { isImageAsset, isMarkdownAsset, type AssetRecord } from "@/domain/asset/AssetRecord";
 import { useAssetImageUrl } from "@/presentation/hooks/useAssetImageUrl";
 
 interface AssetGridProps {
@@ -16,14 +16,17 @@ interface AssetGridProps {
   onConsumeSuppressClick: () => boolean;
 }
 
-function AssetThumbnail({
+function ImageAssetThumbnail({
   workspacePath,
   asset,
 }: {
   workspacePath: string;
   asset: AssetRecord;
 }) {
-  const src = useAssetImageUrl(workspacePath, asset.imageFile);
+  const src = useAssetImageUrl(
+    workspacePath,
+    isImageAsset(asset) ? asset.imageFile : null,
+  );
 
   if (!src) {
     return (
@@ -42,6 +45,29 @@ function AssetThumbnail({
       style={{ imageRendering: "pixelated" }}
     />
   );
+}
+
+function MarkdownAssetThumbnail({ asset }: { asset: AssetRecord }) {
+  const initials = asset.title.trim().slice(0, 2) || "笔记";
+  return (
+    <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-zinc-900 p-1">
+      <span className="text-[9px] font-medium uppercase tracking-wide text-zinc-500">MD</span>
+      <span className="max-w-full truncate px-1 text-[10px] text-zinc-400">{initials}</span>
+    </div>
+  );
+}
+
+function AssetThumbnail({
+  workspacePath,
+  asset,
+}: {
+  workspacePath: string;
+  asset: AssetRecord;
+}) {
+  if (isMarkdownAsset(asset)) {
+    return <MarkdownAssetThumbnail asset={asset} />;
+  }
+  return <ImageAssetThumbnail workspacePath={workspacePath} asset={asset} />;
 }
 
 export function AssetGrid({
@@ -100,7 +126,9 @@ export function AssetGrid({
                   }}
                   onDoubleClick={(e) => {
                     e.preventDefault();
-                    onOpenAssetViewer(asset.id);
+                    if (isImageAsset(asset)) {
+                      onOpenAssetViewer(asset.id);
+                    }
                   }}
                   onContextMenu={(e) => {
                     e.preventDefault();

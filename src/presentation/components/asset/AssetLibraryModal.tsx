@@ -34,6 +34,7 @@ export function AssetLibraryModal() {
   const confirmMoveAssetRecord = useAppStore((s) => s.confirmMoveAssetRecord);
   const importAssetFromClipboardAction = useAppStore((s) => s.importAssetFromClipboardAction);
   const importAssetFromFileAction = useAppStore((s) => s.importAssetFromFileAction);
+  const createMarkdownAssetAction = useAppStore((s) => s.createMarkdownAssetAction);
   const startAssetCanvasCapture = useAppStore((s) => s.startAssetCanvasCapture);
   const updateAssetRecordAction = useAppStore((s) => s.updateAssetRecordAction);
   const createAssetCategoryAction = useAppStore((s) => s.createAssetCategoryAction);
@@ -96,6 +97,7 @@ export function AssetLibraryModal() {
             onImportClipboard={() => void importAssetFromClipboardAction()}
             onImportFile={() => void importAssetFromFileAction()}
             onStartCanvasCapture={() => startAssetCanvasCapture()}
+            onCreateMarkdownAsset={() => void createMarkdownAssetAction()}
             onUpdateAsset={(assetId, updates) =>
               void updateAssetRecordAction(assetId, updates)
             }

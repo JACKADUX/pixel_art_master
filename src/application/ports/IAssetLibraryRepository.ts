@@ -8,5 +8,9 @@ export interface IAssetLibraryRepository {
   readImage(imagePath: string): Promise<Uint8Array>;
   deleteImage(imagePath: string): Promise<void>;
   imageExists(imagePath: string): Promise<boolean>;
+  writeNoteContent(notePath: string, content: string): Promise<void>;
+  readNoteContent(notePath: string): Promise<string>;
+  deleteNoteContent(notePath: string): Promise<void>;
   resolveImagePath(workspacePath: string, relativePath: string): string;
+  resolveNotePath(workspacePath: string, relativePath: string): string;
 }

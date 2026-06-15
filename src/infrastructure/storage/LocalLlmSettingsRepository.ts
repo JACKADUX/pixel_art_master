@@ -1,9 +1,9 @@
 import type { ILlmSettingsRepository } from "@/application/ports/ILlmSettingsRepository";
-import { LLM_SETTINGS_VERSION, type LlmSettings } from "@/domain/llm/LlmSettings";
+import { LLM_SETTINGS_VERSION, type LlmSettingsStore } from "@/domain/llm/LlmSettings";
 
 const STORAGE_KEY = "pixelart.llm.settings";
 
-interface SerializedLlmSettings extends LlmSettings {
+interface SerializedLlmSettingsStore extends LlmSettingsStore {
   version: number;
 }
 
@@ -16,8 +16,8 @@ export class LocalLlmSettingsRepository implements ILlmSettingsRepository {
       const parsed: unknown = JSON.parse(stored);
       if (typeof parsed !== "object" || parsed === null) return null;
 
-      const version = (parsed as SerializedLlmSettings).version;
-      if (version !== LLM_SETTINGS_VERSION) return null;
+      const version = (parsed as SerializedLlmSettingsStore).version;
+      if (version !== 1 && version !== 2) return null;
 
       return parsed;
     } catch {
@@ -25,9 +25,9 @@ export class LocalLlmSettingsRepository implements ILlmSettingsRepository {
     }
   }
 
-  save(settings: LlmSettings): void {
+  save(settings: LlmSettingsStore): void {
     try {
-      const payload: SerializedLlmSettings = {
+      const payload: SerializedLlmSettingsStore = {
         version: LLM_SETTINGS_VERSION,
         ...settings,
       };

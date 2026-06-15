@@ -17,8 +17,10 @@ interface FixedScaleControlsProps {
   sourceHeight: number;
   error: string | null;
   canExport: boolean;
+  canSendToColorEdit: boolean;
   onScaleChange: (scale: number) => void;
   onExport: () => void;
+  onSendToColorEdit: () => void;
 }
 
 export function FixedScaleControls({
@@ -28,8 +30,10 @@ export function FixedScaleControls({
   sourceHeight,
   error,
   canExport,
+  canSendToColorEdit,
   onScaleChange,
   onExport,
+  onSendToColorEdit,
 }: FixedScaleControlsProps) {
   const source = { width: sourceWidth, height: sourceHeight };
   const outputSize = canApplyFixedScaleRestore(source, { value: selectedScale })
@@ -119,14 +123,24 @@ export function FixedScaleControls({
       </div>
 
       <div className="shrink-0 border-t border-zinc-800 p-4">
-        <button
-          type="button"
-          disabled={!canExport || !outputSize}
-          onClick={onExport}
-          className="w-full rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500"
-        >
-          导出到资产库
-        </button>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            disabled={!canSendToColorEdit || !outputSize}
+            onClick={onSendToColorEdit}
+            className="w-full rounded bg-zinc-800 px-3 py-2 text-xs font-medium text-zinc-200 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            发送到颜色编辑
+          </button>
+          <button
+            type="button"
+            disabled={!canExport || !outputSize}
+            onClick={onExport}
+            className="w-full rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500"
+          >
+            导出到资产库
+          </button>
+        </div>
         {!canExport && (
           <p className="mt-2 text-center text-[10px] text-zinc-600">
             请先选择项目文件夹并生成结果

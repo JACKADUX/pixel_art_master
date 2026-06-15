@@ -44,6 +44,8 @@ import {
   clampPatternScale,
 } from "@/domain/tool/ToolType";
 
+import { cloneImageData } from "@/domain/image/ImageDataOperations";
+
 import { clipboardService } from "@/infrastructure/clipboard/createClipboardService";
 
 import {
@@ -167,6 +169,7 @@ import type { SymmetryAxisKind } from "@/domain/symmetry/SymmetryMirror";
 import { snapSymmetryOrigin } from "@/domain/symmetry/SymmetryMirror";
 
 import { findAssetById, ROOT_FOLDER_ID } from "@/domain/asset/AssetLibrary";
+import { isImageAsset } from "@/domain/asset/AssetRecord";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { loadAssetImageAsImageData } from "@/infrastructure/storage/AssetImageLoader";
 import { toast } from "@/presentation/stores/toastStore";
@@ -720,6 +723,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   sendAssetToToolPage: (assetId: string, toolPageId: ToolPageId) => Promise<void>;
 
+  sendPixelRestoreResultToColorEdit: (imageData: ImageData) => void;
+
   exportRestoredImageToAssetLibrary: (imageData: ImageData) => Promise<void>;
 
   openCanvasSizeModal: () => void;
@@ -846,7 +851,19 @@ function mergeDrawOptions(
   return { ...base, tileRegion };
 }
 
+type ActiveToolPage = "pixelRestore" | "colorEdit" | "aiChat";
 
+function closeOtherToolPages(except?: ActiveToolPage): void {
+  if (except !== "pixelRestore") {
+    usePixelRestoreStore.getState().closePage();
+  }
+  if (except !== "colorEdit") {
+    useColorEditStore.getState().closePage();
+  }
+  if (except !== "aiChat") {
+    useAiChatStore.getState().closePage();
+  }
+}
 
 export const useAppStore = create<AppState>((set, get) => {
 
@@ -882,6 +899,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   const llmSettingsSlice = createLlmSettingsSlice(
     set as Parameters<typeof createLlmSettingsSlice>[0],
+    get,
     llmSettingsRepository,
   );
 
@@ -3248,6 +3266,10 @@ export const useAppStore = create<AppState>((set, get) => {
       toast.error("资产不存在");
       return;
     }
+    if (!isImageAsset(asset)) {
+      toast.info("笔记资产无法导入到项目");
+      return;
+    }
     const imageData = await loadAssetImageAsImageData(
       projectsWorkspacePath,
       asset.imageFile,
@@ -3279,6 +3301,10 @@ export const useAppStore = create<AppState>((set, get) => {
     const asset = findAssetById(assetLibrary, assetId);
     if (!asset) {
       toast.error("资产不存在");
+      return;
+    }
+    if (!isImageAsset(asset)) {
+      toast.info("笔记资产无法导入到项目");
       return;
     }
     const imageData = await loadAssetImageAsImageData(
@@ -3318,6 +3344,10 @@ export const useAppStore = create<AppState>((set, get) => {
     const asset = findAssetById(assetLibrary, assetId);
     if (!asset) {
       toast.error("资产不存在");
+      return;
+    }
+    if (!isImageAsset(asset)) {
+      toast.info("笔记资产无法导入到项目");
       return;
     }
     const imageData = await loadAssetImageAsImageData(
@@ -3582,16 +3612,17 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
   openPixelRestorePage: () => {
-    usePixelRestoreStore.getState().reset();
+    closeOtherToolPages("pixelRestore");
     usePixelRestoreStore.getState().openPage();
   },
 
   openColorEditPage: () => {
-    useColorEditStore.getState().reset();
+    closeOtherToolPages("colorEdit");
     useColorEditStore.getState().openPage();
   },
 
   openAiChatTestPage: () => {
+    closeOtherToolPages("aiChat");
     useAiChatStore.getState().reset();
     useAiChatStore.getState().openPage();
   },
@@ -3607,6 +3638,10 @@ export const useAppStore = create<AppState>((set, get) => {
       toast.error("资产不存在");
       return;
     }
+    if (!isImageAsset(asset)) {
+      toast.info("笔记资产无法发送到工具");
+      return;
+    }
     const imageData = await loadAssetImageAsImageData(
       projectsWorkspacePath,
       asset.imageFile,
@@ -3617,6 +3652,7 @@ export const useAppStore = create<AppState>((set, get) => {
     }
 
     if (toolPageId === "pixelRestore") {
+      closeOtherToolPages("pixelRestore");
       const store = usePixelRestoreStore.getState();
       store.reset();
       store.openPage();
@@ -3624,10 +3660,20 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
+    closeOtherToolPages("colorEdit");
     const store = useColorEditStore.getState();
     store.reset();
     store.openPage();
     store.importFromImageData(imageData);
+  },
+
+  sendPixelRestoreResultToColorEdit: (imageData) => {
+    usePixelRestoreStore.getState().closePage();
+    closeOtherToolPages("colorEdit");
+    const colorEdit = useColorEditStore.getState();
+    colorEdit.openPage();
+    colorEdit.importFromImageData(cloneImageData(imageData));
+    toast.info("已发送到颜色编辑");
   },
 
 
@@ -4068,7 +4114,7 @@ useAppStore.subscribe(() => {
 
 useAppStore.subscribe(() => {
   subscribeLlmSettingsPersistence(
-    () => ({ llmSettings: useAppStore.getState().llmSettings }),
+    () => ({ llmSettingsStore: useAppStore.getState().llmSettingsStore }),
     llmSettingsRepository,
   );
 });

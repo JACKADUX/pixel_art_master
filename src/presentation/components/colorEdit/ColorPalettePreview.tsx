@@ -1,5 +1,6 @@
 import type { PixelColor } from "@/domain/canvas/PixelColor";
 import type { ColorPaletteStats } from "@/domain/colorEdit/ColorPaletteStats";
+import { formatMergeColorSwatchTooltip } from "@/domain/colorEdit/MergeColorTooltip";
 import type { ColorEntry } from "@/domain/palette/Palette";
 
 interface ColorPalettePreviewProps {
@@ -33,7 +34,7 @@ function ColorSwatchGrid({
           <button
             key={entry.hex}
             type="button"
-            title={`${entry.hex}\n点击添加为锚点`}
+            title={`${formatMergeColorSwatchTooltip(entry.color, entry.hex)}\n点击添加为锚点`}
             onClick={() => onColorClick(entry.color)}
             className="aspect-square min-h-[1.125rem] rounded-sm border border-zinc-600 transition hover:ring-1 hover:ring-blue-500/60"
             style={{ background: buildSwatchBackground(entry.hex) }}
@@ -41,7 +42,7 @@ function ColorSwatchGrid({
         ) : (
           <div
             key={entry.hex}
-            title={entry.hex}
+            title={formatMergeColorSwatchTooltip(entry.color, entry.hex)}
             className="aspect-square min-h-[1.125rem] rounded-sm border border-zinc-600"
             style={{ background: buildSwatchBackground(entry.hex) }}
           />

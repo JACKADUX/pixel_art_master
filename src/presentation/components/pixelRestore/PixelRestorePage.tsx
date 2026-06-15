@@ -35,6 +35,9 @@ export function PixelRestorePage() {
   const exportRestoredImageToAssetLibrary = useAppStore(
     (s) => s.exportRestoredImageToAssetLibrary,
   );
+  const sendPixelRestoreResultToColorEdit = useAppStore(
+    (s) => s.sendPixelRestoreResultToColorEdit,
+  );
 
   const hasGridSelection =
     gridScaleType === "singleCell" ? gridSeedCell !== null : gridRegion !== null;
@@ -116,6 +119,11 @@ export function PixelRestorePage() {
     void exportRestoredImageToAssetLibrary(resultImageData);
   };
 
+  const handleSendToColorEdit = () => {
+    if (!resultImageData) return;
+    sendPixelRestoreResultToColorEdit(resultImageData);
+  };
+
   return (
     <>
       <div
@@ -163,7 +171,9 @@ export function PixelRestorePage() {
 
           <RestoreToolPanel
             canExport={projectsWorkspacePath !== null && resultImageData !== null}
+            canSendToColorEdit={resultImageData !== null}
             onExport={handleExport}
+            onSendToColorEdit={handleSendToColorEdit}
           />
         </div>
       </div>

@@ -9,18 +9,23 @@ import {
 } from "./AssetFolder";
 import type { AssetRecord } from "./AssetRecord";
 import {
-  createAssetRecord,
+  createImageAssetRecord,
+  createMarkdownAssetRecord,
+  isImageAsset,
+  isMarkdownAsset,
   moveAssetToFolder,
   setAssetCategory,
   setAssetTags,
   updateAssetNotes,
   updateAssetTitle,
+  updateMarkdownAssetContent,
+  type MarkdownAssetRecord,
 } from "./AssetRecord";
 import type { AssetMetadata } from "./AssetMetadata";
 import type { AssetTag } from "./AssetTag";
 import { createAssetTag, renameAssetTag } from "./AssetTag";
 
-export const ASSET_LIBRARY_VERSION = 1;
+export const ASSET_LIBRARY_VERSION = 2;
 export const ROOT_FOLDER_ID = "__root__";
 
 export interface AssetLibraryIndex {
@@ -226,7 +231,20 @@ export function addAssetToLibrary(
   metadata: AssetMetadata,
   title?: string,
 ): { library: AssetLibraryIndex; asset: AssetRecord } {
-  const asset = createAssetRecord(folderId, imageFile, metadata, title);
+  const asset = createImageAssetRecord(folderId, imageFile, metadata, title);
+  return {
+    library: { ...library, assets: [...library.assets, asset] },
+    asset,
+  };
+}
+
+export function addMarkdownAssetToLibrary(
+  library: AssetLibraryIndex,
+  folderId: string,
+  contentFile: string,
+  title?: string,
+): { library: AssetLibraryIndex; asset: MarkdownAssetRecord } {
+  const asset = createMarkdownAssetRecord(folderId, contentFile, title);
   return {
     library: { ...library, assets: [...library.assets, asset] },
     asset,
@@ -251,6 +269,7 @@ export function updateAssetInLibrary(
   updates: {
     title?: string;
     notes?: string;
+    content?: string;
     categoryId?: string | null;
     tagIds?: string[];
     folderId?: string;
@@ -262,7 +281,12 @@ export function updateAssetInLibrary(
       if (a.id !== assetId) return a;
       let updated = a;
       if (updates.title !== undefined) updated = updateAssetTitle(updated, updates.title);
-      if (updates.notes !== undefined) updated = updateAssetNotes(updated, updates.notes);
+      if (updates.notes !== undefined && isImageAsset(updated)) {
+        updated = updateAssetNotes(updated, updates.notes);
+      }
+      if (updates.content !== undefined && isMarkdownAsset(updated)) {
+        updated = updateMarkdownAssetContent(updated);
+      }
       if (updates.categoryId !== undefined) updated = setAssetCategory(updated, updates.categoryId);
       if (updates.tagIds !== undefined) updated = setAssetTags(updated, updates.tagIds);
       if (updates.folderId !== undefined) updated = moveAssetToFolder(updated, updates.folderId);

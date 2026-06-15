@@ -8,6 +8,7 @@ import {
 import {
   MAX_LLM_TIMEOUT_MS,
   MIN_LLM_TIMEOUT_MS,
+  resolveActiveLlmSettings,
 } from "@/domain/llm/LlmSettings";
 import { llmClient } from "@/infrastructure/llm/createLlmClient";
 import { useAppStore } from "../../stores/appStore";
@@ -20,7 +21,8 @@ import {
 } from "./SettingsField";
 
 export function AiSettingsSection() {
-  const llmSettings = useAppStore((s) => s.llmSettings);
+  const llmSettingsStore = useAppStore((s) => s.llmSettingsStore);
+  const llmSettings = resolveActiveLlmSettings(llmSettingsStore);
   const setLlmProvider = useAppStore((s) => s.setLlmProvider);
   const setLlmApiKey = useAppStore((s) => s.setLlmApiKey);
   const setLlmBaseUrl = useAppStore((s) => s.setLlmBaseUrl);
@@ -52,7 +54,7 @@ export function AiSettingsSection() {
     <div className="flex flex-col gap-5">
       <SettingsGroup
         title="LLM 提供商"
-        description="支持 DeepSeek、OpenRouter 与本地 Ollama（OpenAI 兼容接口）。"
+        description="支持 DeepSeek、OpenRouter 与本地 Ollama（OpenAI 兼容接口）。各供应商参数独立保存。"
       >
         <SettingsRow label="提供商">
           <select

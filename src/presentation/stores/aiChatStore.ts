@@ -2,9 +2,8 @@ import { create } from "zustand";
 import { streamChatCompletion } from "@/application/use-cases/StreamChatCompletion";
 import { createChatMessage, type ChatMessage } from "@/domain/llm/ChatMessage";
 import { isLlmError, llmErrorMessage } from "@/domain/llm/LlmError";
-import { validateLlmSettings } from "@/domain/llm/LlmSettings";
+import { validateLlmSettings, type LlmSettings } from "@/domain/llm/LlmSettings";
 import { llmClient } from "@/infrastructure/llm/createLlmClient";
-import { useAppStore } from "./appStore";
 
 interface AiChatStore {
   open: boolean;
@@ -18,7 +17,7 @@ interface AiChatStore {
   closePage: () => void;
   reset: () => void;
   abortStream: () => void;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, llmSettings: LlmSettings) => Promise<void>;
   clearMessages: () => void;
 }
 
@@ -59,12 +58,11 @@ export const useAiChatStore = create<AiChatStore>((set, get) => ({
     set({ messages: [], streamingContent: "", error: null });
   },
 
-  sendMessage: async (content) => {
+  sendMessage: async (content, llmSettings) => {
     const trimmed = content.trim();
     if (!trimmed) return;
     if (get().streaming) return;
 
-    const llmSettings = useAppStore.getState().llmSettings;
     try {
       validateLlmSettings(llmSettings);
     } catch (error) {

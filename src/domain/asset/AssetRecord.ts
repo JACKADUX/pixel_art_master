@@ -1,29 +1,61 @@
 import type { AssetMetadata } from "./AssetMetadata";
 import { formatAssetDefaultTitle } from "./AssetMetadata";
 
-export interface AssetRecord {
+export type AssetKind = "image" | "markdown";
+
+export interface AssetRecordBase {
   id: string;
   folderId: string;
   title: string;
-  notes: string;
   categoryId: string | null;
   tagIds: string[];
-  imageFile: string;
-  width: number;
-  height: number;
-  colorCount: number;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface ImageAssetRecord extends AssetRecordBase {
+  kind: "image";
+  notes: string;
+  imageFile: string;
+  width: number;
+  height: number;
+  colorCount: number;
+}
+
+export interface MarkdownAssetRecord extends AssetRecordBase {
+  kind: "markdown";
+  contentFile: string;
+}
+
+export type AssetRecord = ImageAssetRecord | MarkdownAssetRecord;
+
+export function isImageAsset(asset: AssetRecord): asset is ImageAssetRecord {
+  return asset.kind === "image";
+}
+
+export function isMarkdownAsset(asset: AssetRecord): asset is MarkdownAssetRecord {
+  return asset.kind === "markdown";
+}
+
+/** @deprecated Use createImageAssetRecord */
 export function createAssetRecord(
   folderId: string,
   imageFile: string,
   metadata: AssetMetadata,
   title?: string,
-): AssetRecord {
+): ImageAssetRecord {
+  return createImageAssetRecord(folderId, imageFile, metadata, title);
+}
+
+export function createImageAssetRecord(
+  folderId: string,
+  imageFile: string,
+  metadata: AssetMetadata,
+  title?: string,
+): ImageAssetRecord {
   const now = new Date().toISOString();
   return {
+    kind: "image",
     id: crypto.randomUUID(),
     folderId,
     title: title ?? formatAssetDefaultTitle(),
@@ -39,7 +71,26 @@ export function createAssetRecord(
   };
 }
 
-export function touchAssetRecord(record: AssetRecord): AssetRecord {
+export function createMarkdownAssetRecord(
+  folderId: string,
+  contentFile: string,
+  title?: string,
+): MarkdownAssetRecord {
+  const now = new Date().toISOString();
+  return {
+    kind: "markdown",
+    id: crypto.randomUUID(),
+    folderId,
+    title: title ?? "未命名笔记",
+    categoryId: null,
+    tagIds: [],
+    contentFile,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function touchAssetRecord<T extends AssetRecord>(record: T): T {
   return { ...record, updatedAt: new Date().toISOString() };
 }
 
@@ -47,8 +98,14 @@ export function updateAssetTitle(record: AssetRecord, title: string): AssetRecor
   return touchAssetRecord({ ...record, title: title.trim() || record.title });
 }
 
-export function updateAssetNotes(record: AssetRecord, notes: string): AssetRecord {
+export function updateAssetNotes(record: ImageAssetRecord, notes: string): ImageAssetRecord {
   return touchAssetRecord({ ...record, notes });
+}
+
+export function updateMarkdownAssetContent(
+  record: MarkdownAssetRecord,
+): MarkdownAssetRecord {
+  return touchAssetRecord(record);
 }
 
 export function setAssetCategory(record: AssetRecord, categoryId: string | null): AssetRecord {

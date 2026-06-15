@@ -9,7 +9,7 @@ import {
   buildAssetImageRelativePath,
 } from "@/domain/asset/AssetLibraryPaths";
 import { metadataFromPixelGrid } from "@/domain/asset/AssetMetadata";
-import type { AssetRecord } from "@/domain/asset/AssetRecord";
+import type { AssetRecord, ImageAssetRecord } from "@/domain/asset/AssetRecord";
 import { pixelGridToPngBlob } from "./ClipboardUseCases";
 
 async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
@@ -24,7 +24,7 @@ export async function importAssetFromPixelGrid(
   folderId: string,
   grid: PixelGrid,
   title?: string,
-): Promise<{ library: AssetLibraryIndex; asset: AssetRecord }> {
+): Promise<{ library: AssetLibraryIndex; asset: ImageAssetRecord }> {
   await repository.ensureLibraryStructure(workspacePath);
 
   const metadata = metadataFromPixelGrid(grid);
@@ -42,7 +42,7 @@ export async function importAssetFromPixelGrid(
   const pngBytes = await blobToUint8Array(pngBlob);
   await repository.writeImage(imagePath, pngBytes);
 
-  const finalAsset: AssetRecord = { ...asset, imageFile: imageRelative };
+  const finalAsset: ImageAssetRecord = { ...asset, imageFile: imageRelative };
   const finalLibrary: AssetLibraryIndex = {
     ...withAsset,
     assets: withAsset.assets.map((a) =>

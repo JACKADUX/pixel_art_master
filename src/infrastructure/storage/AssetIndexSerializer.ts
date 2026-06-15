@@ -44,31 +44,20 @@ function parseTag(raw: unknown): AssetTag | null {
   return { id, name, createdAt };
 }
 
-function parseAsset(raw: unknown): AssetRecord | null {
-  if (!isRecord(raw)) return null;
-  const {
-    id,
-    folderId,
-    title,
-    notes,
-    categoryId,
-    tagIds,
-    imageFile,
-    width,
-    height,
-    colorCount,
-    createdAt,
-    updatedAt,
-  } = raw;
+function parseBaseAsset(raw: Record<string, unknown>): {
+  id: string;
+  folderId: string;
+  title: string;
+  categoryId: string | null;
+  tagIds: string[];
+  createdAt: string;
+  updatedAt: string;
+} | null {
+  const { id, folderId, title, categoryId, tagIds, createdAt, updatedAt } = raw;
   if (
     typeof id !== "string" ||
     typeof folderId !== "string" ||
     typeof title !== "string" ||
-    typeof notes !== "string" ||
-    typeof imageFile !== "string" ||
-    typeof width !== "number" ||
-    typeof height !== "number" ||
-    typeof colorCount !== "number" ||
     typeof createdAt !== "string" ||
     typeof updatedAt !== "string"
   ) {
@@ -81,16 +70,50 @@ function parseAsset(raw: unknown): AssetRecord | null {
     id,
     folderId,
     title,
-    notes,
     categoryId:
       categoryId === null || typeof categoryId === "string" ? categoryId : null,
     tagIds: tags,
+    createdAt,
+    updatedAt,
+  };
+}
+
+function parseAsset(raw: unknown): AssetRecord | null {
+  if (!isRecord(raw)) return null;
+
+  const kind = raw.kind === "markdown" ? "markdown" : "image";
+  const base = parseBaseAsset(raw);
+  if (!base) return null;
+
+  if (kind === "markdown") {
+    const { contentFile } = raw;
+    if (typeof contentFile !== "string") return null;
+    return {
+      ...base,
+      kind: "markdown",
+      contentFile,
+    };
+  }
+
+  const { notes, imageFile, width, height, colorCount } = raw;
+  if (
+    typeof notes !== "string" ||
+    typeof imageFile !== "string" ||
+    typeof width !== "number" ||
+    typeof height !== "number" ||
+    typeof colorCount !== "number"
+  ) {
+    return null;
+  }
+
+  return {
+    ...base,
+    kind: "image",
+    notes,
     imageFile,
     width,
     height,
     colorCount,
-    createdAt,
-    updatedAt,
   };
 }
 

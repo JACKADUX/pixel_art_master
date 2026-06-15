@@ -20,7 +20,14 @@ export class LocalColorEditPreferencesRepository implements IColorEditPreference
       if (typeof parsed !== "object" || parsed === null) return null;
 
       const version = (parsed as SerializedColorEditPreferences).version;
-      if (version !== 2 && version !== COLOR_EDIT_PREFERENCES_VERSION) {
+      if (
+        version !== 2 &&
+        version !== 3 &&
+        version !== 4 &&
+        version !== 5 &&
+        version !== 6 &&
+        version !== COLOR_EDIT_PREFERENCES_VERSION
+      ) {
         return null;
       }
 

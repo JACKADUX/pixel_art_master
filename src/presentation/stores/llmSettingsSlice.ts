@@ -3,24 +3,26 @@ import { saveLlmSettings } from "@/application/use-cases/SaveLlmSettings";
 import type { ILlmSettingsRepository } from "@/application/ports/ILlmSettingsRepository";
 import {
   clampLlmTimeoutMs,
-  normalizeBaseUrl,
-  withLlmProvider,
+  resolveActiveLlmSettings,
+  setActiveProvider,
+  updateActiveProviderConfig,
   type LlmSettings,
+  type LlmSettingsStore,
 } from "@/domain/llm/LlmSettings";
 import type { LlmProviderId } from "@/domain/llm/LlmProvider";
 
 export interface LlmSettingsSliceState {
-  llmSettings: LlmSettings;
+  llmSettingsStore: LlmSettingsStore;
 }
 
 export interface LlmSettingsSliceActions {
-  setLlmSettings: (settings: LlmSettings) => void;
-  updateLlmSettings: (partial: Partial<LlmSettings>) => void;
+  setLlmSettingsStore: (store: LlmSettingsStore) => void;
   setLlmProvider: (provider: LlmProviderId) => void;
   setLlmApiKey: (apiKey: string) => void;
   setLlmBaseUrl: (baseUrl: string) => void;
   setLlmModel: (model: string) => void;
   setLlmTimeoutSeconds: (seconds: number) => void;
+  getActiveLlmSettings: () => LlmSettings;
 }
 
 type LlmSettingsSet = (
@@ -29,55 +31,54 @@ type LlmSettingsSet = (
     | ((state: LlmSettingsSliceState) => Partial<LlmSettingsSliceState>),
 ) => void;
 
+type LlmSettingsGet = () => LlmSettingsSliceState;
+
 export function createLlmSettingsInitialState(
   repository: ILlmSettingsRepository,
 ): LlmSettingsSliceState {
   return {
-    llmSettings: loadLlmSettings(repository),
+    llmSettingsStore: loadLlmSettings(repository),
   };
 }
 
 export function createLlmSettingsSlice(
   set: LlmSettingsSet,
+  get: LlmSettingsGet,
   repository: ILlmSettingsRepository,
 ): LlmSettingsSliceState & LlmSettingsSliceActions {
   return {
     ...createLlmSettingsInitialState(repository),
 
-    setLlmSettings: (settings) => set({ llmSettings: settings }),
-
-    updateLlmSettings: (partial) =>
-      set((state) => ({
-        llmSettings: { ...state.llmSettings, ...partial },
-      })),
+    setLlmSettingsStore: (store) => set({ llmSettingsStore: store }),
 
     setLlmProvider: (provider) =>
       set((state) => ({
-        llmSettings: withLlmProvider(state.llmSettings, provider),
+        llmSettingsStore: setActiveProvider(state.llmSettingsStore, provider),
       })),
 
     setLlmApiKey: (apiKey) =>
       set((state) => ({
-        llmSettings: { ...state.llmSettings, apiKey },
+        llmSettingsStore: updateActiveProviderConfig(state.llmSettingsStore, { apiKey }),
       })),
 
     setLlmBaseUrl: (baseUrl) =>
       set((state) => ({
-        llmSettings: { ...state.llmSettings, baseUrl: normalizeBaseUrl(baseUrl) },
+        llmSettingsStore: updateActiveProviderConfig(state.llmSettingsStore, { baseUrl }),
       })),
 
     setLlmModel: (model) =>
       set((state) => ({
-        llmSettings: { ...state.llmSettings, model: model.trim() },
+        llmSettingsStore: updateActiveProviderConfig(state.llmSettingsStore, { model }),
       })),
 
     setLlmTimeoutSeconds: (seconds) =>
       set((state) => ({
-        llmSettings: {
-          ...state.llmSettings,
+        llmSettingsStore: updateActiveProviderConfig(state.llmSettingsStore, {
           timeoutMs: clampLlmTimeoutMs(seconds * 1000),
-        },
+        }),
       })),
+
+    getActiveLlmSettings: () => resolveActiveLlmSettings(get().llmSettingsStore),
   };
 }
 
@@ -92,7 +93,12 @@ export function subscribeLlmSettingsPersistence(
   }
 
   llmSettingsSaveTimer = setTimeout(() => {
-    saveLlmSettings(repository, getState().llmSettings);
+    saveLlmSettings(repository, getState().llmSettingsStore);
     llmSettingsSaveTimer = null;
   }, 300);
+}
+
+/** 从 store 状态选取当前活跃 LLM 配置 */
+export function selectActiveLlmSettings(state: LlmSettingsSliceState): LlmSettings {
+  return resolveActiveLlmSettings(state.llmSettingsStore);
 }

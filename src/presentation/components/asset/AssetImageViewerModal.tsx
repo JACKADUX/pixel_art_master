@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { findAssetById, type AssetLibraryIndex } from "@/domain/asset/AssetLibrary";
+import { isImageAsset } from "@/domain/asset/AssetRecord";
 import { buildColorPaletteFromImageData } from "@/domain/image/ImageColorPalette";
 import { loadAssetImageAsImageData } from "@/infrastructure/storage/AssetImageLoader";
 import { ImagePaletteFloatingPanel } from "@/presentation/components/imagePreview/ImagePaletteFloatingPanel";
@@ -37,6 +38,7 @@ export function AssetImageViewerModal({
 
   const asset =
     open && library && assetId ? findAssetById(library, assetId) : null;
+  const imageAsset = asset && isImageAsset(asset) ? asset : null;
 
   const paletteColors = useMemo(
     () =>
@@ -47,7 +49,7 @@ export function AssetImageViewerModal({
   );
 
   useEffect(() => {
-    if (!open || !asset || !workspacePath) {
+    if (!open || !imageAsset || !workspacePath) {
       setImageData(null);
       setLoading(false);
       return;
@@ -57,7 +59,7 @@ export function AssetImageViewerModal({
     setLoading(true);
     setImageData(null);
 
-    void loadAssetImageAsImageData(workspacePath, asset.imageFile).then((data) => {
+    void loadAssetImageAsImageData(workspacePath, imageAsset.imageFile).then((data) => {
       if (cancelled) return;
       setImageData(data);
       setLoading(false);
@@ -66,7 +68,7 @@ export function AssetImageViewerModal({
     return () => {
       cancelled = true;
     };
-  }, [open, asset?.id, asset?.imageFile, workspacePath]);
+  }, [open, imageAsset?.id, imageAsset?.imageFile, workspacePath]);
 
   useEffect(() => {
     if (!open) {
@@ -111,15 +113,15 @@ export function AssetImageViewerModal({
     return () => observer.disconnect();
   }, [open, loading]);
 
-  if (!open || !asset) return null;
+  if (!open || !imageAsset) return null;
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col bg-black/85">
       <div className="flex shrink-0 items-center justify-between border-b border-zinc-700 bg-zinc-900 px-4 py-2">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-medium text-zinc-100">{asset.title}</h3>
+          <h3 className="truncate text-sm font-medium text-zinc-100">{imageAsset.title}</h3>
           <p className="text-[10px] text-zinc-500">
-            {asset.width}×{asset.height} · 滚轮缩放 · 拖拽平移 · Esc 关闭
+            {imageAsset.width}×{imageAsset.height} · 滚轮缩放 · 拖拽平移 · Esc 关闭
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

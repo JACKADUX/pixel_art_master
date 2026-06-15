@@ -6,10 +6,17 @@ import { usePixelRestoreStore } from "../../stores/pixelRestoreStore";
 
 interface RestoreToolPanelProps {
   canExport: boolean;
+  canSendToColorEdit: boolean;
   onExport: () => void;
+  onSendToColorEdit: () => void;
 }
 
-export function RestoreToolPanel({ canExport, onExport }: RestoreToolPanelProps) {
+export function RestoreToolPanel({
+  canExport,
+  canSendToColorEdit,
+  onExport,
+  onSendToColorEdit,
+}: RestoreToolPanelProps) {
   const restoreMode = usePixelRestoreStore((s) => s.restoreMode);
   const setRestoreMode = usePixelRestoreStore((s) => s.setRestoreMode);
   const detectedScale = usePixelRestoreStore((s) => s.detectedScale);
@@ -68,11 +75,18 @@ export function RestoreToolPanel({ canExport, onExport }: RestoreToolPanelProps)
             sourceHeight={sourceHeight}
             error={error}
             canExport={canExport}
+            canSendToColorEdit={canSendToColorEdit}
             onScaleChange={setScale}
             onExport={onExport}
+            onSendToColorEdit={onSendToColorEdit}
           />
         ) : (
-          <GridScaleControls canExport={canExport} onExport={onExport} />
+          <GridScaleControls
+            canExport={canExport}
+            canSendToColorEdit={canSendToColorEdit}
+            onExport={onExport}
+            onSendToColorEdit={onSendToColorEdit}
+          />
         )}
       </div>
     </div>

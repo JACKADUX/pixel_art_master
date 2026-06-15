@@ -9,6 +9,9 @@ const TEXT_INPUT_TYPES = new Set([
   "",
 ]);
 
+/** Ctrl/Cmd shortcuts that stay app-global even while a text field is focused. */
+const APP_GLOBAL_CTRL_KEYS = new Set(["s", "n", "o"]);
+
 export function isTextInputType(type: string): boolean {
   return TEXT_INPUT_TYPES.has(type.toLowerCase());
 }
@@ -37,15 +40,24 @@ export function releaseKeyboardFocus(): void {
 }
 
 /**
- * When a text input is focused, defer unmodified shortcuts so typed keys reach the field.
- * Modifier combos (Ctrl/Cmd/Alt) are always handled by the app shortcut layer.
+ * When a text input is focused, defer shortcuts so typing and standard text editing work.
+ * App-global combos (Ctrl/Cmd+S/N/O) still reach the shortcut layer.
  */
 export function shouldDeferShortcutToTextEntryWhen(
   isTextEntry: boolean,
-  event: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "altKey">,
+  event: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "altKey" | "shiftKey" | "key">,
 ): boolean {
   if (!isTextEntry) return false;
-  if (event.ctrlKey || event.metaKey || event.altKey) return false;
+
+  const ctrl = event.ctrlKey || event.metaKey;
+
+  if (!ctrl) return true;
+
+  if (event.altKey) return true;
+
+  const key = event.key.toLowerCase();
+  if (APP_GLOBAL_CTRL_KEYS.has(key)) return false;
+
   return true;
 }
 

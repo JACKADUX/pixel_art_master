@@ -13,6 +13,7 @@ import {
   deleteAssetRecord,
   updateAssetRecord,
 } from "@/application/use-cases/AssetRecordUseCases";
+import { createMarkdownAsset } from "@/application/use-cases/CreateMarkdownAsset";
 import { ensureWorkspaceAccess } from "@/application/use-cases/EnsureWorkspaceAccess";
 import { importAssetFromCanvasRegion } from "@/application/use-cases/ImportAssetFromCanvasRegion";
 import { importAssetFromClipboard } from "@/application/use-cases/ImportAssetFromClipboard";
@@ -100,6 +101,7 @@ export interface AssetLibrarySliceActions {
   renameAssetFolderAction: (folderId: string, name: string) => Promise<void>;
   importAssetFromClipboardAction: () => Promise<void>;
   importAssetFromFileAction: () => Promise<void>;
+  createMarkdownAssetAction: () => Promise<void>;
   startAssetCanvasCapture: () => void;
   cancelAssetCanvasCapture: () => void;
   assetCapturePointerDown: (point: Point) => void;
@@ -117,6 +119,7 @@ export interface AssetLibrarySliceActions {
     updates: {
       title?: string;
       notes?: string;
+      content?: string;
       categoryId?: string | null;
       tagIds?: string[];
       folderId?: string;
@@ -320,6 +323,31 @@ export function createAssetLibrarySlice(
         toast.info("已导入到资产库");
       } catch {
         toast.error("从文件导入失败");
+      }
+    },
+
+    createMarkdownAssetAction: async () => {
+      const workspacePath = await resolveWorkspace();
+      let library = get().assetLibrary;
+      if (!workspacePath) return;
+      if (!library) {
+        library = await loadAssetLibrary(deps.assetRepository, workspacePath);
+        set({ assetLibrary: library });
+      }
+      try {
+        const result = await createMarkdownAsset(
+          deps.assetRepository,
+          workspacePath,
+          library,
+          get().selectedAssetFolderId,
+        );
+        set({
+          assetLibrary: result.library,
+          selectedAssetId: result.asset.id,
+        });
+        toast.info("已创建笔记");
+      } catch {
+        toast.error("创建笔记失败");
       }
     },
 
