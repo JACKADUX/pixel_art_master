@@ -15,6 +15,7 @@ import {
 } from "@/domain/colorEdit/ColorEditPreferences";
 import type { DiffusionRegionGroups } from "@/domain/colorEdit/DiffusionRegionGroups";
 import { clampOklabMergeThreshold } from "@/domain/colorEdit/OklabMergeDistance";
+import { filterDisabledColorsInPalette } from "@/domain/colorEdit/ColorDisableOperations";
 import {
   createManualMergeAnchor,
   type ManualMergeAnchor,
@@ -33,6 +34,7 @@ interface ColorEditStore {
   sourceImageData: ImageData | null;
   resultImageData: ImageData | null;
   statsBefore: ColorPaletteStats | null;
+  statsAfterNormalized: ColorPaletteStats | null;
   statsAfter: ColorPaletteStats | null;
   mergeRegionGroups: DiffusionRegionGroups | null;
   loading: boolean;
@@ -42,6 +44,7 @@ interface ColorEditStore {
   oklabMergeThreshold: number;
   oklabReduceAlgorithm: OklabReduceAlgorithm;
   manualMergeAnchors: ManualMergeAnchor[];
+  disabledColors: PixelColor[];
   sourcePickMode: boolean;
 
   openPage: () => void;
@@ -60,6 +63,7 @@ interface ColorEditStore {
   addManualMergeAnchor: (color: PixelColor) => void;
   removeManualMergeAnchor: (id: string) => void;
   setManualMergeAnchorThreshold: (id: string, threshold: number) => void;
+  toggleNormalizedColorDisabled: (color: PixelColor) => void;
   reprocess: () => void;
 }
 
@@ -71,6 +75,7 @@ const sessionDefaults = {
   sourceImageData: null as ImageData | null,
   resultImageData: null as ImageData | null,
   statsBefore: null as ColorPaletteStats | null,
+  statsAfterNormalized: null as ColorPaletteStats | null,
   statsAfter: null as ColorPaletteStats | null,
   mergeRegionGroups: null as DiffusionRegionGroups | null,
   loading: false,
@@ -78,6 +83,7 @@ const sessionDefaults = {
   monitorPickerOpen: false,
   availableMonitors: [] as CapturableMonitor[],
   manualMergeAnchors: [] as ManualMergeAnchor[],
+  disabledColors: [] as PixelColor[],
   sourcePickMode: false,
 };
 
@@ -97,6 +103,7 @@ function reprocessColorEdit(state: {
   oklabMergeThreshold: number;
   oklabReduceAlgorithm: OklabReduceAlgorithm;
   manualMergeAnchors: ManualMergeAnchor[];
+  disabledColors: PixelColor[];
 }) {
   try {
     const result = applyOklabMergeEdit(
@@ -106,18 +113,26 @@ function reprocessColorEdit(state: {
         reduceAlgorithm: state.oklabReduceAlgorithm,
       },
       state.manualMergeAnchors,
+      state.disabledColors,
+    );
+    const activeDisabledColors = filterDisabledColorsInPalette(
+      result.statsAfterNormalized,
+      state.disabledColors,
     );
     return {
       resultImageData: result.resultImageData,
       statsBefore: result.statsBefore,
+      statsAfterNormalized: result.statsAfterNormalized,
       statsAfter: result.statsAfter,
       mergeRegionGroups: result.regionGroups,
+      disabledColors: activeDisabledColors,
       error: null as string | null,
     };
   } catch (err) {
     return {
       resultImageData: null,
       statsBefore: computeColorPaletteStats(state.sourceImageData),
+      statsAfterNormalized: null,
       statsAfter: null,
       mergeRegionGroups: null,
       error: err instanceof Error ? err.message : "处理失败",
@@ -129,18 +144,20 @@ function applySourceImage(
   sourceImageData: ImageData,
   state: Pick<
     ColorEditStore,
-    "oklabMergeThreshold" | "oklabReduceAlgorithm" | "manualMergeAnchors"
+    "oklabMergeThreshold" | "oklabReduceAlgorithm" | "manualMergeAnchors" | "disabledColors"
   >,
 ) {
   return {
     sourceImageData,
     manualMergeAnchors: [] as ManualMergeAnchor[],
+    disabledColors: [] as PixelColor[],
     sourcePickMode: false,
     ...reprocessColorEdit({
       sourceImageData,
       oklabMergeThreshold: state.oklabMergeThreshold,
       oklabReduceAlgorithm: state.oklabReduceAlgorithm,
       manualMergeAnchors: [],
+      disabledColors: [],
     }),
   };
 }
@@ -162,6 +179,7 @@ function withReprocess(state: ColorEditStore, patch: Partial<ColorEditStore>) {
       oklabMergeThreshold: next.oklabMergeThreshold,
       oklabReduceAlgorithm: next.oklabReduceAlgorithm,
       manualMergeAnchors: next.manualMergeAnchors,
+      disabledColors: next.disabledColors,
     }),
   };
 }
@@ -320,6 +338,19 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
     );
   },
 
+  toggleNormalizedColorDisabled: (color) => {
+    const state = get();
+    const isDisabled = state.disabledColors.includes(color);
+    const nextDisabled = isDisabled
+      ? state.disabledColors.filter((entry) => entry !== color)
+      : [...state.disabledColors, color];
+    set(
+      withReprocess(get(), {
+        disabledColors: nextDisabled,
+      }),
+    );
+  },
+
   reprocess: () => {
     const state = get();
     if (!state.sourceImageData) return;
@@ -329,6 +360,7 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
         oklabMergeThreshold: state.oklabMergeThreshold,
         oklabReduceAlgorithm: state.oklabReduceAlgorithm,
         manualMergeAnchors: state.manualMergeAnchors,
+        disabledColors: state.disabledColors,
       }),
     );
   },

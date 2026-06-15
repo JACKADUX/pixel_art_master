@@ -21,7 +21,9 @@ export function OklabMergeControls({ canExport, onExport }: OklabMergeControlsPr
   const oklabMergeThreshold = useColorEditStore((s) => s.oklabMergeThreshold);
   const oklabReduceAlgorithm = useColorEditStore((s) => s.oklabReduceAlgorithm);
   const statsBefore = useColorEditStore((s) => s.statsBefore);
+  const statsAfterNormalized = useColorEditStore((s) => s.statsAfterNormalized);
   const statsAfter = useColorEditStore((s) => s.statsAfter);
+  const disabledColors = useColorEditStore((s) => s.disabledColors);
   const mergeRegionGroups = useColorEditStore((s) => s.mergeRegionGroups);
   const sourceImageData = useColorEditStore((s) => s.sourceImageData);
   const resultImageData = useColorEditStore((s) => s.resultImageData);
@@ -36,6 +38,7 @@ export function OklabMergeControls({ canExport, onExport }: OklabMergeControlsPr
   const setManualMergeAnchorThreshold = useColorEditStore(
     (s) => s.setManualMergeAnchorThreshold,
   );
+  const toggleNormalizedColorDisabled = useColorEditStore((s) => s.toggleNormalizedColorDisabled);
 
   const hasResult = sourceImageData !== null && resultImageData !== null;
 
@@ -110,7 +113,13 @@ export function OklabMergeControls({ canExport, onExport }: OklabMergeControlsPr
               onColorClick={addManualMergeAnchor}
             />
             <DiffusionRegionGroupsPreview regionGroups={mergeRegionGroups} />
-            <ColorPalettePreview label="归一后" stats={statsAfter} />
+            <ColorPalettePreview
+              label="归一后"
+              stats={statsAfterNormalized}
+              activeCount={statsAfter?.uniqueCount ?? null}
+              disabledColors={disabledColors}
+              onColorRightClick={toggleNormalizedColorDisabled}
+            />
           </div>
 
           {error && <p className="text-[11px] text-red-400">{error}</p>}

@@ -6,6 +6,11 @@ import {
 
 } from "@/domain/colorEdit/ColorPaletteStats";
 
+import type { PixelColor } from "@/domain/canvas/PixelColor";
+import {
+  applyDisabledColors,
+  filterDisabledColorsInPalette,
+} from "@/domain/colorEdit/ColorDisableOperations";
 import type { DiffusionRegionGroups } from "@/domain/colorEdit/DiffusionRegionGroups";
 import type { ManualMergeAnchor } from "@/domain/colorEdit/ManualMergeAnchor";
 import { applyManualMergeOverlays } from "@/domain/colorEdit/ManualMergeOperations";
@@ -30,6 +35,8 @@ export interface ColorEditResult {
 
   statsBefore: ColorPaletteStats;
 
+  statsAfterNormalized: ColorPaletteStats;
+
   statsAfter: ColorPaletteStats;
 
   regionGroups: DiffusionRegionGroups;
@@ -45,6 +52,8 @@ export function applyOklabMergeEdit(
   options?: Partial<OklabMergeOptions>,
 
   manualAnchors?: readonly ManualMergeAnchor[],
+
+  disabledColors?: readonly PixelColor[],
 
 ): ColorEditResult {
 
@@ -66,19 +75,35 @@ export function applyOklabMergeEdit(
     manualAnchors ?? [],
   );
 
+  const statsAfterNormalized = computeColorPaletteStats(withManualOverlays);
+  const activeDisabledColors = filterDisabledColorsInPalette(
+    statsAfterNormalized,
+    disabledColors ?? [],
+  );
+
+  const withDisabledColors = applyDisabledColors(
+    withManualOverlays,
+    activeDisabledColors,
+  );
+
   const resultImageData = rgbaBufferToImageData(
 
-    withManualOverlays.width,
+    withDisabledColors.width,
 
-    withManualOverlays.height,
+    withDisabledColors.height,
 
-    withManualOverlays.data,
+    withDisabledColors.data,
 
   );
 
   const statsAfter = computeColorPaletteStats(resultImageData);
 
-  return { resultImageData, statsBefore, statsAfter, regionGroups };
+  return {
+    resultImageData,
+    statsBefore,
+    statsAfterNormalized,
+    statsAfter,
+    regionGroups,
+  };
 
 }
-
