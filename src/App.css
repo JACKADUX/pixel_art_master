@@ -80,7 +80,7 @@ body,
   .cursor-eyedropper {
     cursor:
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath fill='%23fff' stroke='%23000' stroke-width='0.8' d='M2 18l2-2 8-8 2 2-8 8-2 2H2v-2z'/%3E%3Cpath fill='%23fff' stroke='%23000' stroke-width='0.8' d='M11 3l6 6-1.5 1.5L9.5 4.5 11 3z'/%3E%3Ccircle cx='15.5' cy='4.5' r='1.5' fill='%23fff' stroke='%23000' stroke-width='0.8'/%3E%3C/svg%3E")
-        2 18,
+        2 19,
       crosshair;
   }
 

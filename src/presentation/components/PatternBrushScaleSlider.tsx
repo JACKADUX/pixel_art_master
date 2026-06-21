@@ -174,7 +174,10 @@ export function PatternBrushScaleSlider({ value, onChange }: PatternBrushScaleSl
         anchorRef={anchorRef}
         value={value}
         onChange={onChange}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          focusCanvasKeyboard();
+        }}
       />
     </>
   );

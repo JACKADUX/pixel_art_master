@@ -16,9 +16,32 @@ const FULL_PIXEL_CACHE_KEY = "full";
 
 const cache = new Map<string, ReferenceLayerPixelData>();
 const pending = new Map<string, Promise<ReferenceLayerPixelData | null>>();
+const pendingTokens = new Map<string, object>();
 
 function cacheStorageKey(layerId: string, cropKey: string): string {
   return `${layerId}::${cropKey}`;
+}
+
+function isCropCacheKey(key: string): boolean {
+  return !key.endsWith(`::${FULL_PIXEL_CACHE_KEY}`);
+}
+
+export function removeStaleReferenceLayerCropCaches(
+  layerId: string,
+  activeCropKey: string,
+): void {
+  const activeStorageKey = cacheStorageKey(layerId, activeCropKey);
+  for (const key of [...cache.keys()]) {
+    if (key.startsWith(`${layerId}::`) && isCropCacheKey(key) && key !== activeStorageKey) {
+      cache.delete(key);
+    }
+  }
+  for (const key of [...pending.keys()]) {
+    if (key.startsWith(`${layerId}::`) && isCropCacheKey(key) && key !== activeStorageKey) {
+      pending.delete(key);
+      pendingTokens.delete(key);
+    }
+  }
 }
 
 function readRegionPixels(
@@ -86,25 +109,35 @@ async function ensurePixelCacheForCrop(
     return pendingLoad;
   }
 
+  const loadToken = {};
   const loadPromise = (async () => {
     const image = await getReferenceImage(layer.id, layer.imageData!);
+    if (pendingTokens.get(storageKey) !== loadToken) {
+      return null;
+    }
     const pixelData = readRegionPixels(image, crop, cropKey);
     pixelData.base64 = layer.imageData!;
     cache.set(storageKey, pixelData);
-    pending.delete(storageKey);
+    if (cropKey !== FULL_PIXEL_CACHE_KEY) {
+      removeStaleReferenceLayerCropCaches(layer.id, cropKey);
+    }
+    if (pendingTokens.get(storageKey) === loadToken) {
+      pending.delete(storageKey);
+      pendingTokens.delete(storageKey);
+    }
     return pixelData;
   })();
 
   pending.set(storageKey, loadPromise);
+  pendingTokens.set(storageKey, loadToken);
   return loadPromise;
 }
 
 export function getReferenceLayerPixelCache(
   layerId: string,
+  cropKey: string,
 ): ReferenceLayerPixelData | null {
-  const entries = [...cache.entries()].filter(([key]) => key.startsWith(`${layerId}::`));
-  const cropEntry = entries.find(([key]) => !key.endsWith(`::${FULL_PIXEL_CACHE_KEY}`));
-  return cropEntry?.[1] ?? null;
+  return cache.get(cacheStorageKey(layerId, cropKey)) ?? null;
 }
 
 export function invalidateReferenceLayerPixelCache(layerId: string): void {
@@ -116,6 +149,7 @@ export function invalidateReferenceLayerPixelCache(layerId: string): void {
   for (const key of [...pending.keys()]) {
     if (key.startsWith(`${layerId}::`)) {
       pending.delete(key);
+      pendingTokens.delete(key);
     }
   }
   invalidateReferenceImage(layerId);
@@ -139,4 +173,5 @@ export async function ensureReferenceLayerFullPixelCache(
 export function clearReferenceLayerPixelCache(): void {
   cache.clear();
   pending.clear();
+  pendingTokens.clear();
 }

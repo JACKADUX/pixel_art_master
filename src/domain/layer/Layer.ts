@@ -44,6 +44,10 @@ export interface ReferenceLayer {
   crop: CropRect | null;
   position: LayerPosition;
   grid: ReferenceGridConfig;
+  /** Uniform display scale applied on top of the crop size (1 = original size). */
+  scale: number;
+  /** Whether the extracted color strip is shown beneath the reference image. */
+  paletteVisible: boolean;
 }
 
 export type Layer = DrawingLayer | ReferenceLayer;
@@ -90,6 +94,8 @@ export function createEmptyReferenceLayer(name?: string): ReferenceLayer {
       secondary: 8,
       visible: false,
     },
+    scale: 1,
+    paletteVisible: true,
   };
 }
 

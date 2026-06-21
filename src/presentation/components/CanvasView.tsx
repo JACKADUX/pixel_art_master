@@ -1279,7 +1279,7 @@ export function CanvasView() {
       spaceKey: spaceKeyHeldRef.current,
     };
     if (e.altKey) {
-      pickColorAt(point, colorSlotFromDrawingButton(button));
+      void pickColorAt(point, colorSlotFromDrawingButton(button));
       return;
     }
     pointerDown(point, button, modifiers);

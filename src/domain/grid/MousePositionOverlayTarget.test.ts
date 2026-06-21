@@ -16,6 +16,8 @@ function createReferenceLayer(overrides: Partial<ReferenceLayer> = {}): Referenc
     imageSize: null,
     crop: { x: 0, y: 0, width: 32, height: 32 },
     grid: { primary: 16, secondary: 8, visible: false },
+    scale: 1,
+    paletteVisible: true,
     ...overrides,
   };
 }

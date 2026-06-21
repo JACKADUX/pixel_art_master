@@ -13,6 +13,7 @@ import {
 import {
   clampStampSize,
   clampMagicWandTolerance,
+  clampFillTolerance,
   clampPatternScale,
   DEFAULT_TOOL_SETTINGS,
   type BrushShape,
@@ -284,6 +285,9 @@ function parseToolSettings(value: unknown): ToolSettings {
     eraserShape,
     shapeMode,
     shapeFilled: typeof value.shapeFilled === "boolean" ? value.shapeFilled : defaults.shapeFilled,
+    fillTolerance: clampFillTolerance(
+      typeof value.fillTolerance === "number" ? value.fillTolerance : defaults.fillTolerance,
+    ),
     selectionMode,
     magicWandTolerance: clampMagicWandTolerance(
       typeof value.magicWandTolerance === "number"

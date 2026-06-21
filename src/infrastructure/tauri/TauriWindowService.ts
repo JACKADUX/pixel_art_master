@@ -1,6 +1,17 @@
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const STORAGE_KEY = "pixelart-always-on-top";
+
+/** Restore OS-level keyboard focus to the app window (Tauri webview can lose it after dialogs). */
+export async function ensureTauriWindowFocus(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    await getCurrentWindow().setFocus();
+  } catch {
+    // Ignore focus errors in unsupported environments.
+  }
+}
 
 export class TauriWindowService {
   async setAlwaysOnTop(value: boolean): Promise<void> {

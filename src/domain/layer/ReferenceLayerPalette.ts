@@ -2,6 +2,7 @@ import { getAlpha, toHexAlpha, type PixelColor } from "../canvas/PixelColor";
 import { pixelColorToOklab } from "../color/ColorConverter";
 import type { ColorEntry } from "../palette/Palette";
 import type { Layer, ReferenceLayer } from "./Layer";
+import { clampReferenceScale } from "./ReferenceLayerOperations";
 
 export const REFERENCE_LAYER_PALETTE_MAX_COLORS = 256;
 
@@ -9,18 +10,37 @@ export function referenceLayerCropKey(crop: NonNullable<ReferenceLayer["crop"]>)
   return `${crop.x},${crop.y},${crop.width},${crop.height}`;
 }
 
+export function isReferenceLayerPixelCacheValid(
+  cache: {
+    base64: string;
+    cropKey: string;
+    width: number;
+    height: number;
+  },
+  layer: ReferenceLayer,
+): boolean {
+  if (!layer.imageData || !layer.crop) return false;
+  return (
+    cache.base64 === layer.imageData &&
+    cache.cropKey === referenceLayerCropKey(layer.crop) &&
+    cache.width === layer.crop.width &&
+    cache.height === layer.crop.height
+  );
+}
+
 export function isPointInsideReferenceLayer(
   layer: ReferenceLayer,
   point: { x: number; y: number },
 ): boolean {
   if (!layer.visible || !layer.crop || !layer.imageData) return false;
+  const scale = clampReferenceScale(layer.scale);
   const localX = point.x - layer.position.x;
   const localY = point.y - layer.position.y;
   return (
     localX >= 0 &&
     localY >= 0 &&
-    localX < layer.crop.width &&
-    localY < layer.crop.height
+    localX < layer.crop.width * scale &&
+    localY < layer.crop.height * scale
   );
 }
 
@@ -42,10 +62,18 @@ export function toReferenceLayerLocalPoint(
   canvasPoint: { x: number; y: number },
 ): { x: number; y: number } | null {
   if (!layer.crop) return null;
-  const x = canvasPoint.x - layer.position.x;
-  const y = canvasPoint.y - layer.position.y;
-  if (x < 0 || y < 0 || x >= layer.crop.width || y >= layer.crop.height) return null;
-  return { x, y };
+  const scale = clampReferenceScale(layer.scale);
+  const displayX = canvasPoint.x - layer.position.x;
+  const displayY = canvasPoint.y - layer.position.y;
+  if (
+    displayX < 0 ||
+    displayY < 0 ||
+    displayX >= layer.crop.width * scale ||
+    displayY >= layer.crop.height * scale
+  ) {
+    return null;
+  }
+  return { x: displayX / scale, y: displayY / scale };
 }
 
 export function sampleReferenceLayerPixel(

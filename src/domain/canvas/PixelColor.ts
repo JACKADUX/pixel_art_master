@@ -57,6 +57,21 @@ export function colorsEqual(a: PixelColor, b: PixelColor): boolean {
   return a === b;
 }
 
+export function isTransparent(color: PixelColor): boolean {
+  return getAlpha(color) === 0;
+}
+
+export function colorDistance(a: PixelColor, b: PixelColor): number {
+  const ca = toRgbaComponents(a);
+  const cb = toRgbaComponents(b);
+  return (
+    Math.abs(ca.r - cb.r) +
+    Math.abs(ca.g - cb.g) +
+    Math.abs(ca.b - cb.b) +
+    Math.abs(ca.a - cb.a)
+  );
+}
+
 export function rgbKey(color: PixelColor): string {
   const r = color & 0xff;
   const g = (color >> 8) & 0xff;

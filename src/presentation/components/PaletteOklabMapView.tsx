@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { colorsEqual, type PixelColor } from "@/domain/canvas/PixelColor";
-import { pixelColorToOklabPolar } from "@/domain/color/ColorConverter";
+import { pixelColorToHsl, pixelColorToOklabPolar } from "@/domain/color/ColorConverter";
 import type { ColorEntry } from "@/domain/palette/Palette";
 import { formatPaletteColorTooltip } from "@/domain/palette/PaletteColorTooltip";
 import { computePaletteOklabLayout } from "@/domain/palette/PaletteOklabLayout";
@@ -62,14 +62,6 @@ export function PaletteOklabMapView({
     [colors],
   );
 
-  const polarByHex = useMemo(
-    () =>
-      new Map(
-        colors.map((entry) => [entry.hex, pixelColorToOklabPolar(entry.color)]),
-      ),
-    [colors],
-  );
-
   const layout = useMemo(() => {
     const inputs = colors.map((entry) => {
       const polar = pixelColorToOklabPolar(entry.color);
@@ -94,9 +86,6 @@ export function PaletteOklabMapView({
           const entry = colorByHex.get(circle.id);
           if (!entry) return null;
 
-          const polar = polarByHex.get(circle.id);
-          if (!polar) return null;
-
           const diameter = circle.radius * 2;
           const isSelectedForRemoval = !readOnly && removeMode && selectedHexes?.has(entry.hex);
           const isForeground =
@@ -109,6 +98,8 @@ export function PaletteOklabMapView({
             : removeMode
               ? `${formatPaletteColorTooltip(entry.color, entry.hex)}\n点击选择/取消选择`
               : `${formatPaletteColorTooltip(entry.color, entry.hex)}\n左键设为前景色，右键设为背景色`;
+
+          const displaySaturation = pixelColorToHsl(entry.color).s;
 
           const circleClassName = `absolute overflow-hidden rounded-full border ${
             readOnly ? "border-zinc-600" : "transition hover:ring-1 hover:ring-zinc-500/50"
@@ -138,7 +129,7 @@ export function PaletteOklabMapView({
                 className={circleClassName}
                 style={circleStyle}
               >
-                <PaletteSaturationRing saturation={polar.s} diameter={diameter} />
+                <PaletteSaturationRing saturation={displaySaturation} diameter={diameter} />
               </div>
             );
           }
@@ -163,7 +154,7 @@ export function PaletteOklabMapView({
               className={circleClassName}
               style={circleStyle}
             >
-              <PaletteSaturationRing saturation={polar.s} diameter={diameter} />
+              <PaletteSaturationRing saturation={displaySaturation} diameter={diameter} />
               {isSelectedForRemoval && (
                 <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white drop-shadow">
                   ✓

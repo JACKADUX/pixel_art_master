@@ -31,6 +31,8 @@ export const SHORTCUT_LABELS = {
   paste: "Ctrl+V",
   flipHorizontal: "Shift+H",
   flipVertical: "Shift+V",
+  toggleGrid: "Ctrl+'",
+  toggleOklabLightness: "Ctrl+1",
 } as const;
 
 export type ShortcutAction = keyof typeof SHORTCUT_LABELS;
@@ -239,6 +241,7 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
         {
           type: "toggle",
           label: "Oklab 明度",
+          shortcut: SHORTCUT_LABELS.toggleOklabLightness,
           checked: actions.canvasDisplayMode === "oklabLightness",
           onClick: actions.toggleCanvasDisplayMode,
         },

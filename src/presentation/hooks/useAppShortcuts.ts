@@ -18,10 +18,17 @@ export function useAppShortcuts() {
       if (isTextEntryElement(document.activeElement)) return;
       focusCanvasKeyboard();
     };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (isTextEntryElement(document.activeElement)) return;
+      focusCanvasKeyboard();
+    };
     window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       teardownFocus();
       window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
@@ -150,6 +157,20 @@ export function useAppShortcuts() {
         return;
       }
 
+      if (ctrl && (event.key === "'" || event.code === "Quote")) {
+        if (store.project) {
+          event.preventDefault();
+          store.toggleGrid();
+        }
+        return;
+      }
+
+      if (ctrl && event.key === "1") {
+        event.preventDefault();
+        store.toggleCanvasDisplayMode();
+        return;
+      }
+
       if (!ctrl && event.shiftKey && (event.key === "h" || event.key === "H")) {
         event.preventDefault();
         store.flipSelectionHorizontal();
@@ -162,7 +183,7 @@ export function useAppShortcuts() {
         return;
       }
 
-      if (!ctrl && !event.isComposing && event.keyCode !== 229) {
+      if (!ctrl) {
         const tool = toolFromShortcutCode(event.code);
         if (tool) {
           event.preventDefault();

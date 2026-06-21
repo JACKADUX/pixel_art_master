@@ -147,7 +147,7 @@ export function createSelectionFromMagicWand(
 
   project?: Project,
 
-  getPixelCache?: (layerId: string) => ReferenceLayerPixelData | null,
+  getPixelCache?: (layerId: string, cropKey: string) => ReferenceLayerPixelData | null,
 
 ): SelectionState {
 

@@ -25,7 +25,12 @@ import {
 } from "@/domain/layer/LayerOperations";
 import { moveReferenceLayerByDeltaInProject, moveReferenceLayerInProject } from "./MoveReferenceLayer";
 import { toggleReferenceLayerGridInProject } from "./ToggleReferenceLayerGrid";
+import { toggleReferenceLayerPaletteInProject } from "./ToggleReferenceLayerPalette";
 import { updateReferenceLayerCropInProject } from "./UpdateReferenceLayerCrop";
+import {
+  resetReferenceScaleInProject,
+  scaleReferenceLayerInProject,
+} from "./ScaleReferenceLayer";
 import type { CropRect, LayerPosition } from "@/domain/layer/Layer";
 
 export function setActiveLayer(project: Project, layerId: string): Project {
@@ -157,4 +162,27 @@ export function toggleReferenceGrid(
   layerId: string,
 ): Project | null {
   return toggleReferenceLayerGridInProject(project, layerId);
+}
+
+export function toggleReferencePalette(
+  project: Project,
+  layerId: string,
+): Project | null {
+  return toggleReferenceLayerPaletteInProject(project, layerId);
+}
+
+export function scaleReferenceLayer(
+  project: Project,
+  layerId: string,
+  scale: number,
+  position?: LayerPosition,
+): Project | null {
+  return scaleReferenceLayerInProject(project, layerId, scale, position);
+}
+
+export function resetReferenceScale(
+  project: Project,
+  layerId: string,
+): Project | null {
+  return resetReferenceScaleInProject(project, layerId);
 }

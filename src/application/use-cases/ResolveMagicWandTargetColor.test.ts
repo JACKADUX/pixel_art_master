@@ -47,7 +47,8 @@ describe("resolveMagicWandTargetColor", () => {
       project,
       grid,
       { x: 3, y: 3 },
-      (layerId) => (layerId === reference.id ? cache : null),
+      (layerId, cropKey) =>
+        layerId === reference.id && cropKey === cache.cropKey ? cache : null,
     );
 
     expect(color).toBe(rgba(255, 0, 0));

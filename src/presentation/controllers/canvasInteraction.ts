@@ -34,6 +34,7 @@ import { shouldAppendLassoPoint } from "@/domain/selection/LassoRasterize";
 import type { Point } from "@/domain/tool/ITool";
 import type { ToolSettings } from "@/domain/tool/ToolType";
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 import {
   hitTestTransformHandle,
   type TransformHandle,
@@ -80,7 +81,10 @@ export function handleSelectPointerDown(options: {
   selection: SelectionState | null;
   modifiers: ModifierKeys;
   historyStack: HistoryStack;
-  getReferencePixelCache?: (layerId: string) => ReferenceLayerPixelData | null;
+  getReferencePixelCache?: (
+    layerId: string,
+    cropKey: string,
+  ) => ReferenceLayerPixelData | null;
 }): {
   selection: SelectionState | null;
   selectionDrag: SelectionDragState | null;
@@ -379,6 +383,16 @@ export function handleSelectPointerUp(options: {
 
   pushHistory(historyStack, project, selection);
 
+  let workingGrid = grid;
+  let existingSelection = selection;
+  let gridChanged = false;
+  if (selection?.floating) {
+    const committed = commitFloatingSelection(grid, selection);
+    workingGrid = committed.grid;
+    existingSelection = committed.selection;
+    gridChanged = true;
+  }
+
   if (settings.selectionMode === "lasso") {
     const points =
       lassoPoints.length > 0 && shouldAppendLassoPoint(lassoPoints, point)
@@ -388,7 +402,7 @@ export function handleSelectPointerUp(options: {
       points,
       size.width,
       size.height,
-      selection,
+      existingSelection,
       modifiers.shiftKey,
       modifiers.altKey,
     );
@@ -397,6 +411,7 @@ export function handleSelectPointerUp(options: {
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
+      ...(gridChanged ? { grid: workingGrid } : {}),
     };
   }
 
@@ -406,7 +421,7 @@ export function handleSelectPointerUp(options: {
     size.width,
     size.height,
     settings,
-    selection,
+    existingSelection,
     modifiers.shiftKey,
     modifiers.altKey,
   );
@@ -416,6 +431,7 @@ export function handleSelectPointerUp(options: {
     selectionDrag: null,
     lassoPoints: [],
     selectionPreviewRect: null,
+    ...(gridChanged ? { grid: workingGrid } : {}),
   };
 }
 

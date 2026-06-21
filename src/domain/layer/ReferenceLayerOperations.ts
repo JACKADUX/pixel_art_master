@@ -8,6 +8,14 @@ import type {
 } from "./Layer";
 import { createEmptyReferenceLayer } from "./Layer";
 
+export const REFERENCE_SCALE_MIN = 0.1;
+export const REFERENCE_SCALE_MAX = 20;
+
+export function clampReferenceScale(scale: number): number {
+  if (!Number.isFinite(scale)) return 1;
+  return Math.max(REFERENCE_SCALE_MIN, Math.min(scale, REFERENCE_SCALE_MAX));
+}
+
 export function clampCropRect(crop: CropRect, imageSize: ImageSize): CropRect {
   const x = Math.max(0, Math.min(Math.floor(crop.x), imageSize.width - 1));
   const y = Math.max(0, Math.min(Math.floor(crop.y), imageSize.height - 1));
@@ -34,7 +42,11 @@ export function centerReferencePosition(
 
 export function getReferenceDisplaySize(layer: ReferenceLayer): ImageSize | null {
   if (!layer.crop) return null;
-  return { width: layer.crop.width, height: layer.crop.height };
+  const scale = clampReferenceScale(layer.scale);
+  return {
+    width: layer.crop.width * scale,
+    height: layer.crop.height * scale,
+  };
 }
 
 export function getReferenceBounds(
@@ -69,6 +81,7 @@ export function setReferenceImage(
     imageSize,
     crop,
     position: centerReferencePosition(crop, canvasSize),
+    scale: 1,
   };
 }
 
@@ -101,6 +114,23 @@ export function moveReferencePosition(
       y: layer.position.y + delta.y,
     },
   };
+}
+
+export function setReferenceScale(
+  layer: ReferenceLayer,
+  scale: number,
+): ReferenceLayer {
+  return { ...layer, scale: clampReferenceScale(scale) };
+}
+
+export function resetReferenceScale(layer: ReferenceLayer): ReferenceLayer {
+  return { ...layer, scale: 1 };
+}
+
+export function toggleReferencePaletteVisibility(
+  layer: ReferenceLayer,
+): ReferenceLayer {
+  return { ...layer, paletteVisible: !layer.paletteVisible };
 }
 
 export function setReferenceGrid(

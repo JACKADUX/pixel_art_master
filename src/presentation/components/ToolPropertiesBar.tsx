@@ -273,7 +273,21 @@ export function ToolPropertiesBar() {
       )}
 
       {activeTool === "fill" && (
-        <span className="text-zinc-500">点击区域进行填充</span>
+        <>
+          <label className="flex items-center gap-2 text-zinc-400">
+            容差
+            <input
+              type="range"
+              min={0}
+              max={255}
+              value={toolSettings.fillTolerance}
+              onChange={(e) => setToolSettings({ fillTolerance: Number(e.target.value) })}
+              className="w-24"
+            />
+            <span className="w-6">{toolSettings.fillTolerance}</span>
+          </label>
+          <span className="text-zinc-500">点击区域进行填充 · 透明区域视为同色</span>
+        </>
       )}
 
       {activeTool === "select" && (

@@ -32,6 +32,8 @@ interface SerializedReferenceLayer {
   crop: CropRect | null;
   position: LayerPosition;
   grid: ReferenceGridConfig;
+  scale?: number;
+  paletteVisible?: boolean;
 }
 
 type SerializedLayerV3 = SerializedDrawingLayer | SerializedReferenceLayer;
@@ -152,6 +154,8 @@ function serializeLayerV3(layer: Layer, canvasWidth: number, canvasHeight: numbe
     crop: layer.crop,
     position: layer.position,
     grid: layer.grid,
+    scale: layer.scale,
+    paletteVisible: layer.paletteVisible,
   };
 }
 
@@ -341,6 +345,8 @@ export function deserializeProject(json: string, filePath: string): Project {
         crop: sl.crop,
         position: sl.position,
         grid: sl.grid,
+        scale: sl.scale ?? 1,
+        paletteVisible: sl.paletteVisible ?? true,
       };
     });
 

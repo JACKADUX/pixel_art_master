@@ -170,7 +170,10 @@ export function BrushSizeInput({ value, onChange }: BrushSizeInputProps) {
         anchorRef={anchorRef}
         value={value}
         onChange={onChange}
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          focusCanvasKeyboard();
+        }}
       />
     </>
   );

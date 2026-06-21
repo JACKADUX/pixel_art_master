@@ -1,8 +1,8 @@
 import { getAlpha, toHexAlpha, type PixelColor } from "@/domain/canvas/PixelColor";
-import { pixelColorToOklabPolar } from "@/domain/color/ColorConverter";
+import { pixelColorToHsl } from "@/domain/color/ColorConverter";
 
 export function formatPaletteColorTooltip(color: PixelColor, hex?: string): string {
-  const polar = pixelColorToOklabPolar(color);
+  const hsl = pixelColorToHsl(color);
   const hexValue = hex ?? toHexAlpha(color);
-  return `${hexValue}\nH: ${Math.round(polar.h)}°  S: ${Math.round(polar.s)}%  L: ${Math.round(polar.l * 100)}%  A: ${Math.round((getAlpha(color) / 255) * 100)}%`;
+  return `${hexValue}\nH: ${Math.round(hsl.h)}°  S: ${Math.round(hsl.s)}%  L: ${Math.round(hsl.l)}%  A: ${Math.round((getAlpha(color) / 255) * 100)}%`;
 }

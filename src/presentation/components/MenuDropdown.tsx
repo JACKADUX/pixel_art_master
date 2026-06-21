@@ -16,6 +16,7 @@ export type MenuItem =
       type: "toggle";
       label: string;
       icon?: IconComponent;
+      shortcut?: string;
       checked: boolean;
       onClick: () => void;
     }
@@ -85,6 +86,9 @@ export function MenuDropdown({ label, open, onToggle, onClose, items }: MenuDrop
                   </span>
                   {Icon && <Icon className="h-4 w-4 shrink-0 text-zinc-400" />}
                   <span className="flex-1">{item.label}</span>
+                  {item.shortcut && (
+                    <span className="ml-4 shrink-0 text-zinc-500">{item.shortcut}</span>
+                  )}
                 </button>
               );
             }

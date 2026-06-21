@@ -1,4 +1,4 @@
-import { toRgbComponents, getAlpha, type PixelColor } from "../canvas/PixelColor";
+import { colorDistance, type PixelColor } from "../canvas/PixelColor";
 import type { PixelGrid } from "../canvas/PixelGrid";
 import type { Point } from "../tool/ITool";
 import { createEmptyMask, setMaskPixel, type SelectionMask } from "./SelectionMask";
@@ -6,17 +6,6 @@ import { createEmptyMask, setMaskPixel, type SelectionMask } from "./SelectionMa
 export interface FloodSelectOptions {
   tolerance: number;
   contiguous: boolean;
-}
-
-function colorDistance(a: PixelColor, b: PixelColor): number {
-  const ca = toRgbComponents(a);
-  const cb = toRgbComponents(b);
-  return (
-    Math.abs(ca.r - cb.r) +
-    Math.abs(ca.g - cb.g) +
-    Math.abs(ca.b - cb.b) +
-    Math.abs(getAlpha(a) - getAlpha(b))
-  );
 }
 
 export function floodSelectMask(

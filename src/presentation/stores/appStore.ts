@@ -41,6 +41,7 @@ import type { SelectionRect } from "@/domain/selection/SelectionRect";
 
 import {
   clampMagicWandTolerance,
+  clampFillTolerance,
   clampPatternScale,
 } from "@/domain/tool/ToolType";
 
@@ -116,9 +117,15 @@ import {
 
   toggleReferenceGrid as toggleReferenceGridInProject,
 
+  toggleReferencePalette as toggleReferencePaletteInProject,
+
+  scaleReferenceLayer as scaleReferenceLayerInProject,
+
+  resetReferenceScale as resetReferenceScaleInProject,
+
 } from "@/application/use-cases/LayerUseCases";
 
-import { resolveColorAtCanvasPoint } from "@/application/use-cases/PickColorAtPoint";
+import { resolveColorAtCanvasPointAsync } from "@/application/use-cases/PickColorAtPoint";
 import { loadEditorPreferences } from "@/application/use-cases/LoadEditorPreferences";
 import { loadProject } from "@/application/use-cases/LoadProject";
 import { openLastProjectOnStartup } from "@/application/use-cases/OpenLastProjectOnStartup";
@@ -175,6 +182,7 @@ import { loadAssetImageAsImageData } from "@/infrastructure/storage/AssetImageLo
 import { toast } from "@/presentation/stores/toastStore";
 
 import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
+import { referenceLayerCropKey } from "@/domain/layer/ReferenceLayerPalette";
 
 import {
 
@@ -237,6 +245,8 @@ import {
   ensureReferenceLayerFullPixelCache,
   ensureReferenceLayerPixelCache,
   getReferenceLayerPixelCache,
+  invalidateReferenceLayerPixelCache,
+  removeStaleReferenceLayerCropCaches,
 } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
 
@@ -656,7 +666,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   flipSelectionVertical: () => void;
 
-  pickColorAt: (point: Point, slot: ColorSlot) => void;
+  pickColorAt: (point: Point, slot: ColorSlot) => Promise<void>;
 
   setLayersPanelTab: (tab: "drawing" | "reference") => void;
 
@@ -708,6 +718,15 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   setReferenceCrop: (layerId: string, crop: CropRect) => void;
 
   toggleReferenceGrid: (layerId: string) => void;
+
+  resizeReferenceLayer: (
+    layerId: string,
+    payload: { scale: number; position?: LayerPosition },
+  ) => void;
+
+  resetReferenceScale: (layerId: string) => void;
+
+  toggleReferencePalette: (layerId: string) => void;
 
   openCropEditor: (layerId: string) => void;
 
@@ -1479,6 +1498,9 @@ export const useAppStore = create<AppState>((set, get) => {
       }
       if (settings.magicWandTolerance !== undefined) {
         next.magicWandTolerance = clampMagicWandTolerance(settings.magicWandTolerance);
+      }
+      if (settings.fillTolerance !== undefined) {
+        next.fillTolerance = clampFillTolerance(settings.fillTolerance);
       }
       if (settings.patternBrushScale !== undefined) {
         next.patternBrushScale = clampPatternScale(settings.patternBrushScale);
@@ -2299,6 +2321,7 @@ export const useAppStore = create<AppState>((set, get) => {
       );
 
       if (result) {
+        invalidateReferenceLayerPixelCache(result.layerId);
 
         set({
 
@@ -2361,6 +2384,7 @@ export const useAppStore = create<AppState>((set, get) => {
       );
 
       if (result) {
+        invalidateReferenceLayerPixelCache(result.layerId);
 
         set({
 
@@ -2429,6 +2453,7 @@ export const useAppStore = create<AppState>((set, get) => {
       );
 
       if (result) {
+        invalidateReferenceLayerPixelCache(result.layerId);
 
         set({
 
@@ -2878,16 +2903,17 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  pickColorAt: (point, slot) => {
+  pickColorAt: async (point, slot) => {
 
     const { project } = get();
 
     if (!project) return;
 
-    const color = resolveColorAtCanvasPoint(
+    const color = await resolveColorAtCanvasPointAsync(
       project,
       point,
       getReferenceLayerPixelCache,
+      ensureReferenceLayerPixelCache,
     );
 
     get().setColorSlot(slot, color);
@@ -3477,7 +3503,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
     const updated = setReferenceCropInProject(project, layerId, crop);
 
-    if (updated) set({ project: updated });
+    if (updated) {
+      const layer = updated.canvas.layers.find((l) => l.id === layerId);
+      if (layer && isReferenceLayer(layer) && layer.crop) {
+        removeStaleReferenceLayerCropCaches(layerId, referenceLayerCropKey(layer.crop));
+      }
+      set({ project: updated });
+    }
 
   },
 
@@ -3490,6 +3522,48 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!project) return;
 
     const updated = toggleReferenceGridInProject(project, layerId);
+
+    if (updated) set({ project: updated });
+
+  },
+
+
+
+  resizeReferenceLayer: (layerId, { scale, position }) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    const updated = scaleReferenceLayerInProject(project, layerId, scale, position);
+
+    if (updated) set({ project: updated });
+
+  },
+
+
+
+  resetReferenceScale: (layerId) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    const updated = resetReferenceScaleInProject(project, layerId);
+
+    if (updated) set({ project: updated });
+
+  },
+
+
+
+  toggleReferencePalette: (layerId) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    const updated = toggleReferencePaletteInProject(project, layerId);
 
     if (updated) set({ project: updated });
 
@@ -3586,6 +3660,7 @@ export const useAppStore = create<AppState>((set, get) => {
       );
 
       if (result) {
+        invalidateReferenceLayerPixelCache(result.layerId);
 
         set({
 
@@ -3724,10 +3799,16 @@ export const useAppStore = create<AppState>((set, get) => {
     const { project } = get();
 
     if (!project) return;
+    const removedLayer = project.canvas.layers.find((layer) => layer.id === layerId);
 
     const updated = removeLayerFromProject(project, layerId);
 
-    if (updated) set({ project: updated });
+    if (updated) {
+      if (removedLayer && isReferenceLayer(removedLayer)) {
+        invalidateReferenceLayerPixelCache(layerId);
+      }
+      set({ project: updated });
+    }
 
   },
 

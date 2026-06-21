@@ -29,6 +29,10 @@ export function clampMagicWandTolerance(tolerance: number): number {
   return Math.max(0, Math.min(255, Math.round(tolerance)));
 }
 
+export function clampFillTolerance(tolerance: number): number {
+  return Math.max(0, Math.min(255, Math.round(tolerance)));
+}
+
 export interface ToolSettings {
   brushSize: number;
   brushShape: BrushShape;
@@ -38,6 +42,7 @@ export interface ToolSettings {
   eraserShape: BrushShape;
   shapeMode: ShapeMode;
   shapeFilled: boolean;
+  fillTolerance: number;
   selectionMode: SelectionMode;
   magicWandTolerance: number;
   magicWandContiguous: boolean;
@@ -53,6 +58,7 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
   eraserShape: "square",
   shapeMode: "rectangle",
   shapeFilled: false,
+  fillTolerance: 0,
   selectionMode: "rectangle",
   magicWandTolerance: 0,
   magicWandContiguous: true,

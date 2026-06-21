@@ -7,7 +7,6 @@ import { getEffectiveBounds } from "@/domain/selection/SelectionState";
 
 const MARCH_COLOR = "#ffffff";
 const MARCH_SHADOW = "#000000";
-const FILL_COLOR = "rgba(0, 120, 215, 0.15)";
 
 export interface SelectionOverlayOptions {
   selection: SelectionState | null;
@@ -27,12 +26,10 @@ export function renderSelectionOverlay(
     options;
 
   if (selection && !selection.floating) {
-    renderMaskFill(ctx, selection.mask, zoom);
     renderMaskMarchingAnts(ctx, selection.mask, phase, zoom);
   }
 
   if (selection?.floating) {
-    renderMaskFill(ctx, selection.mask, zoom);
     renderMaskMarchingAnts(ctx, selection.mask, phase, zoom);
   }
 
@@ -46,20 +43,6 @@ export function renderSelectionOverlay(
 
   void canvasWidth;
   void canvasHeight;
-}
-
-function renderMaskFill(
-  ctx: CanvasRenderingContext2D,
-  mask: SelectionMask,
-  zoom: number,
-): void {
-  ctx.fillStyle = FILL_COLOR;
-  for (let y = 0; y < mask.height; y++) {
-    for (let x = 0; x < mask.width; x++) {
-      if (!isMaskSelected(mask, x, y)) continue;
-      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
-    }
-  }
 }
 
 function renderMaskMarchingAnts(
@@ -101,9 +84,6 @@ function renderPreviewRect(
   const y = rect.y * zoom;
   const w = rect.width * zoom;
   const h = rect.height * zoom;
-
-  ctx.fillStyle = FILL_COLOR;
-  ctx.fillRect(x, y, w, h);
 
   const dash = 4;
   const offset = phase % (dash * 2);

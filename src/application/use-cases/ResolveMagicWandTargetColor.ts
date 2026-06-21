@@ -2,6 +2,8 @@ import type { PixelColor } from "@/domain/canvas/PixelColor";
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
 import {
   findTopReferenceLayerAtCanvasPoint,
+  isReferenceLayerPixelCacheValid,
+  referenceLayerCropKey,
   sampleReferenceLayerPixel,
   toReferenceLayerLocalPoint,
 } from "@/domain/layer/ReferenceLayerPalette";
@@ -13,13 +15,13 @@ export function resolveMagicWandTargetColor(
   project: Project,
   grid: PixelGrid,
   point: Point,
-  getPixelCache: (layerId: string) => ReferenceLayerPixelData | null,
+  getPixelCache: (layerId: string, cropKey: string) => ReferenceLayerPixelData | null,
 ): PixelColor {
   const referenceLayer = findTopReferenceLayerAtCanvasPoint(project.canvas.layers, point);
   if (referenceLayer?.crop && referenceLayer.imageData) {
     const localPoint = toReferenceLayerLocalPoint(referenceLayer, point);
-    const cache = getPixelCache(referenceLayer.id);
-    if (localPoint && cache && cache.base64 === referenceLayer.imageData) {
+    const cache = getPixelCache(referenceLayer.id, referenceLayerCropKey(referenceLayer.crop));
+    if (localPoint && cache && isReferenceLayerPixelCacheValid(cache, referenceLayer)) {
       const referenceColor = sampleReferenceLayerPixel(
         cache.pixels,
         cache.width,

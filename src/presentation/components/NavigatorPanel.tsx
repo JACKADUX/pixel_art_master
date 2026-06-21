@@ -17,6 +17,7 @@ import {
   type NavigatorResizeCorner,
   type NavigatorResizeStart,
 } from "@/domain/viewport/NavigatorPanelResize";
+import { renderTransparencyCheckerboard } from "@/infrastructure/canvas/CanvasBackgroundRenderer";
 import { renderPixelGrid1x } from "@/infrastructure/canvas/PixelGridCanvasRenderer";
 import { useAppStore } from "../stores/appStore";
 
@@ -49,6 +50,7 @@ function toPreviewLayout(navigator: {
 }
 
 export function NavigatorPanel() {
+  const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
   const pixelCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -64,6 +66,7 @@ export function NavigatorPanel() {
 
   const project = useAppStore((s) => s.project);
   const zoom = useAppStore((s) => s.zoom);
+  const appSettings = useAppStore((s) => s.appSettings);
   const navigator = useAppStore((s) => s.navigator);
   const viewportSnapshot = useAppStore((s) => s.viewportSnapshot);
   const getCompositeGrid = useAppStore((s) => s.getCompositeGrid);
@@ -106,14 +109,47 @@ export function NavigatorPanel() {
   }, []);
 
   const renderPreview = useCallback(() => {
+    const backgroundCanvas = backgroundCanvasRef.current;
     const pixelCanvas = pixelCanvasRef.current;
     const overlayCanvas = overlayCanvasRef.current;
-    if (!pixelCanvas || !overlayCanvas || !project || !viewportSnapshot) return;
+    if (
+      !backgroundCanvas ||
+      !pixelCanvas ||
+      !overlayCanvas ||
+      !project ||
+      !viewportSnapshot
+    ) {
+      return;
+    }
 
     const composite = getCompositeGrid();
     if (!composite) return;
 
     const transform = computePreviewTransform(viewportSnapshot, previewLayout);
+    const effectiveZoom = transform.drawnWidth / composite.width;
+
+    backgroundCanvas.width = transform.drawnWidth;
+    backgroundCanvas.height = transform.drawnHeight;
+    backgroundCanvas.style.position = "absolute";
+    backgroundCanvas.style.left = `${transform.offsetX}px`;
+    backgroundCanvas.style.top = `${transform.offsetY}px`;
+    backgroundCanvas.style.width = `${transform.drawnWidth}px`;
+    backgroundCanvas.style.height = `${transform.drawnHeight}px`;
+    backgroundCanvas.style.imageRendering = "pixelated";
+
+    const backgroundCtx = backgroundCanvas.getContext("2d");
+    if (!backgroundCtx) return;
+    renderTransparencyCheckerboard(
+      backgroundCtx,
+      composite.width,
+      composite.height,
+      effectiveZoom,
+      {
+        tileSize: appSettings.checkerboardTileSize,
+        lightColor: appSettings.checkerboardLightHex,
+        darkColor: appSettings.checkerboardDarkHex,
+      },
+    );
 
     pixelCanvas.width = composite.width;
     pixelCanvas.height = composite.height;
@@ -156,6 +192,9 @@ export function NavigatorPanel() {
     previewLayout,
     viewportSnapshot,
     getCompositeGrid,
+    appSettings.checkerboardTileSize,
+    appSettings.checkerboardLightHex,
+    appSettings.checkerboardDarkHex,
   ]);
 
   useEffect(() => {
@@ -396,6 +435,10 @@ export function NavigatorPanel() {
           isNavigatingRef.current = false;
         }}
       >
+        <canvas
+          ref={backgroundCanvasRef}
+          className="pointer-events-none absolute block"
+        />
         <canvas
           ref={pixelCanvasRef}
           className="pointer-events-none absolute block"

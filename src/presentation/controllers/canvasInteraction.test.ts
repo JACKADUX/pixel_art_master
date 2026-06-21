@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { rgba } from "@/domain/canvas/PixelColor";
 import { HistoryStack } from "@/domain/history/HistoryStack";
+import {
+  beginMoveSelection,
+  moveFloatingSelection,
+} from "@/application/use-cases/SelectionUseCases";
 import { createSelectionFromFloating } from "@/application/use-cases/ClipboardUseCases";
+import { createRectMask } from "@/domain/selection/SelectionMaskOperations";
+import { isMaskSelected } from "@/domain/selection/SelectionMask";
+import { createSelectionState } from "@/domain/selection/SelectionState";
 import { createEmptyProject } from "@/domain/project/Project";
 import { DEFAULT_TOOL_SETTINGS } from "@/domain/tool/ToolType";
 import {
@@ -48,6 +55,39 @@ describe("handleSelectPointerUp blank click", () => {
 
     expect(result.selection).toBeNull();
     expect(result.grid?.getPixel(2, 2)).toBe(rgba(255, 0, 0));
+  });
+
+  it("commits floating selection when box-selecting a new area", () => {
+    const project = createEmptyProject("test");
+    const grid = PixelGrid.createEmpty(8, 8);
+    grid.setPixel(2, 2, rgba(255, 0, 0));
+    const mask = createRectMask({ x: 2, y: 2 }, { x: 2, y: 2 }, 8, 8);
+    let selection = createSelectionState(mask);
+    selection = beginMoveSelection(grid, selection);
+    selection = moveFloatingSelection(selection, 2, 0);
+    const historyStack = new HistoryStack();
+
+    const result = handleSelectPointerUp({
+      project,
+      point: { x: 1, y: 1 },
+      settings: DEFAULT_TOOL_SETTINGS,
+      selection,
+      selectionDrag: {
+        start: { x: 0, y: 0 },
+        current: { x: 1, y: 1 },
+        mode: "create",
+      },
+      lassoPoints: [],
+      modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+      historyStack,
+      grid,
+    });
+
+    expect(result.grid?.getPixel(4, 2)).toBe(rgba(255, 0, 0));
+    expect(result.grid?.getPixel(2, 2)).toBe(0);
+    expect(result.selection).not.toBeNull();
+    expect(isMaskSelected(result.selection!.mask, 0, 0)).toBe(true);
+    expect(result.selection!.floating).toBeNull();
   });
 });
 
