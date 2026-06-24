@@ -1,14 +1,21 @@
 import { useAppStore } from "../stores/appStore";
+import { useWorkspaceRegion } from "../hooks/useWorkspaceRegion";
 
 import { LayersPanel } from "./LayersPanel";
 import { ReferenceLayersPanel } from "./ReferenceLayersPanel";
+import { WorkspaceRegionBorder } from "./WorkspaceRegionBorder";
 
 export function LayersSection() {
   const layersPanelTab = useAppStore((s) => s.layersPanelTab);
   const setLayersPanelTab = useAppStore((s) => s.setLayersPanelTab);
+  const { regionProps, isActive: regionActive } = useWorkspaceRegion("layers");
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col">
+    <div
+      {...regionProps}
+      className="relative flex h-full min-h-0 w-full min-w-0 flex-col"
+    >
+      <WorkspaceRegionBorder active={regionActive} />
       <div className="flex shrink-0 border-b border-zinc-700">
         <button
           type="button"

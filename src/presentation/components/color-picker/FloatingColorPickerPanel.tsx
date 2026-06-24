@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
 import { getDefaultColorPickerPanelWidth } from "@/domain/color/ColorPickerLayout";
 import { useAppStore } from "@/presentation/stores/appStore";
-import { ColorPickerHeader } from "./ColorPickerHeader";
-import { ColorPickerPanel } from "./ColorPickerPanel";
+import { ColorPickerView } from "./ColorPickerView";
 
 export function FloatingColorPickerPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -105,15 +104,13 @@ export function FloatingColorPickerPanel() {
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <ColorPickerHeader
-        variant="floating"
-        onClose={closeFloatingColorPicker}
-        onHeaderMouseDown={handleHeaderMouseDown}
-      />
-      <ColorPickerPanel
+      <ColorPickerView
         currentColor={activeColor}
         onChange={(color) => setColorSlot(floatingColorPicker.activeSlot, color)}
         orientation={orientation}
+        headerVariant="floating"
+        onClose={closeFloatingColorPicker}
+        onHeaderMouseDown={handleHeaderMouseDown}
       />
     </div>
   );

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useAppStore } from "../../stores/appStore";
+import { useWorkspaceRegion } from "../../hooks/useWorkspaceRegion";
+import { WorkspaceRegionBorder } from "../WorkspaceRegionBorder";
 import { AssetLibraryContent } from "./AssetLibraryContent";
 import { AssetFolderDeleteDialog } from "./AssetFolderDeleteDialog";
 import { AssetMoveConfirmDialog } from "./AssetMoveConfirmDialog";
@@ -9,6 +11,7 @@ const MIN_DRAWER_HEIGHT = 120;
 const MAX_DRAWER_HEIGHT_RATIO = 0.7;
 
 export function AssetLibraryDrawer() {
+  const { regionProps, isActive: regionActive } = useWorkspaceRegion("assetLibrary");
   const expanded = useAppStore((s) => s.assetLibraryDrawerExpanded);
   const drawerHeight = useAppStore((s) => s.assetLibraryDrawerHeight);
   const workspacePath = useAppStore((s) => s.projectsWorkspacePath);
@@ -84,9 +87,11 @@ export function AssetLibraryDrawer() {
   return (
     <>
     <div
-      className="flex shrink-0 flex-col border-t border-zinc-700 bg-zinc-900"
+      {...regionProps}
+      className="relative flex shrink-0 flex-col border-t border-zinc-700 bg-zinc-900"
       style={{ height }}
     >
+      <WorkspaceRegionBorder active={regionActive} />
       {expanded && (
         <div
           className="flex h-2 shrink-0 cursor-row-resize items-center justify-center border-b border-zinc-800 hover:bg-zinc-800"

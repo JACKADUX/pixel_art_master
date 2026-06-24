@@ -2,16 +2,25 @@ import type { Project } from "@/domain/project/Project";
 import { getActiveLayer, getCanvasSize } from "@/domain/project/Project";
 import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
 import { syncLayerPixels, getLayerGrid } from "@/domain/layer/LayerOperations";
+import { cloneLayers } from "@/domain/layer/Layer";
 import { touchProject } from "@/domain/project/Project";
 import {
   type EditorSnapshot,
   type HistoryStack,
+  type SnapshotKind,
   cloneEditorSnapshot,
 } from "@/domain/history/HistoryStack";
 import {
   cloneSelectionState,
   type SelectionState,
 } from "@/domain/selection/SelectionState";
+
+export interface HistoryApplyResult {
+  project: Project;
+  selection: SelectionState | null;
+  /** 是否为图层结构变更（增删/排序等），调用方可据此刷新结构相关缓存。 */
+  structural: boolean;
+}
 
 export function captureEditorSnapshot(
   project: Project,
@@ -21,10 +30,35 @@ export function captureEditorSnapshot(
   if (!isDrawingLayer(layer)) return null;
 
   return {
+    kind: "pixels",
     layerId: layer.id,
     pixels: new Uint32Array(layer.pixels),
     selection: selection ? cloneSelectionState(selection) : null,
   };
+}
+
+/** 采集整个图层结构的快照，用于撤销/重做增删图层等操作。 */
+export function captureStructureSnapshot(
+  project: Project,
+  selection: SelectionState | null,
+): EditorSnapshot {
+  return {
+    kind: "structure",
+    layers: cloneLayers(project.canvas.layers),
+    activeLayerId: project.canvas.activeLayerId,
+    activeReferenceLayerId: project.canvas.activeReferenceLayerId,
+    selection: selection ? cloneSelectionState(selection) : null,
+  };
+}
+
+function captureSnapshotByKind(
+  project: Project,
+  selection: SelectionState | null,
+  kind: SnapshotKind,
+): EditorSnapshot | null {
+  return kind === "structure"
+    ? captureStructureSnapshot(project, selection)
+    : captureEditorSnapshot(project, selection);
 }
 
 export function pushHistory(
@@ -37,10 +71,23 @@ export function pushHistory(
   historyStack.push(snapshot);
 }
 
+/** 在改变图层结构（如删除图层）之前记录结构快照。 */
+export function pushStructureHistory(
+  historyStack: HistoryStack,
+  project: Project,
+  selection: SelectionState | null,
+): void {
+  historyStack.push(captureStructureSnapshot(project, selection));
+}
+
 export function applyEditorSnapshot(
   project: Project,
   snapshot: EditorSnapshot,
 ): Project {
+  if (snapshot.kind === "structure") {
+    return applyStructureSnapshot(project, snapshot);
+  }
+
   const layerIndex = project.canvas.layers.findIndex((l) => l.id === snapshot.layerId);
   if (layerIndex < 0) return project;
 
@@ -65,12 +112,31 @@ export function applyEditorSnapshot(
   });
 }
 
+/** 将整个图层结构恢复为快照中的状态。 */
+export function applyStructureSnapshot(
+  project: Project,
+  snapshot: Extract<EditorSnapshot, { kind: "structure" }>,
+): Project {
+  return touchProject({
+    ...project,
+    canvas: {
+      ...project.canvas,
+      layers: cloneLayers(snapshot.layers),
+      activeLayerId: snapshot.activeLayerId,
+      activeReferenceLayerId: snapshot.activeReferenceLayerId,
+    },
+  });
+}
+
 export function undoHistory(
   historyStack: HistoryStack,
   project: Project,
   selection: SelectionState | null,
-): { project: Project; selection: SelectionState | null } | null {
-  const current = captureEditorSnapshot(project, selection);
+): HistoryApplyResult | null {
+  const kind = historyStack.nextUndoKind;
+  if (!kind) return null;
+
+  const current = captureSnapshotByKind(project, selection, kind);
   if (!current) return null;
 
   const restored = historyStack.undo(current);
@@ -79,6 +145,7 @@ export function undoHistory(
   return {
     project: applyEditorSnapshot(project, restored),
     selection: restored.selection,
+    structural: restored.kind === "structure",
   };
 }
 
@@ -86,8 +153,11 @@ export function redoHistory(
   historyStack: HistoryStack,
   project: Project,
   selection: SelectionState | null,
-): { project: Project; selection: SelectionState | null } | null {
-  const current = captureEditorSnapshot(project, selection);
+): HistoryApplyResult | null {
+  const kind = historyStack.nextRedoKind;
+  if (!kind) return null;
+
+  const current = captureSnapshotByKind(project, selection, kind);
   if (!current) return null;
 
   const restored = historyStack.redo(current);
@@ -96,6 +166,7 @@ export function redoHistory(
   return {
     project: applyEditorSnapshot(project, restored),
     selection: restored.selection,
+    structural: restored.kind === "structure",
   };
 }
 

@@ -8,6 +8,7 @@ import {
 
 import {
   pushHistory,
+  pushStructureHistory,
   undoHistory,
   redoHistory,
 } from "@/application/use-cases/HistoryUseCases";
@@ -67,6 +68,7 @@ import {
 import { usePixelRestoreStore } from "@/presentation/stores/pixelRestoreStore";
 import { useColorEditStore } from "@/presentation/stores/colorEditStore";
 import { useAiChatStore } from "@/presentation/stores/aiChatStore";
+import { useAiVisionStore } from "@/presentation/stores/aiVisionStore";
 import type { ToolPageId } from "@/presentation/config/toolPagesConfig";
 
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
@@ -89,6 +91,7 @@ import {
   importAssetImageDataToNewReferenceLayer,
 } from "@/application/use-cases/ImportAssetToProject";
 import { imageDataToPixelGrid } from "@/application/use-cases/ClipboardUseCases";
+import { importReferenceLayerFromClipboard } from "@/application/use-cases/ImportReferenceLayerFromClipboard";
 
 import {
 
@@ -194,6 +197,8 @@ import {
 
   getCompositeGrid as compositeProjectLayers,
 
+  withProjectFilePath,
+
   type Project,
 
 } from "@/domain/project/Project";
@@ -242,6 +247,7 @@ import {
 } from "@/application/use-cases/ImportReferenceLayerColorsToPalette";
 
 import {
+  clearReferenceLayerPixelCache,
   ensureReferenceLayerFullPixelCache,
   ensureReferenceLayerPixelCache,
   getReferenceLayerPixelCache,
@@ -289,6 +295,17 @@ import {
   type LlmSettingsSliceState,
 } from "@/presentation/stores/llmSettingsSlice";
 import { llmSettingsRepository } from "@/infrastructure/storage/LocalLlmSettingsRepository";
+import {
+  createPalettePresetSlice,
+  type PalettePresetSliceActions,
+  type PalettePresetSliceState,
+} from "@/presentation/stores/palettePresetSlice";
+import { palettePresetRepository } from "@/infrastructure/storage/LocalPalettePresetRepository";
+import {
+  createWorkspaceRegionSlice,
+  type WorkspaceRegionSliceActions,
+  type WorkspaceRegionSliceState,
+} from "@/presentation/stores/workspaceRegionSlice";
 
 import { captureService } from "@/infrastructure/tauri/TauriCaptureService";
 
@@ -381,7 +398,7 @@ export interface FloatingColorPickerState {
   edgeAnchor: PanelEdgeAnchor;
 }
 
-interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, PatternBrushSliceState, PatternBrushSliceActions, SettingsSliceState, SettingsSliceActions, AppSettingsSliceState, AppSettingsSliceActions, LlmSettingsSliceState, LlmSettingsSliceActions {
+interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, PatternBrushSliceState, PatternBrushSliceActions, SettingsSliceState, SettingsSliceActions, AppSettingsSliceState, AppSettingsSliceActions, LlmSettingsSliceState, LlmSettingsSliceActions, PalettePresetSliceState, PalettePresetSliceActions, WorkspaceRegionSliceState, WorkspaceRegionSliceActions {
 
   project: Project | null;
 
@@ -415,7 +432,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   layersPanelTab: "drawing" | "reference";
 
-  paletteViewMode: "grid" | "oklabMap";
+  paletteViewMode: "grid" | "oklchMap";
 
   colorPickerMode: ColorMode;
 
@@ -670,7 +687,9 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   setLayersPanelTab: (tab: "drawing" | "reference") => void;
 
-  setPaletteViewMode: (mode: "grid" | "oklabMap") => void;
+  importReferenceLayerFromClipboardAction: () => Promise<void>;
+
+  setPaletteViewMode: (mode: "grid" | "oklchMap") => void;
 
   setColorPickerMode: (mode: ColorMode) => void;
 
@@ -739,6 +758,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   openColorEditPage: () => void;
 
   openAiChatTestPage: () => void;
+  openAiVisionTestPage: () => void;
 
   sendAssetToToolPage: (assetId: string, toolPageId: ToolPageId) => Promise<void>;
 
@@ -870,7 +890,7 @@ function mergeDrawOptions(
   return { ...base, tileRegion };
 }
 
-type ActiveToolPage = "pixelRestore" | "colorEdit" | "aiChat";
+type ActiveToolPage = "pixelRestore" | "colorEdit" | "aiChat" | "aiVision";
 
 function closeOtherToolPages(except?: ActiveToolPage): void {
   if (except !== "pixelRestore") {
@@ -881,6 +901,9 @@ function closeOtherToolPages(except?: ActiveToolPage): void {
   }
   if (except !== "aiChat") {
     useAiChatStore.getState().closePage();
+  }
+  if (except !== "aiVision") {
+    useAiVisionStore.getState().closePage();
   }
 }
 
@@ -922,6 +945,19 @@ export const useAppStore = create<AppState>((set, get) => {
     llmSettingsRepository,
   );
 
+  const palettePresetSlice = createPalettePresetSlice(
+    set as Parameters<typeof createPalettePresetSlice>[0],
+    get,
+    {
+      palettePresetRepository,
+    },
+  );
+
+  const workspaceRegionSlice = createWorkspaceRegionSlice(
+    set as Parameters<typeof createWorkspaceRegionSlice>[0],
+    get,
+  );
+
   return {
 
   ...assetLibrarySlice,
@@ -933,6 +969,10 @@ export const useAppStore = create<AppState>((set, get) => {
   ...appSettingsSlice,
 
   ...llmSettingsSlice,
+
+  ...palettePresetSlice,
+
+  ...workspaceRegionSlice,
 
   project: createEmptyProject(),
 
@@ -968,7 +1008,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   paletteViewMode: "grid",
 
-  colorPickerMode: "hsl",
+  colorPickerMode: "oklch",
 
   colorPickerLayoutOrientation: "vertical",
 
@@ -1146,6 +1186,8 @@ export const useAppStore = create<AppState>((set, get) => {
     }
 
     void get().refreshPatternBrushLibrary();
+
+    get().loadPalettePresets();
 
     const stored = windowService.getStoredPreference();
 
@@ -1342,7 +1384,17 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!result.saved || !result.project) return false;
 
-    set({ project: result.project });
+    const savedProject = result.project;
+
+    set((state) => {
+      if (!state.project || state.project.id !== savedProject.id) {
+        return {};
+      }
+
+      return {
+        project: withProjectFilePath(state.project, savedProject.filePath),
+      };
+    });
 
     if (projectsWorkspaceStore.getPath()) {
 
@@ -1378,7 +1430,15 @@ export const useAppStore = create<AppState>((set, get) => {
 
     saveLastOpenedProject(lastOpenedProjectStore, selected);
 
-    set({ project: saved });
+    set((state) => {
+      if (!state.project || state.project.id !== saved.id) {
+        return {};
+      }
+
+      return {
+        project: withProjectFilePath(state.project, saved.filePath),
+      };
+    });
 
     if (projectsWorkspaceStore.getPath()) {
 
@@ -1591,7 +1651,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   toggleCanvasDisplayMode: () =>
     set((s) => ({
-      canvasDisplayMode: s.canvasDisplayMode === "oklabLightness" ? "normal" : "oklabLightness",
+      canvasDisplayMode: s.canvasDisplayMode === "oklchLightness" ? "normal" : "oklchLightness",
     })),
 
   toggleNavigator: () =>
@@ -2925,6 +2985,9 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!project) return;
     const result = undoHistory(historyStack, project, selection);
     if (!result) return;
+    if (result.structural) {
+      clearReferenceLayerPixelCache();
+    }
     set({
       project: result.project,
       selection: result.selection,
@@ -2940,6 +3003,9 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!project) return;
     const result = redoHistory(historyStack, project, selection);
     if (!result) return;
+    if (result.structural) {
+      clearReferenceLayerPixelCache();
+    }
     set({
       project: result.project,
       selection: result.selection,
@@ -3157,6 +3223,29 @@ export const useAppStore = create<AppState>((set, get) => {
 
   setLayersPanelTab: (tab) => set({ layersPanelTab: tab }),
 
+  importReferenceLayerFromClipboardAction: async () => {
+    const { project } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    try {
+      const result = await importReferenceLayerFromClipboard(clipboardService, project);
+      if (!result) {
+        toast.info("剪贴板中没有图像");
+        return;
+      }
+      invalidateReferenceLayerPixelCache(result.layerId);
+      set({
+        project: setActiveReferenceLayer(result.project, result.layerId),
+        cropEditorLayerId: result.openCropEditor ? result.layerId : null,
+      });
+      toast.info("已导入到参考层");
+    } catch {
+      toast.error("从剪贴板导入失败");
+    }
+  },
+
   setPaletteViewMode: (mode) => set({ paletteViewMode: mode }),
 
   setColorPickerMode: (mode) => set({ colorPickerMode: mode }),
@@ -3347,8 +3436,9 @@ export const useAppStore = create<AppState>((set, get) => {
         imageData,
         asset.title,
       );
+      invalidateReferenceLayerPixelCache(result.layerId);
       set({
-        project: result.project,
+        project: setActiveReferenceLayer(result.project, result.layerId),
         cropEditorLayerId: result.openCropEditor ? result.layerId : null,
       });
       toast.info("已导入到参考图层");
@@ -3702,6 +3792,12 @@ export const useAppStore = create<AppState>((set, get) => {
     useAiChatStore.getState().openPage();
   },
 
+  openAiVisionTestPage: () => {
+    closeOtherToolPages("aiVision");
+    useAiVisionStore.getState().reset();
+    useAiVisionStore.getState().openPage();
+  },
+
   sendAssetToToolPage: async (assetId, toolPageId) => {
     const { projectsWorkspacePath, assetLibrary } = get();
     if (!projectsWorkspacePath || !assetLibrary) {
@@ -3782,7 +3878,7 @@ export const useAppStore = create<AppState>((set, get) => {
       set({
         assetLibrary: result.library,
         selectedAssetId: result.asset.id,
-        selectedAssetFolderId: ROOT_FOLDER_ID,
+        selectedAssetFolderId: null,
         assetLibraryDrawerExpanded: true,
       });
       toast.info("已导出到资产库");
@@ -3796,19 +3892,21 @@ export const useAppStore = create<AppState>((set, get) => {
 
   removeLayer: (layerId) => {
 
-    const { project } = get();
+    const { project, selection, historyStack } = get();
 
     if (!project) return;
     const removedLayer = project.canvas.layers.find((layer) => layer.id === layerId);
 
     const updated = removeLayerFromProject(project, layerId);
+    if (!updated) return;
 
-    if (updated) {
-      if (removedLayer && isReferenceLayer(removedLayer)) {
-        invalidateReferenceLayerPixelCache(layerId);
-      }
-      set({ project: updated });
+    // 删除成功后才记录结构快照，避免被领域规则拒绝时污染历史栈。
+    pushStructureHistory(historyStack, project, selection);
+
+    if (removedLayer && isReferenceLayer(removedLayer)) {
+      invalidateReferenceLayerPixelCache(layerId);
     }
+    set({ project: updated });
 
   },
 

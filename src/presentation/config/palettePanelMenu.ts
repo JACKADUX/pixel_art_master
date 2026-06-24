@@ -1,16 +1,31 @@
-import { NoSymbolIcon, TrashIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowDownOnSquareIcon,
+  BookmarkSquareIcon,
+  NoSymbolIcon,
+  Squares2X2Icon,
+  TrashIcon,
+} from "@heroicons/react/24/outline";
 import type { MenuItem } from "../components/MenuDropdown";
 
+export interface PalettePanelMenuPreset {
+  id: string;
+  name: string;
+}
+
 export interface PalettePanelMenuState {
-  paletteViewMode: "grid" | "oklabMap";
+  paletteViewMode: "grid" | "oklchMap";
   colorsCount: number;
   removeMode: boolean;
+  presets: PalettePanelMenuPreset[];
 }
 
 export interface PalettePanelMenuActions {
-  setPaletteViewMode: (mode: "grid" | "oklabMap") => void;
+  setPaletteViewMode: (mode: "grid" | "oklchMap") => void;
   enterRemoveMode: () => void;
   requestClearPalette: () => void;
+  saveAsPreset: () => void;
+  importPresetMerge: (id: string) => void;
+  openPresetManager: () => void;
 }
 
 export function buildPalettePanelMenuItems(
@@ -30,14 +45,48 @@ export function buildPalettePanelMenuItems(
       {
         type: "toggle",
         label: "色域图",
-        checked: state.paletteViewMode === "oklabMap",
-        onClick: () => actions.setPaletteViewMode("oklabMap"),
+        checked: state.paletteViewMode === "oklchMap",
+        onClick: () => actions.setPaletteViewMode("oklchMap"),
       },
     );
   }
 
-  if (state.colorsCount > 0 && !state.removeMode) {
+  if (!state.removeMode) {
     if (items.length > 0) items.push({ type: "separator" });
+
+    if (state.colorsCount > 0) {
+      items.push({
+        type: "action",
+        label: "保存为预设",
+        icon: BookmarkSquareIcon,
+        onClick: actions.saveAsPreset,
+      });
+    }
+
+    items.push({
+      type: "submenu",
+      label: "从预设导入（合并）",
+      icon: ArrowDownOnSquareIcon,
+      items:
+        state.presets.length > 0
+          ? state.presets.map((preset) => ({
+              type: "action" as const,
+              label: preset.name,
+              onClick: () => actions.importPresetMerge(preset.id),
+            }))
+          : [{ type: "action" as const, label: "暂无预设", onClick: () => {}, disabled: true }],
+    });
+
+    items.push({
+      type: "action",
+      label: "管理预设…",
+      icon: Squares2X2Icon,
+      onClick: actions.openPresetManager,
+    });
+  }
+
+  if (state.colorsCount > 0 && !state.removeMode) {
+    items.push({ type: "separator" });
     items.push(
       {
         type: "action",

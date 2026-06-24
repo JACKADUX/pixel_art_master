@@ -19,12 +19,13 @@ import {
   type RegionGridLayout,
 } from "@/domain/pixelRestore/RegionGridRestoreOperations";
 import type { GridScaleType } from "@/domain/pixelRestore/GridScaleType";
+import {
+  isMiddleMouseButton,
+  isMiddleMousePressed,
+} from "@/domain/viewport/ViewportPan";
 import { usePixelRestoreStore } from "../../stores/pixelRestoreStore";
 import { formatZoomLabel } from "../imagePreview/imagePreviewUtils";
-import {
-  canvasClientToImage,
-  useImagePreviewViewport,
-} from "../imagePreview/useImagePreviewViewport";
+import { useImagePreviewViewport } from "../imagePreview/useImagePreviewViewport";
 import { useGridLayout, useRegionGridLayout } from "./useGridLayout";
 
 function normalizeRect(
@@ -34,62 +35,100 @@ function normalizeRect(
   return normalizeSeedRect(a, b);
 }
 
+const GRID_LINE_COLOR = "rgba(56, 189, 248, 0.95)";
+const REGION_FILL_COLOR = "rgba(56, 189, 248, 0.14)";
+const REGION_BORDER_COLOR = "rgba(125, 211, 252, 1)";
+const SELECTION_FILL_COLOR = "rgba(56, 189, 248, 0.22)";
+const SELECTION_STROKE_COLOR = "#38bdf8";
+const HANDLE_FILL_COLOR = "#ffffff";
+const HANDLE_STROKE_COLOR = "#38bdf8";
+
+/**
+ * overlay 以视口分辨率绘制，所有几何先从图像坐标映射到「视口内 CSS 像素」坐标，
+ * 线宽保持屏幕尺度，因此放大后依然清晰锐利。
+ */
+interface OverlayTransform {
+  /** 图像原点在 overlay 视口内的 CSS 像素偏移（= canvasLeft - scrollLeft） */
+  offX: number;
+  offY: number;
+  zoom: number;
+  viewportW: number;
+  viewportH: number;
+}
+
+function toScreenX(t: OverlayTransform, imageX: number): number {
+  return t.offX + imageX * t.zoom;
+}
+
+function toScreenY(t: OverlayTransform, imageY: number): number {
+  return t.offY + imageY * t.zoom;
+}
+
+/** 将坐标对齐到设备像素中心，保证 1px 描边清晰不发虚 */
+function crisp(value: number): number {
+  return Math.round(value) + 0.5;
+}
+
 function drawCornerHandle(
   ctx: CanvasRenderingContext2D,
+  t: OverlayTransform,
   imageX: number,
   imageY: number,
-  zoom: number,
 ) {
-  const hx = imageX * zoom;
-  const hy = imageY * zoom;
+  const cx = toScreenX(t, imageX);
+  const cy = toScreenY(t, imageY);
   const size = SEED_CORNER_HANDLE_SIZE_PX;
+  const half = size / 2;
 
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(hx - size / 2, hy - size / 2, size, size);
-  ctx.strokeStyle = "#3b82f6";
+  ctx.fillStyle = HANDLE_FILL_COLOR;
+  ctx.fillRect(cx - half, cy - half, size, size);
+  ctx.strokeStyle = HANDLE_STROKE_COLOR;
   ctx.lineWidth = 1;
-  ctx.strokeRect(hx - size / 2 + 0.5, hy - size / 2 + 0.5, size - 1, size - 1);
+  ctx.strokeRect(cx - half + 0.5, cy - half + 0.5, size - 1, size - 1);
 }
 
 function drawSelectionRect(
   ctx: CanvasRenderingContext2D,
+  t: OverlayTransform,
   activeRect: CropRect,
-  zoom: number,
 ) {
-  const x = activeRect.x * zoom;
-  const y = activeRect.y * zoom;
-  const w = activeRect.width * zoom;
-  const h = activeRect.height * zoom;
+  const x = toScreenX(t, activeRect.x);
+  const y = toScreenY(t, activeRect.y);
+  const w = activeRect.width * t.zoom;
+  const h = activeRect.height * t.zoom;
 
-  ctx.fillStyle = "rgba(59, 130, 246, 0.18)";
+  ctx.fillStyle = SELECTION_FILL_COLOR;
   ctx.fillRect(x, y, w, h);
 
-  ctx.strokeStyle = "#3b82f6";
+  ctx.strokeStyle = SELECTION_STROKE_COLOR;
   ctx.lineWidth = 2;
-  ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
+  ctx.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
 
-  drawCornerHandle(ctx, activeRect.x, activeRect.y, zoom);
+  drawCornerHandle(ctx, t, activeRect.x, activeRect.y);
   drawCornerHandle(
     ctx,
+    t,
     activeRect.x + activeRect.width,
     activeRect.y + activeRect.height,
-    zoom,
   );
 }
 
 function drawSingleCellGridOverlay(
   ctx: CanvasRenderingContext2D,
+  t: OverlayTransform,
   imageSize: { width: number; height: number },
   seedCell: CropRect,
-  zoom: number,
-  displayWidth: number,
-  displayHeight: number,
 ) {
   const layout = computeGridLayout(imageSize, seedCell);
   if (!layout) return;
 
-  ctx.strokeStyle = "rgba(96, 165, 250, 0.45)";
+  ctx.strokeStyle = GRID_LINE_COLOR;
   ctx.lineWidth = 1;
+
+  const top = Math.max(0, toScreenY(t, 0));
+  const bottom = Math.min(t.viewportH, toScreenY(t, imageSize.height));
+  const left = Math.max(0, toScreenX(t, 0));
+  const right = Math.min(t.viewportW, toScreenX(t, imageSize.width));
 
   const columnIndices = computeGridOverlayLineIndices(
     seedCell.x,
@@ -97,11 +136,11 @@ function drawSingleCellGridOverlay(
     imageSize.width,
   );
   for (const col of columnIndices) {
-    const x = (seedCell.x + col * seedCell.width) * zoom + 0.5;
-    if (x < 0 || x > displayWidth) continue;
+    const sx = crisp(toScreenX(t, seedCell.x + col * seedCell.width));
+    if (sx < 0 || sx > t.viewportW) continue;
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, displayHeight);
+    ctx.moveTo(sx, top);
+    ctx.lineTo(sx, bottom);
     ctx.stroke();
   }
 
@@ -111,21 +150,21 @@ function drawSingleCellGridOverlay(
     imageSize.height,
   );
   for (const row of rowIndices) {
-    const y = (seedCell.y + row * seedCell.height) * zoom + 0.5;
-    if (y < 0 || y > displayHeight) continue;
+    const sy = crisp(toScreenY(t, seedCell.y + row * seedCell.height));
+    if (sy < 0 || sy > t.viewportH) continue;
     ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(displayWidth, y);
+    ctx.moveTo(left, sy);
+    ctx.lineTo(right, sy);
     ctx.stroke();
   }
 }
 
 function drawRegionOuterCellRing(
   ctx: CanvasRenderingContext2D,
+  t: OverlayTransform,
   layout: RegionGridLayout,
-  zoom: number,
 ) {
-  ctx.fillStyle = "rgba(59, 130, 246, 0.08)";
+  ctx.fillStyle = REGION_FILL_COLOR;
 
   for (let row = 0; row < layout.totalRows; row++) {
     for (let col = 0; col < layout.totalColumns; col++) {
@@ -138,58 +177,64 @@ function drawRegionOuterCellRing(
         layout.totalColumns,
         layout.totalRows,
       );
-      ctx.fillRect(cell.x * zoom, cell.y * zoom, cell.width * zoom, cell.height * zoom);
+      ctx.fillRect(
+        toScreenX(t, cell.x),
+        toScreenY(t, cell.y),
+        cell.width * t.zoom,
+        cell.height * t.zoom,
+      );
     }
   }
 
-  const bx = layout.region.x * zoom;
-  const by = layout.region.y * zoom;
-  const bw = layout.region.width * zoom;
-  const bh = layout.region.height * zoom;
+  const bx = toScreenX(t, layout.region.x);
+  const by = toScreenY(t, layout.region.y);
+  const bw = layout.region.width * t.zoom;
+  const bh = layout.region.height * t.zoom;
 
-  ctx.strokeStyle = "rgba(96, 165, 250, 0.55)";
+  ctx.strokeStyle = REGION_BORDER_COLOR;
   ctx.lineWidth = 1;
-  ctx.setLineDash([3, 3]);
+  ctx.setLineDash([4, 4]);
   ctx.strokeRect(bx + 0.5, by + 0.5, Math.max(0, bw - 1), Math.max(0, bh - 1));
   ctx.setLineDash([]);
 }
 
 function drawRegionGridOverlay(
   ctx: CanvasRenderingContext2D,
+  t: OverlayTransform,
   region: CropRect,
   columns: number,
   rows: number,
-  zoom: number,
 ) {
-  ctx.strokeStyle = "rgba(96, 165, 250, 0.45)";
+  ctx.strokeStyle = GRID_LINE_COLOR;
   ctx.lineWidth = 1;
 
-  const rx = region.x * zoom;
-  const ry = region.y * zoom;
-  const rw = region.width * zoom;
-  const rh = region.height * zoom;
+  const ry = toScreenY(t, region.y);
+  const rh = region.height * t.zoom;
+  const rx = toScreenX(t, region.x);
+  const rw = region.width * t.zoom;
 
   for (let col = 0; col <= columns; col++) {
     const cell = getRegionCellRect(region, col, 0, columns, rows);
-    const x = cell.x * zoom + 0.5;
+    const sx = crisp(toScreenX(t, cell.x));
     ctx.beginPath();
-    ctx.moveTo(x, ry);
-    ctx.lineTo(x, ry + rh);
+    ctx.moveTo(sx, ry);
+    ctx.lineTo(sx, ry + rh);
     ctx.stroke();
   }
 
   for (let row = 0; row <= rows; row++) {
     const cell = getRegionCellRect(region, 0, row, columns, rows);
-    const y = cell.y * zoom + 0.5;
+    const sy = crisp(toScreenY(t, cell.y));
     ctx.beginPath();
-    ctx.moveTo(rx, y);
-    ctx.lineTo(rx + rw, y);
+    ctx.moveTo(rx, sy);
+    ctx.lineTo(rx + rw, sy);
     ctx.stroke();
   }
 }
 
 function drawGridOverlay(
   ctx: CanvasRenderingContext2D,
+  t: OverlayTransform,
   imageSize: { width: number; height: number },
   gridScaleType: GridScaleType,
   seedCell: CropRect | null,
@@ -197,35 +242,30 @@ function drawGridOverlay(
   columnCount: number,
   rowCount: number,
   marquee: CropRect | null,
-  zoom: number,
-  displayWidth: number,
-  displayHeight: number,
 ) {
-  ctx.clearRect(0, 0, displayWidth, displayHeight);
-
   const committedRect = gridScaleType === "singleCell" ? seedCell : region;
   const activeRect = marquee ?? committedRect;
 
   if (gridScaleType === "singleCell" && seedCell && !marquee) {
-    drawSingleCellGridOverlay(ctx, imageSize, seedCell, zoom, displayWidth, displayHeight);
+    drawSingleCellGridOverlay(ctx, t, imageSize, seedCell);
   }
 
   if (gridScaleType === "region" && region && !marquee) {
     const layout = computeRegionGridLayout(region, columnCount, rowCount);
     if (layout) {
-      drawRegionOuterCellRing(ctx, layout, zoom);
+      drawRegionOuterCellRing(ctx, t, layout);
       drawRegionGridOverlay(
         ctx,
+        t,
         layout.region,
         layout.totalColumns,
         layout.totalRows,
-        zoom,
       );
     }
   }
 
   if (activeRect) {
-    drawSelectionRect(ctx, activeRect, zoom);
+    drawSelectionRect(ctx, t, activeRect);
   }
 }
 
@@ -276,8 +316,6 @@ export function GridRestoreSourcePreview() {
     stageLayout,
     imageWidth,
     imageHeight,
-    displayWidth,
-    displayHeight,
     handleContainerMouseDown,
     handleAuxClick,
     stopPanning,
@@ -285,28 +323,68 @@ export function GridRestoreSourcePreview() {
     startPanning,
   } = viewport;
 
+  const stageLayoutRef = useRef(stageLayout);
+  stageLayoutRef.current = stageLayout;
+
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
+
   const committedRect = gridScaleType === "singleCell" ? gridSeedCell : gridRegion;
   const canDrawGrid = gridEnabled && (gridCreateActive || committedRect !== null);
 
+  /** client 坐标 → 图像像素坐标（基于滚动容器，与 overlay 是否平移无关） */
+  const clientToImage = useCallback(
+    (clientX: number, clientY: number) => {
+      const container = containerRef.current;
+      const layout = stageLayoutRef.current;
+      if (!container || !layout) return { x: 0, y: 0 };
+      const rect = container.getBoundingClientRect();
+      const z = zoomRef.current || 1;
+      return {
+        x: Math.floor((clientX - rect.left + container.scrollLeft - layout.canvasLeft) / z),
+        y: Math.floor((clientY - rect.top + container.scrollTop - layout.canvasTop) / z),
+      };
+    },
+    [containerRef, zoomRef],
+  );
+
   const drawOverlay = useCallback(() => {
     const canvas = overlayCanvasRef.current;
-    if (!canvas || !sourceImageData) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
 
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
-    canvas.style.width = `${displayWidth}px`;
-    canvas.style.height = `${displayHeight}px`;
+    const viewportW = container.clientWidth;
+    const viewportH = container.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    const backingW = Math.max(1, Math.round(viewportW * dpr));
+    const backingH = Math.max(1, Math.round(viewportH * dpr));
+
+    if (canvas.width !== backingW) canvas.width = backingW;
+    if (canvas.height !== backingH) canvas.height = backingH;
+    canvas.style.width = `${viewportW}px`;
+    canvas.style.height = `${viewportH}px`;
+    // overlay 跟随滚动停留在视口内（作为滚动容器的绝对定位子元素）
+    canvas.style.left = `${container.scrollLeft}px`;
+    canvas.style.top = `${container.scrollTop}px`;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, viewportW, viewportH);
 
-    if (!gridEnabled) {
-      ctx.clearRect(0, 0, displayWidth, displayHeight);
-      return;
-    }
+    const layout = stageLayoutRef.current;
+    if (!gridEnabled || !sourceImageData || !layout) return;
+
+    const transform: OverlayTransform = {
+      offX: layout.canvasLeft - container.scrollLeft,
+      offY: layout.canvasTop - container.scrollTop,
+      zoom,
+      viewportW,
+      viewportH,
+    };
 
     drawGridOverlay(
       ctx,
+      transform,
       { width: sourceImageData.width, height: sourceImageData.height },
       gridScaleType,
       gridSeedCell,
@@ -314,11 +392,9 @@ export function GridRestoreSourcePreview() {
       gridColumnCount,
       gridRowCount,
       marquee,
-      zoom,
-      displayWidth,
-      displayHeight,
     );
   }, [
+    containerRef,
     sourceImageData,
     gridScaleType,
     gridSeedCell,
@@ -327,14 +403,60 @@ export function GridRestoreSourcePreview() {
     gridRowCount,
     marquee,
     zoom,
-    displayWidth,
-    displayHeight,
+    stageLayout,
+    viewportSize.width,
+    viewportSize.height,
     gridEnabled,
   ]);
+
+  const drawOverlayRef = useRef(drawOverlay);
+  drawOverlayRef.current = drawOverlay;
+
+  const redrawRafRef = useRef<number | null>(null);
+  const scheduleRedraw = useCallback(() => {
+    if (redrawRafRef.current !== null) return;
+    redrawRafRef.current = requestAnimationFrame(() => {
+      redrawRafRef.current = null;
+      drawOverlayRef.current();
+    });
+  }, []);
 
   useLayoutEffect(() => {
     drawOverlay();
   }, [drawOverlay]);
+
+  // 视口尺寸变化时同步 overlay backing store
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setViewportSize({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      }
+    });
+    observer.observe(container);
+    setViewportSize({ width: container.clientWidth, height: container.clientHeight });
+    return () => observer.disconnect();
+  }, [containerRef]);
+
+  // 滚动/平移时重绘并重新定位 overlay
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const handleScroll = () => scheduleRedraw();
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+      if (redrawRafRef.current !== null) {
+        cancelAnimationFrame(redrawRafRef.current);
+        redrawRafRef.current = null;
+      }
+    };
+  }, [containerRef, scheduleRedraw]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -365,12 +487,17 @@ export function GridRestoreSourcePreview() {
     const isRegionMode = gridScaleType === "region";
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (isPanningRef.current) {
-        if (event.buttons !== 4) {
-          stopPanning();
-          return;
+      if (isMiddleMousePressed(event.buttons)) {
+        if (!isPanningRef.current) {
+          startPanning(event.clientX, event.clientY);
+        } else {
+          applyPanMove(event.clientX, event.clientY);
         }
-        applyPanMove(event.clientX, event.clientY);
+        return;
+      }
+
+      if (isPanningRef.current) {
+        stopPanning();
         return;
       }
 
@@ -383,7 +510,7 @@ export function GridRestoreSourcePreview() {
         const currentRect =
           state.gridScaleType === "region" ? state.gridRegion : state.gridSeedCell;
         if (!currentRect) return;
-        const point = canvasClientToImage(event.clientX, event.clientY, canvas, zoomRef.current);
+        const point = clientToImage(event.clientX, event.clientY);
         const next = resizeSeedFromCornerHandle(currentRect, handleDrag, point, imageSize);
         if (state.gridScaleType === "region") {
           setGridRegion(next);
@@ -396,7 +523,7 @@ export function GridRestoreSourcePreview() {
       const selection = selectRef.current;
       if (!selection) return;
 
-      const current = canvasClientToImage(event.clientX, event.clientY, canvas, zoomRef.current);
+      const current = clientToImage(event.clientX, event.clientY);
       selection.current = current;
       setMarquee(
         clampCropRect(
@@ -407,8 +534,10 @@ export function GridRestoreSourcePreview() {
     };
 
     const handleMouseUp = (event: MouseEvent) => {
-      if (isPanningRef.current) {
-        stopPanning();
+      if (isMiddleMouseButton(event.button)) {
+        if (isPanningRef.current) {
+          stopPanning();
+        }
         return;
       }
 
@@ -427,7 +556,7 @@ export function GridRestoreSourcePreview() {
 
       if (event.button !== 0) return;
 
-      const current = canvasClientToImage(event.clientX, event.clientY, canvas, zoomRef.current);
+      const current = clientToImage(event.clientX, event.clientY);
       if (isRegionMode) {
         commitGridRegion(selection.start, current);
       } else {
@@ -448,16 +577,17 @@ export function GridRestoreSourcePreview() {
     gridScaleType,
     applyPanMove,
     stopPanning,
+    startPanning,
     commitGridSeedCell,
     commitGridRegion,
     setGridSeedCell,
     setGridRegion,
+    clientToImage,
     isPanningRef,
-    zoomRef,
   ]);
 
   const handleOverlayMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (event.button === 1) {
+    if (isMiddleMouseButton(event.button)) {
       event.preventDefault();
       startPanning(event.clientX, event.clientY);
       return;
@@ -478,7 +608,7 @@ export function GridRestoreSourcePreview() {
     if (!canvas || !sourceImageData) return;
 
     if (committedRect && !isSelecting) {
-      const point = canvasClientToImage(event.clientX, event.clientY, canvas, zoom);
+      const point = clientToImage(event.clientX, event.clientY);
       const handle = hitTestSeedCornerHandle(point, committedRect, zoom);
       if (handle) {
         event.preventDefault();
@@ -490,7 +620,7 @@ export function GridRestoreSourcePreview() {
 
     event.preventDefault();
     beginGridDrawing();
-    const start = canvasClientToImage(event.clientX, event.clientY, canvas, zoom);
+    const start = clientToImage(event.clientX, event.clientY);
     selectRef.current = { start, current: start };
     setIsSelecting(true);
     setMarquee(
@@ -523,10 +653,16 @@ export function GridRestoreSourcePreview() {
         ? `网格 ${regionLayout.columns}×${regionLayout.rows} → ${regionLayout.outputWidth}×${regionLayout.outputHeight}`
         : null;
 
+  const handleContainerMouseUp = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (isMiddleMouseButton(event.button)) {
+      stopPanning();
+    }
+  };
+
   const footerHint =
     gridScaleType === "singleCell"
-      ? "左键框选基准格 · 拖拽角点 · 方向键微调 · Shift+方向键调右下角 · 右键取消 · Enter 应用"
-      : "左键框选区域 · 拖拽角点 · Shift+滚轮调 X · Ctrl+滚轮调 Y · 方向键移动 · Shift+方向键调大小 · 右键取消 · Enter 应用";
+      ? "左键框选基准格 · 中键平移视图 · 拖拽角点 · 方向键微调 · Shift+方向键调右下角 · 右键取消 · Enter 应用"
+      : "左键框选区域 · 中键平移视图 · 拖拽角点 · Shift+滚轮调 X · Ctrl+滚轮调 Y · 方向键移动 · Shift+方向键调大小 · 右键取消 · Enter 应用";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -552,7 +688,7 @@ export function GridRestoreSourcePreview() {
         }`}
         onMouseDown={handleContainerMouseDown}
         onAuxClick={handleAuxClick}
-        onMouseUp={stopPanning}
+        onMouseUp={handleContainerMouseUp}
         onMouseLeave={stopPanning}
         onContextMenu={handleContextMenu}
       >
@@ -583,25 +719,27 @@ export function GridRestoreSourcePreview() {
                   style={{ imageRendering: "pixelated" }}
                   draggable={false}
                 />
-                <canvas
-                  ref={overlayCanvasRef}
-                  className={`absolute left-0 top-0 block touch-none select-none${
-                    isSelecting || isHandleDragging
-                      ? " cursor-crosshair"
-                      : isPanning
-                        ? " cursor-grabbing"
-                        : canDrawGrid
-                          ? " cursor-crosshair"
-                          : " cursor-grab"
-                  }`}
-                  style={{ imageRendering: "pixelated" }}
-                  draggable={false}
-                  onMouseDown={handleOverlayMouseDown}
-                  onAuxClick={handleAuxClick}
-                />
               </div>
             </div>
           )
+        )}
+        {sourceImageData && stageLayout && (
+          <canvas
+            ref={overlayCanvasRef}
+            className={`absolute z-10 block touch-none select-none${
+              isSelecting || isHandleDragging
+                ? " cursor-crosshair"
+                : isPanning
+                  ? " cursor-grabbing"
+                  : canDrawGrid
+                    ? " cursor-crosshair"
+                    : " cursor-grab"
+            }`}
+            draggable={false}
+            onMouseDown={handleOverlayMouseDown}
+            onAuxClick={handleAuxClick}
+            onContextMenu={handleContextMenu}
+          />
         )}
       </div>
 

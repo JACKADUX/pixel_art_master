@@ -9,6 +9,7 @@ import {
   DocumentDuplicateIcon,
   Cog6ToothIcon,
   DocumentPlusIcon,
+  EyeIcon,
   FolderOpenIcon,
   MapPinIcon,
   PhotoIcon,
@@ -31,8 +32,8 @@ export const SHORTCUT_LABELS = {
   paste: "Ctrl+V",
   flipHorizontal: "Shift+H",
   flipVertical: "Shift+V",
-  toggleGrid: "Ctrl+'",
-  toggleOklabLightness: "Ctrl+1",
+  toggleGrid: "Ctrl+' / Ctrl+2",
+  toggleOklchLightness: "Ctrl+1",
 } as const;
 
 export type ShortcutAction = keyof typeof SHORTCUT_LABELS;
@@ -48,7 +49,7 @@ export interface MenuActions {
   toggleAlwaysOnTop: () => void;
   alwaysOnTop: boolean;
   toggleCanvasDisplayMode: () => void;
-  canvasDisplayMode: "normal" | "oklabLightness";
+  canvasDisplayMode: "normal" | "oklchLightness";
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
@@ -62,6 +63,7 @@ export interface MenuActions {
   openPixelRestorePage: () => void;
   openColorEditPage: () => void;
   openAiChatTestPage: () => void;
+  openAiVisionTestPage: () => void;
   openAssetLibrary: () => void;
   openSettingsModal: () => void;
 }
@@ -213,6 +215,12 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           icon: ChatBubbleLeftRightIcon,
           onClick: actions.openAiChatTestPage,
         },
+        {
+          type: "action",
+          label: "AI 识图测试…",
+          icon: EyeIcon,
+          onClick: actions.openAiVisionTestPage,
+        },
       ],
     },
     {
@@ -240,9 +248,9 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
         },
         {
           type: "toggle",
-          label: "Oklab 明度",
-          shortcut: SHORTCUT_LABELS.toggleOklabLightness,
-          checked: actions.canvasDisplayMode === "oklabLightness",
+          label: "OKLCH 明度",
+          shortcut: SHORTCUT_LABELS.toggleOklchLightness,
+          checked: actions.canvasDisplayMode === "oklchLightness",
           onClick: actions.toggleCanvasDisplayMode,
         },
       ],

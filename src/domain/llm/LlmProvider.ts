@@ -28,6 +28,14 @@ export const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   custom: "",
 };
 
+/** 各供应商的默认视觉（识图）模型，供识图模式提示用户使用支持视觉的模型 */
+export const DEFAULT_VISION_MODELS: Record<LlmProviderId, string> = {
+  deepseek: "deepseek-chat",
+  openrouter: "deepseek/deepseek-chat",
+  ollama: "llava",
+  custom: "",
+};
+
 export function isLlmProviderId(value: unknown): value is LlmProviderId {
   return typeof value === "string" && LLM_PROVIDER_IDS.includes(value as LlmProviderId);
 }

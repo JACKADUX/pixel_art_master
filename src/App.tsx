@@ -11,17 +11,20 @@ import { CanvasSizeModal } from "./presentation/components/CanvasSizeModal";
 import { PixelRestorePage } from "./presentation/components/pixelRestore/PixelRestorePage";
 import { ColorEditPage } from "./presentation/components/colorEdit/ColorEditPage";
 import { AiChatTestPage } from "./presentation/components/ai/AiChatTestPage";
+import { AiVisionTestPage } from "./presentation/components/ai/AiVisionTestPage";
 import { SettingsModal } from "./presentation/components/settings/SettingsModal";
 import { ToastContainer } from "./presentation/components/ToastContainer";
 import { TopBar } from "./presentation/components/TopBar";
 import { useAppShortcuts } from "./presentation/hooks/useAppShortcuts";
 import { useAutoSaveProject } from "./presentation/hooks/useAutoSaveProject";
+import { useWorkspaceRegionAutoClear } from "./presentation/hooks/useWorkspaceRegion";
 import { useAppStore } from "./presentation/stores/appStore";
 import "./App.css";
 
 function App() {
   useAppShortcuts();
   useAutoSaveProject();
+  useWorkspaceRegionAutoClear();
   const init = useAppStore((s) => s.init);
 
   useEffect(() => {
@@ -48,6 +51,7 @@ function App() {
       <PixelRestorePage />
       <ColorEditPage />
       <AiChatTestPage />
+      <AiVisionTestPage />
       <ToastContainer />
     </div>
   );

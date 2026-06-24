@@ -28,6 +28,10 @@ import { createAssetTag, renameAssetTag } from "./AssetTag";
 export const ASSET_LIBRARY_VERSION = 2;
 export const ROOT_FOLDER_ID = "__root__";
 
+export function resolveAssetFolderTarget(folderId: string | null): string {
+  return folderId ?? ROOT_FOLDER_ID;
+}
+
 export interface AssetLibraryIndex {
   version: number;
   folders: AssetFolder[];

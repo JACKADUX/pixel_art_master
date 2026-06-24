@@ -31,7 +31,7 @@ export function AssetImageViewerModal({
 }: AssetImageViewerModalProps) {
   const [imageData, setImageData] = useState<ImageData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showOklabLightness, setShowOklabLightness] = useState(false);
+  const [showOklchLightness, setShowOklchLightness] = useState(false);
   const [showPalette, setShowPalette] = useState(false);
   const [previewContainerSize, setPreviewContainerSize] = useState({ width: 0, height: 0 });
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -72,13 +72,13 @@ export function AssetImageViewerModal({
 
   useEffect(() => {
     if (!open) {
-      setShowOklabLightness(false);
+      setShowOklchLightness(false);
       setShowPalette(false);
     }
   }, [open]);
 
   useEffect(() => {
-    setShowOklabLightness(false);
+    setShowOklchLightness(false);
     setShowPalette(false);
   }, [assetId]);
 
@@ -127,10 +127,10 @@ export function AssetImageViewerModal({
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowOklabLightness((value) => !value)}
-            className={toggleButtonClass(showOklabLightness)}
+            onClick={() => setShowOklchLightness((value) => !value)}
+            className={toggleButtonClass(showOklchLightness)}
           >
-            Oklab 明度
+            OKLCH 明度
           </button>
           <button
             type="button"
@@ -161,7 +161,7 @@ export function AssetImageViewerModal({
             pixelated
             panMouseButton={0}
             className="h-full"
-            displayMode={showOklabLightness ? "oklabLightness" : "normal"}
+            displayMode={showOklchLightness ? "oklchLightness" : "normal"}
           />
         )}
 

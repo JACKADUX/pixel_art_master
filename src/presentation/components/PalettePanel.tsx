@@ -2,13 +2,14 @@ import { useCallback, useState } from "react";
 import { PlusIcon } from "@heroicons/react/24/outline";
 import { toHexAlpha } from "@/domain/canvas/PixelColor";
 import {
-  PALETTE_OKLAB_MAP_MAX_COLORS,
-} from "@/domain/palette/PaletteOklabLayout";
+  PALETTE_OKLCH_MAP_MAX_COLORS,
+} from "@/domain/palette/PaletteOklchLayout";
 import { useAppStore } from "../stores/appStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PaletteGridView } from "./PaletteGridView";
 import { PaletteMoreMenu } from "./PaletteMoreMenu";
-import { PaletteOklabMapView } from "./PaletteOklabMapView";
+import { PaletteOklchMapView } from "./PaletteOklchMapView";
+import { PalettePresetManagerModal } from "./PalettePresetManagerModal";
 
 function buildSwatchBackground(hex: string): string {
   return `
@@ -63,8 +64,8 @@ export function PalettePanel() {
   if (!project) return null;
 
   const colors = project.palette.getColors();
-  const mapColors = colors.slice(0, PALETTE_OKLAB_MAP_MAX_COLORS);
-  const isTruncated = paletteViewMode === "oklabMap" && colors.length > PALETTE_OKLAB_MAP_MAX_COLORS;
+  const mapColors = colors.slice(0, PALETTE_OKLCH_MAP_MAX_COLORS);
+  const isTruncated = paletteViewMode === "oklchMap" && colors.length > PALETTE_OKLCH_MAP_MAX_COLORS;
   const foregroundHex = toHexAlpha(foregroundColor);
 
   const sharedViewProps = {
@@ -113,7 +114,7 @@ export function PalettePanel() {
 
       {isTruncated && (
         <p className="shrink-0 text-[10px] text-amber-500/90">
-          色域图仅展示前 {PALETTE_OKLAB_MAP_MAX_COLORS} 色（共 {colors.length} 色）
+          色域图仅展示前 {PALETTE_OKLCH_MAP_MAX_COLORS} 色（共 {colors.length} 色）
         </p>
       )}
 
@@ -122,7 +123,7 @@ export function PalettePanel() {
       ) : paletteViewMode === "grid" ? (
         <PaletteGridView colors={colors} {...sharedViewProps} />
       ) : (
-        <PaletteOklabMapView colors={mapColors} {...sharedViewProps} />
+        <PaletteOklchMapView colors={mapColors} {...sharedViewProps} />
       )}
 
       {removeMode && (
@@ -154,6 +155,8 @@ export function PalettePanel() {
         onConfirm={handleConfirmClearPalette}
         onCancel={() => setClearConfirmOpen(false)}
       />
+
+      <PalettePresetManagerModal />
     </div>
   );
 }

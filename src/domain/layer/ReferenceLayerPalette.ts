@@ -1,5 +1,5 @@
 import { getAlpha, toHexAlpha, type PixelColor } from "../canvas/PixelColor";
-import { pixelColorToOklab } from "../color/ColorConverter";
+import { pixelColorToOklch } from "../color/ColorConverter";
 import type { ColorEntry } from "../palette/Palette";
 import type { Layer, ReferenceLayer } from "./Layer";
 import { clampReferenceScale } from "./ReferenceLayerOperations";
@@ -108,7 +108,7 @@ export function buildReferenceColorPalette(
   }
 
   entries.sort((a, b) => {
-    const lightnessDelta = pixelColorToOklab(a.color).l - pixelColorToOklab(b.color).l;
+    const lightnessDelta = pixelColorToOklch(a.color).l - pixelColorToOklch(b.color).l;
     if (lightnessDelta !== 0) return lightnessDelta;
     return a.hex.localeCompare(b.hex);
   });

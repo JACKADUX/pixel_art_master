@@ -9,6 +9,7 @@ export {
   Cog6ToothIcon,
   DocumentDuplicateIcon,
   DocumentPlusIcon,
+  EyeIcon,
   FolderOpenIcon,
   MapPinIcon,
   PauseIcon,

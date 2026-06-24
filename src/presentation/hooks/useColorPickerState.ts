@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAppStore } from "@/presentation/stores/appStore";
 import {
   fromHex,
   getAlpha,
@@ -9,14 +8,14 @@ import {
 } from "@/domain/canvas/PixelColor";
 import {
   hslToPixelColor,
-  oklabPolarToPixelColor,
+  oklchToPixelColor,
   pixelColorToHsl,
   pixelColorToHslPreservingHue,
-  pixelColorToOklabPolar,
-  pixelColorToOklabPolarPreservingHue,
+  pixelColorToOklch,
+  pixelColorToOklchPreservingHue,
 } from "@/domain/color/ColorConverter";
 import { createHsl, type HslColor } from "@/domain/color/HslColor";
-import { createOklabPolar, type OklabPolarColor } from "@/domain/color/OklabPolarColor";
+import { createOklch, type OklchColor } from "@/domain/color/OklchColor";
 
 interface UseColorPickerStateOptions {
   currentColor: PixelColor;
@@ -24,24 +23,20 @@ interface UseColorPickerStateOptions {
 }
 
 export function useColorPickerState({ currentColor, onChange }: UseColorPickerStateOptions) {
-  const mode = useAppStore((s) => s.colorPickerMode);
-  const setColorPickerMode = useAppStore((s) => s.setColorPickerMode);
   const [hsl, setHsl] = useState<HslColor>(() => pixelColorToHsl(currentColor));
-  const [oklabPolar, setOklabPolar] = useState<OklabPolarColor>(() =>
-    pixelColorToOklabPolar(currentColor),
-  );
+  const [oklch, setOklch] = useState<OklchColor>(() => pixelColorToOklch(currentColor));
   const [alpha, setAlphaState] = useState(() => getAlpha(currentColor));
   const [hexInput, setHexInput] = useState(() => toHexAlpha(currentColor));
   const lastEmittedRef = useRef(currentColor);
-  const oklabDragBaselineRef = useRef<OklabPolarColor | null>(null);
-  const oklabPolarRef = useRef(oklabPolar);
-  oklabPolarRef.current = oklabPolar;
+  const oklchDragBaselineRef = useRef<OklchColor | null>(null);
+  const oklchRef = useRef(oklch);
+  oklchRef.current = oklch;
 
   useEffect(() => {
     if (currentColor === lastEmittedRef.current) return;
     lastEmittedRef.current = currentColor;
     setHsl(pixelColorToHsl(currentColor));
-    setOklabPolar(pixelColorToOklabPolar(currentColor));
+    setOklch(pixelColorToOklch(currentColor));
     setAlphaState(getAlpha(currentColor));
     setHexInput(toHexAlpha(currentColor));
   }, [currentColor]);
@@ -53,18 +48,30 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
       setAlphaState(getAlpha(color));
       setHexInput(toHexAlpha(color));
       setHsl((prev) => pixelColorToHslPreservingHue(color, prev));
-      setOklabPolar((prev) => pixelColorToOklabPolarPreservingHue(color, prev));
+      setOklch((prev) => pixelColorToOklchPreservingHue(color, prev));
     },
     [onChange],
   );
 
-  const emitOklabFromPolar = useCallback(
-    (polar: OklabPolarColor) => {
-      const color = oklabPolarToPixelColor(polar, alpha);
+  const emitHsl = useCallback(
+    (next: HslColor) => {
+      const color = hslToPixelColor(next, alpha);
       lastEmittedRef.current = color;
       onChange(color);
       setHexInput(toHexAlpha(color));
-      setOklabPolar(polar);
+      setHsl(next);
+      setOklch((prev) => pixelColorToOklchPreservingHue(color, prev));
+    },
+    [alpha, onChange],
+  );
+
+  const emitOklch = useCallback(
+    (next: OklchColor) => {
+      const color = oklchToPixelColor(next, alpha);
+      lastEmittedRef.current = color;
+      onChange(color);
+      setHexInput(toHexAlpha(color));
+      setOklch(next);
       setHsl((prev) => pixelColorToHslPreservingHue(color, prev));
     },
     [alpha, onChange],
@@ -83,10 +90,9 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
 
   const updateFromHsl = useCallback(
     (next: HslColor) => {
-      setHsl(next);
-      emitColor(hslToPixelColor(next, alpha));
+      emitHsl(next);
     },
-    [alpha, emitColor],
+    [emitHsl],
   );
 
   const setHue = useCallback(
@@ -109,53 +115,53 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
     [hsl.h, updateFromHsl],
   );
 
-  const beginOklabSliderDrag = useCallback(() => {
-    oklabDragBaselineRef.current = { ...oklabPolarRef.current };
+  const beginOklchSliderDrag = useCallback(() => {
+    oklchDragBaselineRef.current = { ...oklchRef.current };
   }, []);
 
-  const endOklabSliderDrag = useCallback(() => {
-    oklabDragBaselineRef.current = null;
+  const endOklchSliderDrag = useCallback(() => {
+    oklchDragBaselineRef.current = null;
   }, []);
 
-  const getOklabBaseline = useCallback((): OklabPolarColor => {
-    return oklabDragBaselineRef.current ?? oklabPolar;
-  }, [oklabPolar]);
+  const getOklchBaseline = useCallback((): OklchColor => {
+    return oklchDragBaselineRef.current ?? oklch;
+  }, [oklch]);
 
-  const setOklabHue = useCallback(
+  const setOklchHue = useCallback(
     (h: number) => {
-      const baseline = getOklabBaseline();
-      emitOklabFromPolar(createOklabPolar(h, baseline.s, baseline.l));
+      const baseline = getOklchBaseline();
+      emitOklch(createOklch(baseline.l, baseline.c, h));
     },
-    [emitOklabFromPolar, getOklabBaseline],
+    [emitOklch, getOklchBaseline],
   );
 
-  const setOklabSaturation = useCallback(
-    (s: number) => {
-      const baseline = getOklabBaseline();
-      emitOklabFromPolar(createOklabPolar(baseline.h, s, baseline.l));
+  const setOklchChroma = useCallback(
+    (c: number) => {
+      const baseline = getOklchBaseline();
+      emitOklch(createOklch(baseline.l, c, baseline.h));
     },
-    [emitOklabFromPolar, getOklabBaseline],
+    [emitOklch, getOklchBaseline],
   );
 
-  const setOklabLightness = useCallback(
+  const setOklchLightness = useCallback(
     (l: number) => {
-      const baseline = getOklabBaseline();
-      emitOklabFromPolar(createOklabPolar(baseline.h, baseline.s, l));
+      const baseline = getOklchBaseline();
+      emitOklch(createOklch(l, baseline.c, baseline.h));
     },
-    [emitOklabFromPolar, getOklabBaseline],
+    [emitOklch, getOklchBaseline],
   );
 
-  const pickOklabPlaneColor = useCallback(
+  const pickOklchPlaneColor = useCallback(
     (color: PixelColor) => {
       emitPlaneColor(color);
     },
     [emitPlaneColor],
   );
 
-  const commitOklabPlanePick = useCallback(
+  const commitOklchPlanePick = useCallback(
     (color: PixelColor) => {
       lastEmittedRef.current = withAlpha(color, alpha);
-      setOklabPolar((prev) => pixelColorToOklabPolarPreservingHue(color, prev));
+      setOklch((prev) => pixelColorToOklchPreservingHue(color, prev));
     },
     [alpha],
   );
@@ -179,10 +185,8 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
   }, [currentColor, emitColor, hexInput]);
 
   return {
-    mode,
-    setMode: setColorPickerMode,
     hsl,
-    oklabPolar,
+    oklch,
     alpha,
     hexInput,
     setHexInput,
@@ -192,12 +196,14 @@ export function useColorPickerState({ currentColor, onChange }: UseColorPickerSt
     setLightness,
     setAlpha,
     setHslPlane,
-    beginOklabSliderDrag,
-    endOklabSliderDrag,
-    setOklabHue,
-    setOklabSaturation,
-    setOklabLightness,
-    pickOklabPlaneColor,
-    commitOklabPlanePick,
+    beginOklchSliderDrag,
+    endOklchSliderDrag,
+    setOklchHue,
+    setOklchChroma,
+    setOklchLightness,
+    pickOklchPlaneColor,
+    commitOklchPlanePick,
   };
 }
+
+export type ColorPickerState = ReturnType<typeof useColorPickerState>;

@@ -29,6 +29,7 @@ export function TopBar() {
   const openPixelRestorePage = useAppStore((s) => s.openPixelRestorePage);
   const openColorEditPage = useAppStore((s) => s.openColorEditPage);
   const openAiChatTestPage = useAppStore((s) => s.openAiChatTestPage);
+  const openAiVisionTestPage = useAppStore((s) => s.openAiVisionTestPage);
   const openAssetLibraryModal = useAppStore((s) => s.openAssetLibraryModal);
   const openSettingsModal = useAppStore((s) => s.openSettingsModal);
   const project = useAppStore((s) => s.project);
@@ -60,6 +61,7 @@ export function TopBar() {
         openPixelRestorePage,
         openColorEditPage,
         openAiChatTestPage,
+        openAiVisionTestPage,
         openAssetLibrary: openAssetLibraryModal,
         openSettingsModal,
       }),
@@ -88,6 +90,7 @@ export function TopBar() {
       openPixelRestorePage,
       openColorEditPage,
       openAiChatTestPage,
+      openAiVisionTestPage,
       openAssetLibraryModal,
       openSettingsModal,
     ],

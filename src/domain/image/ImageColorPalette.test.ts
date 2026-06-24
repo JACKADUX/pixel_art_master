@@ -31,7 +31,7 @@ describe("buildColorPaletteFromImageData", () => {
     expect(palette).toHaveLength(2);
   });
 
-  it("sorts by OKLab lightness then hex", () => {
+  it("sorts by OKLCH lightness then hex", () => {
     const grid = PixelGrid.createEmpty(3, 1);
     grid.setPixel(0, 0, rgba(0, 0, 0, 255));
     grid.setPixel(1, 0, rgba(255, 255, 255, 255));

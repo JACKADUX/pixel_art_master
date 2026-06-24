@@ -63,7 +63,7 @@ export interface EditorPreferences {
   foregroundColor: PixelColor;
   backgroundColor: PixelColor;
   zoom: number;
-  paletteViewMode: "grid" | "oklabMap";
+  paletteViewMode: "grid" | "oklchMap";
   colorPickerMode: ColorMode;
   colorPickerLayoutOrientation: ColorPickerLayoutOrientation;
   sidebarWidth: number;
@@ -111,10 +111,10 @@ const ERASER_SHAPES: BrushShape[] = ["square", "circle"];
 const SHAPE_MODES: ShapeMode[] = ["rectangle", "line", "ellipse"];
 const SELECTION_MODES: SelectionMode[] = ["rectangle", "ellipse", "lasso", "magicWand"];
 const TRANSFORM_MODES: TransformMode[] = ["move", "scale", "rotate"];
-const COLOR_MODES: ColorMode[] = ["hsl", "oklab"];
+const COLOR_MODES: ColorMode[] = ["hsl", "oklch"];
 const COLOR_SLOTS: EditorColorSlot[] = ["foreground", "background"];
-const PALETTE_VIEW_MODES = ["grid", "oklabMap"] as const;
-const CANVAS_DISPLAY_MODES = ["normal", "oklabLightness"] as const;
+const PALETTE_VIEW_MODES = ["grid", "oklchMap"] as const;
+const CANVAS_DISPLAY_MODES = ["normal", "oklchLightness"] as const;
 
 export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   activeTool: "brush",
@@ -124,7 +124,7 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   backgroundColor: TRANSPARENT,
   zoom: 8,
   paletteViewMode: "grid",
-  colorPickerMode: "hsl",
+  colorPickerMode: "oklch",
   colorPickerLayoutOrientation: "vertical",
   sidebarWidth: DEFAULT_SIDEBAR_WIDTH,
   splitPaneRatio: DEFAULT_SPLIT_PANE_RATIO,
@@ -157,7 +157,7 @@ export interface EditorPreferencesSource {
   foregroundColor: PixelColor;
   backgroundColor: PixelColor;
   zoom: number;
-  paletteViewMode: "grid" | "oklabMap";
+  paletteViewMode: "grid" | "oklchMap";
   colorPickerMode: ColorMode;
   colorPickerLayoutOrientation: ColorPickerLayoutOrientation;
   sidebarWidth: number;
@@ -349,24 +349,29 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
   const activeTool = TOOL_TYPES.includes(raw.activeTool as ToolType)
     ? (raw.activeTool as ToolType)
     : defaults.activeTool;
-  const paletteViewMode = PALETTE_VIEW_MODES.includes(
-    raw.paletteViewMode as (typeof PALETTE_VIEW_MODES)[number],
-  )
-    ? (raw.paletteViewMode as (typeof PALETTE_VIEW_MODES)[number])
-    : defaults.paletteViewMode;
-  const colorPickerMode = COLOR_MODES.includes(raw.colorPickerMode as ColorMode)
-    ? (raw.colorPickerMode as ColorMode)
-    : defaults.colorPickerMode;
+  const paletteViewMode =
+    raw.paletteViewMode === "oklabMap"
+      ? "oklchMap"
+      : PALETTE_VIEW_MODES.includes(raw.paletteViewMode as (typeof PALETTE_VIEW_MODES)[number])
+        ? (raw.paletteViewMode as (typeof PALETTE_VIEW_MODES)[number])
+        : defaults.paletteViewMode;
+  const colorPickerMode =
+    raw.colorPickerMode === "oklab" || raw.colorPickerMode === "hsl"
+      ? "oklch"
+      : COLOR_MODES.includes(raw.colorPickerMode as ColorMode)
+        ? (raw.colorPickerMode as ColorMode)
+        : defaults.colorPickerMode;
   const colorPickerLayoutOrientation = COLOR_PICKER_LAYOUT_ORIENTATIONS.includes(
     raw.colorPickerLayoutOrientation as ColorPickerLayoutOrientation,
   )
     ? (raw.colorPickerLayoutOrientation as ColorPickerLayoutOrientation)
     : defaults.colorPickerLayoutOrientation;
-  const canvasDisplayMode = CANVAS_DISPLAY_MODES.includes(
-    raw.canvasDisplayMode as CanvasDisplayMode,
-  )
-    ? (raw.canvasDisplayMode as CanvasDisplayMode)
-    : defaults.canvasDisplayMode;
+  const canvasDisplayMode =
+    raw.canvasDisplayMode === "oklabLightness"
+      ? "oklchLightness"
+      : CANVAS_DISPLAY_MODES.includes(raw.canvasDisplayMode as CanvasDisplayMode)
+        ? (raw.canvasDisplayMode as CanvasDisplayMode)
+        : defaults.canvasDisplayMode;
 
   return {
     activeTool,

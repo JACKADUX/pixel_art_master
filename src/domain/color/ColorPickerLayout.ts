@@ -4,9 +4,7 @@ export const COLOR_PICKER_LAYOUT_ORIENTATIONS: ColorPickerLayoutOrientation[] = 
   "horizontal",
 ];
 
-export const COLOR_PICKER_VERTICAL_WIDTH = 240;
-export const COLOR_PICKER_PREVIEW_SIZE = 28;
-export const COLOR_PICKER_HORIZONTAL_LEFT_WIDTH = 72;
+export const COLOR_PICKER_VERTICAL_WIDTH = 280;
 export const COLOR_PICKER_HORIZONTAL_SLIDER_WIDTH = 224;
 /** 单行滑条高度（与 ColorChannelSlider 行高一致） */
 export const COLOR_PICKER_HORIZONTAL_SLIDER_ROW_HEIGHT = 20;
@@ -18,11 +16,9 @@ export const COLOR_PICKER_HORIZONTAL_BLOCK_HEIGHT =
   (COLOR_PICKER_HORIZONTAL_SLIDER_COUNT - 1) * COLOR_PICKER_HORIZONTAL_SLIDER_GAP;
 export const COLOR_PICKER_HORIZONTAL_PLANE_WIDTH = COLOR_PICKER_HORIZONTAL_BLOCK_HEIGHT;
 export const COLOR_PICKER_HORIZONTAL_WIDTH =
-  COLOR_PICKER_HORIZONTAL_LEFT_WIDTH +
   COLOR_PICKER_HORIZONTAL_PLANE_WIDTH +
   COLOR_PICKER_HORIZONTAL_SLIDER_WIDTH +
-  24 +
-  24;
+  36;
 export const COLOR_PICKER_HORIZONTAL_MIN_HEIGHT = COLOR_PICKER_HORIZONTAL_BLOCK_HEIGHT + 24;
 export const COLOR_PICKER_HEADER_HEIGHT = 28;
 
@@ -62,5 +58,5 @@ export function getEstimatedColorPickerPanelHeight(
     return COLOR_PICKER_HORIZONTAL_MIN_HEIGHT;
   }
   const contentWidth = COLOR_PICKER_VERTICAL_WIDTH - 24;
-  return estimateColorPickerPlaneHeight("vertical", contentWidth) + 280;
+  return estimateColorPickerPlaneHeight("vertical", contentWidth) + 236;
 }

@@ -1,1 +1,1 @@
-export type ColorMode = "hsl" | "oklab";
+export type ColorMode = "hsl" | "oklch";

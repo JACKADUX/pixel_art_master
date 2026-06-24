@@ -18,7 +18,7 @@ import {
   isMiddleMouseButton,
 } from "@/domain/viewport/ViewportPan";
 import type { CanvasDisplayMode } from "@/domain/color/CanvasDisplayMode";
-import { OklabDisplayGlRenderer } from "@/infrastructure/canvas/OklabDisplayGlRenderer";
+import { OklchDisplayGlRenderer } from "@/infrastructure/canvas/OklchDisplayGlRenderer";
 import { ensureImageData } from "@/infrastructure/image/ImageDataCodec";
 import {
   applyWheelZoomRatio,
@@ -61,7 +61,7 @@ export function ImagePreviewWorkspace({
 }: ImagePreviewWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const oklabRendererRef = useRef<OklabDisplayGlRenderer | null>(null);
+  const oklchRendererRef = useRef<OklchDisplayGlRenderer | null>(null);
   const zoomRef = useRef(1);
   const isPanningRef = useRef(false);
   const lastPanRef = useRef({ x: 0, y: 0 });
@@ -113,27 +113,27 @@ export function ImagePreviewWorkspace({
   }, [imageKey]);
 
   useEffect(() => {
-    oklabRendererRef.current = new OklabDisplayGlRenderer();
+    oklchRendererRef.current = new OklchDisplayGlRenderer();
     return () => {
-      oklabRendererRef.current?.dispose();
-      oklabRendererRef.current = null;
+      oklchRendererRef.current?.dispose();
+      oklchRendererRef.current = null;
     };
   }, []);
 
   useLayoutEffect(() => {
-    if (displayMode !== "oklabLightness" || !imageData) return;
-    oklabRendererRef.current?.setSource(imageData);
+    if (displayMode !== "oklchLightness" || !imageData) return;
+    oklchRendererRef.current?.setSource(imageData);
   }, [imageData, imageKey, displayMode]);
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !imageData) return;
 
-    if (displayMode === "oklabLightness") {
-      const renderer = oklabRendererRef.current;
+    if (displayMode === "oklchLightness") {
+      const renderer = oklchRendererRef.current;
       if (!renderer) return;
       renderer.initCanvas(canvas);
-      renderer.render(canvas, displayWidth, displayHeight, "oklabLightness");
+      renderer.render(canvas, displayWidth, displayHeight, "oklchLightness");
       return;
     }
 

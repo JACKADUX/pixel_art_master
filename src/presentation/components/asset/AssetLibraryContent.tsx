@@ -6,6 +6,7 @@ import { useAppStore } from "../../stores/appStore";
 import { AssetDetailPanel } from "./AssetDetailPanel";
 import { AssetFolderTree } from "./AssetFolderTree";
 import { AssetGrid } from "./AssetGrid";
+import { AssetFolderMoreMenu } from "./AssetFolderMoreMenu";
 import { AssetImportMenu } from "./AssetImportMenu";
 import { AssetImageViewerModal } from "./AssetImageViewerModal";
 import { useAssetPointerDrag } from "../../hooks/useAssetPointerDrag";
@@ -14,9 +15,9 @@ import { ResizablePanelColumn } from "../ResizablePanelColumn";
 interface AssetLibraryContentProps {
   library: AssetLibraryIndex;
   workspacePath: string;
-  selectedFolderId: string;
+  selectedFolderId: string | null;
   selectedAssetId: string | null;
-  onSelectFolder: (folderId: string) => void;
+  onSelectFolder: (folderId: string | null) => void;
   onSelectAsset: (assetId: string | null) => void;
   onCreateFolder: (parentId: string | null) => void;
   onRenameFolder: (folderId: string, name: string) => void;
@@ -118,12 +119,17 @@ export function AssetLibraryContent({
         onWidthChange={setAssetFolderTreeWidth}
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden">
-          <div className="shrink-0 border-b border-zinc-700 px-2 py-1.5">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-zinc-700 px-2 py-1.5">
             <AssetImportMenu
               onImportClipboard={onImportClipboard}
               onImportFile={onImportFile}
               onStartCanvasCapture={onStartCanvasCapture}
+            />
+            <AssetFolderMoreMenu
+              selectedFolderId={selectedFolderId}
               onCreateMarkdownAsset={onCreateMarkdownAsset}
+              onCreateFolder={onCreateFolder}
+              onRequestDeleteFolder={onRequestDeleteFolder}
             />
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">

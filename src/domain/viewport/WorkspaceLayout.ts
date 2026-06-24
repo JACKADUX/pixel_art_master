@@ -3,8 +3,19 @@ import { getReferenceBounds } from "@/domain/layer/ReferenceLayerOperations";
 
 export const WORKSPACE_MARGIN_MIN = 800;
 
+/** 拖拽到视图边界时，画布在对侧仍保留的最小可见像素，确保不会完全拖出视野 */
+export const WORKSPACE_EDGE_VISIBLE_MIN = 64;
+
 export const WORKSPACE_CONTAINER_FALLBACK_WIDTH = 800;
 export const WORKSPACE_CONTAINER_FALLBACK_HEIGHT = 600;
+
+/**
+ * 计算单轴的可拖拽边距：随容器尺寸增长，使画布始终能被拖到视图边界，
+ * 拖到极限时对侧仅保留 WORKSPACE_EDGE_VISIBLE_MIN 像素。
+ */
+export function computePanMargin(containerSize: number): number {
+  return Math.max(WORKSPACE_MARGIN_MIN, containerSize - WORKSPACE_EDGE_VISIBLE_MIN);
+}
 
 export interface WorkspaceStageLayout {
   stageWidth: number;
@@ -26,7 +37,8 @@ export function computeReferenceAwareStageSize(
   referenceLayers: ReferenceLayer[],
   zoom: number,
 ): WorkspaceStageLayout {
-  const margin = WORKSPACE_MARGIN_MIN;
+  const marginX = computePanMargin(containerWidth);
+  const marginY = computePanMargin(containerHeight);
 
   let minX = 0;
   let minY = 0;
@@ -47,8 +59,8 @@ export function computeReferenceAwareStageSize(
   const offsetX = minX < 0 ? -minX : 0;
   const offsetY = minY < 0 ? -minY : 0;
 
-  const stageWidth = Math.max(containerWidth, contentWidth + margin * 2);
-  const stageHeight = Math.max(containerHeight, contentHeight + margin * 2);
+  const stageWidth = Math.max(containerWidth, contentWidth + marginX * 2);
+  const stageHeight = Math.max(containerHeight, contentHeight + marginY * 2);
 
   const canvasLeft = offsetX + (stageWidth - contentWidth) / 2 - minX;
   const canvasTop = offsetY + (stageHeight - contentHeight) / 2 - minY;
@@ -67,14 +79,15 @@ export function computeWorkspaceStageSize(
   canvasDisplayWidth: number,
   canvasDisplayHeight: number,
 ): WorkspaceStageLayout {
-  const margin = WORKSPACE_MARGIN_MIN;
+  const marginX = computePanMargin(containerWidth);
+  const marginY = computePanMargin(containerHeight);
   const stageWidth = Math.max(
     containerWidth,
-    canvasDisplayWidth + margin * 2,
+    canvasDisplayWidth + marginX * 2,
   );
   const stageHeight = Math.max(
     containerHeight,
-    canvasDisplayHeight + margin * 2,
+    canvasDisplayHeight + marginY * 2,
   );
 
   return {

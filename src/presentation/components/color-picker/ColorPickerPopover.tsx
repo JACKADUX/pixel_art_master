@@ -7,8 +7,7 @@ import {
   getEstimatedColorPickerPanelHeight,
 } from "@/domain/color/ColorPickerLayout";
 import { useAppStore, type ColorSlot } from "@/presentation/stores/appStore";
-import { ColorPickerHeader } from "./ColorPickerHeader";
-import { ColorPickerPanel } from "./ColorPickerPanel";
+import { ColorPickerView } from "./ColorPickerView";
 
 interface ColorPickerPopoverProps {
   open: boolean;
@@ -164,11 +163,12 @@ export function ColorPickerPopover({
       className="fixed z-50 flex flex-col overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl"
       style={{ top: position.top, left: position.left, width: panelWidth }}
     >
-      <ColorPickerHeader variant="popover" onDetach={handleDetach} />
-      <ColorPickerPanel
+      <ColorPickerView
         currentColor={currentColor}
         onChange={onChange}
         orientation={orientation}
+        headerVariant="popover"
+        onDetach={handleDetach}
       />
     </div>,
     document.body,

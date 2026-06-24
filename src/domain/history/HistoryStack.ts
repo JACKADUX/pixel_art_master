@@ -1,20 +1,46 @@
+import type { Layer } from "../layer/Layer";
+import { cloneLayers } from "../layer/Layer";
 import type { SelectionState } from "../selection/SelectionState";
 import { cloneSelectionState } from "../selection/SelectionState";
 
-export interface HistoryEntry {
+export type SnapshotKind = "pixels" | "structure";
+
+/** 单个绘制层像素的快照，用于绘制、选区等只改变像素的操作。 */
+export interface PixelSnapshot {
+  kind: "pixels";
   layerId: string;
   pixels: Uint32Array;
   selection: SelectionState | null;
 }
 
-export interface EditorSnapshot {
-  layerId: string;
-  pixels: Uint32Array;
+/** 整个图层结构的快照，用于增删、排序等改变图层列表的操作。 */
+export interface StructureSnapshot {
+  kind: "structure";
+  layers: Layer[];
+  activeLayerId: string;
+  activeReferenceLayerId: string | null;
   selection: SelectionState | null;
+}
+
+export type EditorSnapshot = PixelSnapshot | StructureSnapshot;
+export type HistoryEntry = EditorSnapshot;
+
+function isStructureSnapshot(snapshot: EditorSnapshot): snapshot is StructureSnapshot {
+  return snapshot.kind === "structure";
 }
 
 export function cloneEditorSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
+  if (isStructureSnapshot(snapshot)) {
+    return {
+      kind: "structure",
+      layers: cloneLayers(snapshot.layers),
+      activeLayerId: snapshot.activeLayerId,
+      activeReferenceLayerId: snapshot.activeReferenceLayerId,
+      selection: snapshot.selection ? cloneSelectionState(snapshot.selection) : null,
+    };
+  }
   return {
+    kind: "pixels",
     layerId: snapshot.layerId,
     pixels: new Uint32Array(snapshot.pixels),
     selection: snapshot.selection ? cloneSelectionState(snapshot.selection) : null,
@@ -68,6 +94,18 @@ export class HistoryStack {
 
   get canRedo(): boolean {
     return this.redoStack.length > 0;
+  }
+
+  /** 下一个待撤销条目的类型，调用方据此采集匹配类型的当前状态。 */
+  get nextUndoKind(): SnapshotKind | null {
+    const entry = this.undoStack[this.undoStack.length - 1];
+    return entry ? entry.kind : null;
+  }
+
+  /** 下一个待重做条目的类型，调用方据此采集匹配类型的当前状态。 */
+  get nextRedoKind(): SnapshotKind | null {
+    const entry = this.redoStack[this.redoStack.length - 1];
+    return entry ? entry.kind : null;
   }
 
   get undoDepth(): number {

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { OKLCH_MAX_CHROMA } from "@/domain/color/OklchColor";
 import { focusCanvasKeyboard } from "@/presentation/utils/canvasKeyboardFocus";
 
-const NUMERIC_WIDTH_CLASS = "w-[3ch]";
+const NUMERIC_WIDTH_CLASS = "w-[5ch]";
 
 interface ColorChannelSliderProps {
   label: string;
@@ -145,9 +146,14 @@ export function parsePercentInput(text: string): number | null {
   return parseNumericInput(text);
 }
 
-export function parseOklabLightnessInput(text: string): number | null {
+export function parseUnitLightnessInput(text: string): number | null {
   const parsed = parseNumericInput(text);
   return parsed === null ? null : parsed / 100;
+}
+
+export function parseChromaInput(text: string): number | null {
+  const parsed = parseNumericInput(text);
+  return parsed === null ? null : (parsed / 100) * OKLCH_MAX_CHROMA;
 }
 
 export function parseAlphaPercentInput(text: string): number | null {

@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckIcon, ChevronRightIcon, EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 import type { MenuItem } from "./MenuDropdown";
 import {
   buildPalettePanelMenuItems,
   type PalettePanelMenuActions,
+  type PalettePanelMenuPreset,
 } from "../config/palettePanelMenu";
+import { listPalettePresets } from "@/domain/palette/PalettePresetLibrary";
 import { useAppStore } from "../stores/appStore";
 
 interface PaletteMoreMenuProps {
@@ -22,23 +25,54 @@ export function PaletteMoreMenu({
 }: PaletteMoreMenuProps) {
   const paletteViewMode = useAppStore((s) => s.paletteViewMode);
   const setPaletteViewMode = useAppStore((s) => s.setPaletteViewMode);
+  const palettePresetLibrary = useAppStore((s) => s.palettePresetLibrary);
+  const saveCurrentPaletteAsPreset = useAppStore((s) => s.saveCurrentPaletteAsPreset);
+  const importPresetToPalette = useAppStore((s) => s.importPresetToPalette);
+  const openPalettePresetManager = useAppStore((s) => s.openPalettePresetManager);
 
   const [open, setOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ top: 0, right: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
     setOpenSubmenu(null);
   }, []);
 
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    setPosition({
+      top: rect.bottom + 2,
+      right: Math.max(4, window.innerWidth - rect.right),
+    });
+  }, []);
+
+  const presets = useMemo<PalettePanelMenuPreset[]>(
+    () => listPalettePresets(palettePresetLibrary).map((p) => ({ id: p.id, name: p.name })),
+    [palettePresetLibrary],
+  );
+
   const actions = useMemo<PalettePanelMenuActions>(
     () => ({
       setPaletteViewMode,
       enterRemoveMode: onEnterRemoveMode,
       requestClearPalette: onRequestClearPalette,
+      saveAsPreset: () => saveCurrentPaletteAsPreset(),
+      importPresetMerge: (id: string) => importPresetToPalette(id, "merge"),
+      openPresetManager: openPalettePresetManager,
     }),
-    [setPaletteViewMode, onEnterRemoveMode, onRequestClearPalette],
+    [
+      setPaletteViewMode,
+      onEnterRemoveMode,
+      onRequestClearPalette,
+      saveCurrentPaletteAsPreset,
+      importPresetToPalette,
+      openPalettePresetManager,
+    ],
   );
 
   const items = useMemo(
@@ -48,11 +82,17 @@ export function PaletteMoreMenu({
           paletteViewMode,
           colorsCount,
           removeMode,
+          presets,
         },
         actions,
       ),
-    [paletteViewMode, colorsCount, removeMode, actions],
+    [paletteViewMode, colorsCount, removeMode, presets, actions],
   );
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePosition();
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
@@ -63,18 +103,23 @@ export function PaletteMoreMenu({
 
     const handlePointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
-      if (containerRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
       closeMenu();
     };
 
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [open, closeMenu]);
+  }, [open, closeMenu, updatePosition]);
 
   if (items.length === 0) return null;
 
@@ -181,8 +226,9 @@ export function PaletteMoreMenu({
   };
 
   return (
-    <div ref={containerRef} className="relative">
+    <>
       <button
+        ref={triggerRef}
         type="button"
         title="更多操作"
         aria-label="更多操作"
@@ -198,14 +244,18 @@ export function PaletteMoreMenu({
         <EllipsisVerticalIcon className="h-4 w-4" />
       </button>
 
-      {open && (
-        <div
-          role="menu"
-          className="absolute right-0 top-full z-50 mt-0.5 min-w-[160px] rounded border border-zinc-600 bg-zinc-900 py-1 shadow-xl"
-        >
-          {items.map(renderMenuItem)}
-        </div>
-      )}
-    </div>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            className="fixed z-[60] min-w-[160px] rounded border border-zinc-600 bg-zinc-900 py-1 shadow-xl"
+            style={{ top: position.top, right: position.right }}
+          >
+            {items.map(renderMenuItem)}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }

@@ -25,8 +25,8 @@ import { getReferenceImage } from "@/infrastructure/canvas/ReferenceImageCache";
 
 import {
   blitWithDisplayMode,
-  OklabDisplayGlRenderer,
-} from "@/infrastructure/canvas/OklabDisplayGlRenderer";
+  OklchDisplayGlRenderer,
+} from "@/infrastructure/canvas/OklchDisplayGlRenderer";
 
 import { ensureReferenceLayerPixelCache } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 
@@ -67,7 +67,7 @@ export function ReferenceLayerOverlay({
 }: ReferenceLayerOverlayProps) {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const oklabRendererRef = useRef<OklabDisplayGlRenderer | null>(null);
+  const oklchRendererRef = useRef<OklchDisplayGlRenderer | null>(null);
   const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const moveReferenceLayer = useAppStore((s) => s.moveReferenceLayer);
@@ -112,6 +112,36 @@ export function ReferenceLayerOverlay({
 
   const [isResizing, setIsResizing] = useState(false);
 
+  const [isHovered, setIsHovered] = useState(false);
+
+  const hoverHideTimeoutRef = useRef<number | null>(null);
+
+  const handleHoverEnter = useCallback(() => {
+    if (hoverHideTimeoutRef.current !== null) {
+      window.clearTimeout(hoverHideTimeoutRef.current);
+      hoverHideTimeoutRef.current = null;
+    }
+    setIsHovered(true);
+  }, []);
+
+  const handleHoverLeave = useCallback(() => {
+    if (hoverHideTimeoutRef.current !== null) {
+      window.clearTimeout(hoverHideTimeoutRef.current);
+    }
+    hoverHideTimeoutRef.current = window.setTimeout(() => {
+      setIsHovered(false);
+      hoverHideTimeoutRef.current = null;
+    }, 120);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hoverHideTimeoutRef.current !== null) {
+        window.clearTimeout(hoverHideTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const scale = clampReferenceScale(layer.scale);
   const effectiveZoom = zoom * scale;
 
@@ -123,11 +153,11 @@ export function ReferenceLayerOverlay({
   const imageAcceptsPointer = isActive || altHeld || selectionToolActive;
 
   useEffect(() => {
-    oklabRendererRef.current = new OklabDisplayGlRenderer();
+    oklchRendererRef.current = new OklchDisplayGlRenderer();
     glCanvasRef.current = document.createElement("canvas");
     return () => {
-      oklabRendererRef.current?.dispose();
-      oklabRendererRef.current = null;
+      oklchRendererRef.current?.dispose();
+      oklchRendererRef.current = null;
       glCanvasRef.current = null;
     };
   }, []);
@@ -170,10 +200,10 @@ export function ReferenceLayerOverlay({
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, displayWidth, displayHeight);
 
-      const renderer = oklabRendererRef.current;
+      const renderer = oklchRendererRef.current;
       const glCanvas = glCanvasRef.current;
 
-      if (canvasDisplayMode === "oklabLightness" && renderer && glCanvas) {
+      if (canvasDisplayMode === "oklchLightness" && renderer && glCanvas) {
         const cropCanvas = document.createElement("canvas");
         cropCanvas.width = crop.width;
         cropCanvas.height = crop.height;
@@ -551,6 +581,8 @@ export function ReferenceLayerOverlay({
           pointerEvents: imageAcceptsPointer ? "auto" : "none",
         }}
         onMouseDown={imageAcceptsPointer ? handleMouseDown : undefined}
+        onMouseEnter={handleHoverEnter}
+        onMouseLeave={handleHoverLeave}
         onContextMenu={(e) => {
           if (altHeld) {
             e.preventDefault();
@@ -576,11 +608,13 @@ export function ReferenceLayerOverlay({
 
       )}
 
-      {isActive && !altHeld && (
+      {isActive && !altHeld && isHovered && (
         <div
           className="pointer-events-auto absolute left-0 flex items-center gap-0.5 rounded border border-zinc-700/80 bg-zinc-900/90 p-0.5 shadow"
           style={{ top: -4, transform: "translateY(-100%)" }}
           onMouseDown={(e) => e.stopPropagation()}
+          onMouseEnter={handleHoverEnter}
+          onMouseLeave={handleHoverLeave}
         >
           <button
             type="button"

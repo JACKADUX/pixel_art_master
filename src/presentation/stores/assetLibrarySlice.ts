@@ -35,6 +35,7 @@ import {
   findFolderById,
   getFolderPathLabel,
   listDescendantFolderIds,
+  resolveAssetFolderTarget,
   type AssetFolderDeletionDisposition,
   type AssetLibraryIndex,
 } from "@/domain/asset/AssetLibrary";
@@ -75,7 +76,7 @@ export interface AssetLibrarySliceState {
   assetFolderTreeWidth: number;
   assetLibrary: AssetLibraryIndex | null;
   assetLibraryLoading: boolean;
-  selectedAssetFolderId: string;
+  selectedAssetFolderId: string | null;
   selectedAssetId: string | null;
   assetCapturePhase: AssetCapturePhase;
   assetCaptureFolderId: string;
@@ -95,7 +96,7 @@ export interface AssetLibrarySliceActions {
   setAssetLibraryDrawerHeight: (height: number) => void;
   setAssetFolderTreeWidth: (width: number) => void;
   refreshAssetLibrary: () => Promise<void>;
-  setSelectedAssetFolder: (folderId: string) => void;
+  setSelectedAssetFolder: (folderId: string | null) => void;
   setSelectedAsset: (assetId: string | null) => void;
   createAssetFolderAction: (parentId: string | null) => Promise<void>;
   renameAssetFolderAction: (folderId: string, name: string) => Promise<void>;
@@ -162,7 +163,7 @@ export function createAssetLibraryInitialState(): AssetLibrarySliceState {
     assetFolderTreeWidth: DEFAULT_ASSET_FOLDER_TREE_WIDTH,
     assetLibrary: null,
     assetLibraryLoading: false,
-    selectedAssetFolderId: ROOT_FOLDER_ID,
+    selectedAssetFolderId: null,
     selectedAssetId: null,
     assetCapturePhase: "idle",
     assetCaptureFolderId: ROOT_FOLDER_ID,
@@ -283,7 +284,7 @@ export function createAssetLibrarySlice(
           deps.assetRepository,
           workspacePath,
           library,
-          get().selectedAssetFolderId,
+          resolveAssetFolderTarget(get().selectedAssetFolderId),
         );
         if (!result) {
           toast.info("剪贴板中没有图像");
@@ -313,7 +314,7 @@ export function createAssetLibrarySlice(
           deps.imageProcessor,
           workspacePath,
           library,
-          get().selectedAssetFolderId,
+          resolveAssetFolderTarget(get().selectedAssetFolderId),
         );
         if (!result) return;
         set({
@@ -339,7 +340,7 @@ export function createAssetLibrarySlice(
           deps.assetRepository,
           workspacePath,
           library,
-          get().selectedAssetFolderId,
+          resolveAssetFolderTarget(get().selectedAssetFolderId),
         );
         set({
           assetLibrary: result.library,
@@ -352,7 +353,7 @@ export function createAssetLibrarySlice(
     },
 
     startAssetCanvasCapture: () => {
-      const folderId = get().selectedAssetFolderId;
+      const folderId = resolveAssetFolderTarget(get().selectedAssetFolderId);
       set({
         assetLibraryModalOpen: false,
         assetCapturePhase: "dragging",
@@ -700,9 +701,10 @@ export function createAssetLibrarySlice(
         );
         const selectedFolderId = get().selectedAssetFolderId;
         const folderIds = listDescendantFolderIds(library, target.folderId);
-        const nextFolderId = folderIds.includes(selectedFolderId)
-          ? ROOT_FOLDER_ID
-          : selectedFolderId;
+        const nextFolderId =
+          selectedFolderId && folderIds.includes(selectedFolderId)
+            ? null
+            : selectedFolderId;
         const selectedAssetId =
           disposition === "deleteAssets" &&
           get().selectedAssetId &&

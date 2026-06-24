@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { rgba } from "@/domain/canvas/PixelColor";
 import {
   hslToPixelColor,
-  oklabPolarToPixelColor,
+  oklchToPixelColor,
   pixelColorToHslPreservingHue,
-  pixelColorToOklabPolarPreservingHue,
+  pixelColorToOklchPreservingHue,
 } from "./ColorConverter";
 import { createHsl } from "./HslColor";
-import { createOklabPolar } from "./OklabPolarColor";
+import { createOklch } from "./OklchColor";
 
 describe("pixelColorToHslPreservingHue", () => {
   it("keeps previous hue when saturation is zero", () => {
@@ -40,27 +40,27 @@ describe("pixelColorToHslPreservingHue", () => {
   });
 });
 
-describe("pixelColorToOklabPolarPreservingHue", () => {
+describe("pixelColorToOklchPreservingHue", () => {
   it("keeps previous hue when chroma is zero", () => {
-    const gray = oklabPolarToPixelColor(createOklabPolar(200, 0, 0.5));
-    const result = pixelColorToOklabPolarPreservingHue(gray, createOklabPolar(200, 80, 0.5));
+    const gray = oklchToPixelColor(createOklch(0.5, 0, 200));
+    const result = pixelColorToOklchPreservingHue(gray, createOklch(0.5, 0.2, 200));
     expect(result.h).toBeCloseTo(200, 5);
-    expect(result.s).toBeCloseTo(0, 3);
+    expect(result.c).toBeCloseTo(0, 3);
     expect(result.l).toBeCloseTo(0.5, 3);
   });
 
   it("keeps previous hue for achromatic black", () => {
     const black = rgba(0, 0, 0);
-    const result = pixelColorToOklabPolarPreservingHue(black, createOklabPolar(90, 60, 0.5));
+    const result = pixelColorToOklchPreservingHue(black, createOklch(0.5, 0.2, 90));
     expect(result.h).toBeCloseTo(90, 5);
-    expect(result.s).toBeCloseTo(0, 3);
+    expect(result.c).toBeCloseTo(0, 3);
     expect(result.l).toBe(0);
   });
 
   it("uses derived hue for chromatic colors", () => {
     const red = rgba(255, 0, 0);
-    const result = pixelColorToOklabPolarPreservingHue(red, createOklabPolar(200, 80, 0.5));
-    expect(result.s).toBeGreaterThan(0);
+    const result = pixelColorToOklchPreservingHue(red, createOklch(0.5, 0.2, 200));
+    expect(result.c).toBeGreaterThan(0);
     expect(result.h).not.toBeCloseTo(200, 0);
   });
 });

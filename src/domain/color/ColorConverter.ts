@@ -1,7 +1,13 @@
 import { rgba, toRgbComponents, type PixelColor } from "@/domain/canvas/PixelColor";
 import { createHsl, normalizeHue, type HslColor } from "./HslColor";
 import { createOklab, type OklabColor } from "./OklabColor";
-import { oklabToPolar, polarToOklab, type OklabPolarColor, createOklabPolar } from "./OklabPolarColor";
+import {
+  OKLCH_MAX_CHROMA,
+  createOklch,
+  oklabToOklch,
+  oklchToOklab,
+  type OklchColor,
+} from "./OklchColor";
 
 function srgbToLinear(channel: number): number {
   const c = channel / 255;
@@ -102,6 +108,16 @@ export function rgbToOklab(r: number, g: number, b: number): OklabColor {
 }
 
 export function oklabToRgb(oklab: OklabColor): { r: number; g: number; b: number } {
+  const { lr, lg, lb } = oklabToLinearRgb(oklab);
+
+  return {
+    r: linearToSrgb(lr),
+    g: linearToSrgb(lg),
+    b: linearToSrgb(lb),
+  };
+}
+
+function oklabToLinearRgb(oklab: OklabColor): { lr: number; lg: number; lb: number } {
   const lRoot = oklab.l + 0.3963377774 * oklab.a + 0.2158037573 * oklab.b;
   const mRoot = oklab.l - 0.1055613458 * oklab.a - 0.0638541728 * oklab.b;
   const sRoot = oklab.l - 0.0894841775 * oklab.a - 1.291485548 * oklab.b;
@@ -115,10 +131,23 @@ export function oklabToRgb(oklab: OklabColor): { r: number; g: number; b: number
   const lb = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
 
   return {
-    r: linearToSrgb(lr),
-    g: linearToSrgb(lg),
-    b: linearToSrgb(lb),
+    lr,
+    lg,
+    lb,
   };
+}
+
+export function isOklchInSrgbGamut(h: number, c: number, l: number): boolean {
+  const { lr, lg, lb } = oklabToLinearRgb(oklchToOklab(createOklch(l, c, h)));
+  const epsilon = 0.000001;
+  return (
+    lr >= -epsilon &&
+    lr <= 1 + epsilon &&
+    lg >= -epsilon &&
+    lg <= 1 + epsilon &&
+    lb >= -epsilon &&
+    lb <= 1 + epsilon
+  );
 }
 
 export function pixelColorToHsl(color: PixelColor): HslColor {
@@ -140,28 +169,28 @@ export function pixelColorToOklab(color: PixelColor): OklabColor {
   return rgbToOklab(r, g, b);
 }
 
-export function pixelColorToOklabPolar(color: PixelColor): OklabPolarColor {
-  return oklabToPolar(pixelColorToOklab(color));
+export function pixelColorToOklch(color: PixelColor): OklchColor {
+  return oklabToOklch(pixelColorToOklab(color));
 }
 
-/** 无彩色（s=0）时 RGB→OKLab 极坐标无法还原色相，保留 UI 上一次的 h。 */
-export function pixelColorToOklabPolarPreservingHue(
+/** 无彩色（c=0）时 RGB→OKLCH 无法还原色相，保留 UI 上一次的 h。 */
+export function pixelColorToOklchPreservingHue(
   color: PixelColor,
-  previous: OklabPolarColor,
-): OklabPolarColor {
-  const derived = pixelColorToOklabPolar(color);
-  if (isAchromaticSaturation(derived.s)) {
-    return createOklabPolar(previous.h, derived.s, derived.l);
+  previous: OklchColor,
+): OklchColor {
+  const derived = pixelColorToOklch(color);
+  if (isAchromaticSaturation((derived.c / OKLCH_MAX_CHROMA) * 100)) {
+    return createOklch(derived.l, derived.c, previous.h);
   }
   return derived;
 }
 
-export function oklabPolarToPixelColor(polar: OklabPolarColor, alpha = 255): PixelColor {
-  return oklabToPixelColor(polarToOklab(polar), alpha);
+export function oklchToPixelColor(oklch: OklchColor, alpha = 255): PixelColor {
+  return oklabToPixelColor(oklchToOklab(oklch), alpha);
 }
 
-export function oklabPlaneColorAt(h: number, s: number, l: number, alpha = 255): PixelColor {
-  return oklabPolarToPixelColor(createOklabPolar(h, s, l), alpha);
+export function oklchPlaneColorAt(h: number, c: number, l: number, alpha = 255): PixelColor {
+  return oklchToPixelColor(createOklch(l, c, h), alpha);
 }
 
 export function hslToPixelColor(hsl: HslColor, alpha = 255): PixelColor {

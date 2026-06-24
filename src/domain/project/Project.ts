@@ -314,6 +314,13 @@ export function touchProject(project: Project): Project {
   };
 }
 
+export function withProjectFilePath(project: Project, filePath: string | null): Project {
+  if (project.filePath === filePath) {
+    return project;
+  }
+  return { ...project, filePath };
+}
+
 /** 重命名项目；名称未变化或为空时返回 null */
 export function renameProject(project: Project, name: string): Project | null {
   const trimmed = name.trim();

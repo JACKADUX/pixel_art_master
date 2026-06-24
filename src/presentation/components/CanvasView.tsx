@@ -24,8 +24,8 @@ import { renderCanvasGrid } from "@/infrastructure/canvas/CanvasGridRenderer";
 import { renderPixelGrid1x } from "@/infrastructure/canvas/PixelGridCanvasRenderer";
 import {
   blitWithDisplayMode,
-  OklabDisplayGlRenderer,
-} from "@/infrastructure/canvas/OklabDisplayGlRenderer";
+  OklchDisplayGlRenderer,
+} from "@/infrastructure/canvas/OklchDisplayGlRenderer";
 import { renderBrushStampPreview } from "@/infrastructure/canvas/BrushStampPreviewRenderer";
 import { renderBrushLinePreview } from "@/infrastructure/canvas/BrushLinePreviewRenderer";
 import { renderPatternBrushPreview } from "@/infrastructure/canvas/PatternBrushPreviewRenderer";
@@ -61,6 +61,8 @@ import { useAppStore, type ColorSlot, type DrawingButton } from "../stores/appSt
 import { useAltKeyHeld } from "../hooks/useAltKeyHeld";
 import { useBrushSizeHint } from "../hooks/useBrushSizeHint";
 import { useMousePositionOverlay } from "../hooks/useMousePositionOverlay";
+import { useWorkspaceRegion } from "../hooks/useWorkspaceRegion";
+import { WorkspaceRegionBorder } from "./WorkspaceRegionBorder";
 import { focusCanvasKeyboard } from "../utils/canvasKeyboardFocus";
 import { isTextEntryElement } from "../utils/editableFocus";
 import { CanvasBoundsLabel } from "./CanvasBoundsLabel";
@@ -122,11 +124,13 @@ function clientToPixelFloat(
 const SYMMETRY_HIT_SCREEN_PX = 6;
 
 export function CanvasView() {
+  const { regionProps: canvasRegionProps, isActive: canvasRegionActive } =
+    useWorkspaceRegion("canvas");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gridRef = useRef<HTMLCanvasElement>(null);
   const previewRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const oklabRendererRef = useRef<OklabDisplayGlRenderer | null>(null);
+  const oklchRendererRef = useRef<OklchDisplayGlRenderer | null>(null);
   const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isPanningRef = useRef(false);
   const mousePositionOverlaySuppressedRef = useRef(false);
@@ -395,10 +399,10 @@ export function CanvasView() {
     const offCtx = offscreen.getContext("2d");
     if (!offCtx) return;
 
-    const renderer = oklabRendererRef.current;
+    const renderer = oklchRendererRef.current;
     const glCanvas = glCanvasRef.current;
 
-    if (canvasDisplayMode === "oklabLightness" && renderer && glCanvas) {
+    if (canvasDisplayMode === "oklchLightness" && renderer && glCanvas) {
       const imageData = new ImageData(composite.toRgba(), composite.width, composite.height);
       blitWithDisplayMode(
         renderer,
@@ -419,7 +423,7 @@ export function CanvasView() {
       const floatDisplayWidth = pixels.width * zoom;
       const floatDisplayHeight = pixels.height * zoom;
 
-      if (canvasDisplayMode === "oklabLightness" && renderer && glCanvas) {
+      if (canvasDisplayMode === "oklchLightness" && renderer && glCanvas) {
         const floatImageData = new ImageData(pixels.toRgba(), pixels.width, pixels.height);
         blitWithDisplayMode(
           renderer,
@@ -832,11 +836,11 @@ export function CanvasView() {
   }, [zoom]);
 
   useEffect(() => {
-    oklabRendererRef.current = new OklabDisplayGlRenderer();
+    oklchRendererRef.current = new OklchDisplayGlRenderer();
     glCanvasRef.current = document.createElement("canvas");
     return () => {
-      oklabRendererRef.current?.dispose();
-      oklabRendererRef.current = null;
+      oklchRendererRef.current?.dispose();
+      oklchRendererRef.current = null;
       glCanvasRef.current = null;
     };
   }, []);
@@ -1544,7 +1548,11 @@ export function CanvasView() {
   }
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+    <div
+      {...canvasRegionProps}
+      className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
+    >
+      <WorkspaceRegionBorder active={canvasRegionActive} />
       <div
         ref={containerRef}
         tabIndex={-1}

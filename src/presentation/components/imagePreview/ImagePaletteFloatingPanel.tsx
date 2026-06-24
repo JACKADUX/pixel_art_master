@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TRANSPARENT } from "@/domain/canvas/PixelColor";
 import type { ColorEntry } from "@/domain/palette/Palette";
 import {
-  PALETTE_OKLAB_MAP_MAX_COLORS,
-} from "@/domain/palette/PaletteOklabLayout";
+  PALETTE_OKLCH_MAP_MAX_COLORS,
+} from "@/domain/palette/PaletteOklchLayout";
 import { adaptPanelPositionOnResize } from "@/domain/viewport/FloatingPanelAnchor";
 import {
   computeNavigatorResizeFromCorner,
@@ -14,7 +14,7 @@ import {
   type NavigatorResizeCorner,
   type NavigatorResizeStart,
 } from "@/domain/viewport/NavigatorPanelResize";
-import { PaletteOklabMapView } from "@/presentation/components/PaletteOklabMapView";
+import { PaletteOklchMapView } from "@/presentation/components/PaletteOklchMapView";
 
 const HEADER_HEIGHT = 28;
 const PANEL_MARGIN = 12;
@@ -79,10 +79,10 @@ export function ImagePaletteFloatingPanel({
   );
 
   const mapColors = useMemo(
-    () => colors.slice(0, PALETTE_OKLAB_MAP_MAX_COLORS),
+    () => colors.slice(0, PALETTE_OKLCH_MAP_MAX_COLORS),
     [colors],
   );
-  const isTruncated = totalColorCount > PALETTE_OKLAB_MAP_MAX_COLORS;
+  const isTruncated = totalColorCount > PALETTE_OKLCH_MAP_MAX_COLORS;
 
   useEffect(() => {
     setBounds((prev) => {
@@ -170,7 +170,7 @@ export function ImagePaletteFloatingPanel({
 
       {isTruncated && (
         <p className="shrink-0 px-2 py-0.5 text-[10px] text-amber-500/90">
-          色域图仅展示前 {PALETTE_OKLAB_MAP_MAX_COLORS} 色（共 {totalColorCount} 色）
+          色域图仅展示前 {PALETTE_OKLCH_MAP_MAX_COLORS} 色（共 {totalColorCount} 色）
         </p>
       )}
 
@@ -181,7 +181,7 @@ export function ImagePaletteFloatingPanel({
           </div>
         ) : (
           <div className="absolute inset-0">
-            <PaletteOklabMapView
+            <PaletteOklchMapView
               colors={mapColors}
               foregroundColor={TRANSPARENT}
               backgroundColor={TRANSPARENT}

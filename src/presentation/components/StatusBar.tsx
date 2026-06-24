@@ -116,10 +116,10 @@ export function StatusBar() {
         type="button"
         onClick={toggleCanvasDisplayMode}
         className={`rounded px-2 py-0.5 ${
-          canvasDisplayMode === "oklabLightness" ? "bg-zinc-700" : "bg-zinc-800 text-zinc-600"
+          canvasDisplayMode === "oklchLightness" ? "bg-zinc-700" : "bg-zinc-800 text-zinc-600"
         }`}
       >
-        Oklab 明度 {canvasDisplayMode === "oklabLightness" ? "开" : "关"}
+        OKLCH 明度 {canvasDisplayMode === "oklchLightness" ? "开" : "关"}
       </button>
 
       <button

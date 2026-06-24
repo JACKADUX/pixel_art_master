@@ -7,6 +7,7 @@ import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 import { useAppStore } from "../stores/appStore";
 
 import { EyeIcon, EyeOffIcon, TrashIcon } from "./LayerPanelIcons";
+import { ReferenceLayerMoreMenu } from "./ReferenceLayerMoreMenu";
 
 const DRAG_THRESHOLD_PX = 4;
 
@@ -35,6 +36,8 @@ export function ReferenceLayersPanel() {
   const importImageToReferenceLayer = useAppStore((s) => s.importImageToReferenceLayer);
   const openCropEditor = useAppStore((s) => s.openCropEditor);
   const toggleReferenceGrid = useAppStore((s) => s.toggleReferenceGrid);
+
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -161,13 +164,16 @@ export function ReferenceLayersPanel() {
   const displayLayers = [...referenceLayers].reverse();
 
   return (
-    <div className="flex h-full min-w-0 w-full flex-col">
+    <div ref={panelRef} className="flex h-full min-w-0 w-full flex-col">
       <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-2">
-        <h3 className="mb-2 px-1 text-sm font-medium text-zinc-300">
-          参考层 ({referenceLayers.length})
-        </h3>
+        <div className="mb-2 flex items-center justify-between gap-2 px-1">
+          <h3 className="text-sm font-medium text-zinc-300">
+            参考层 ({referenceLayers.length})
+          </h3>
+          <ReferenceLayerMoreMenu />
+        </div>
         <p className="mb-2 px-1 text-[10px] text-zinc-500">
-          拖拽手柄调整参考层顺序；选中后可拖拽移动，不可绘制
+          拖拽手柄调整参考层顺序；选中后可拖拽移动，不可绘制。侧栏激活时 Ctrl+V 从剪贴板导入
         </p>
         {displayLayers.length === 0 ? (
           <p className="px-1 text-xs text-zinc-500">暂无参考层</p>

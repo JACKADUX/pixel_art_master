@@ -1,11 +1,15 @@
-import { listAssetsInFolder, type AssetLibraryIndex } from "@/domain/asset/AssetLibrary";
+import {
+  listAssetsInFolder,
+  resolveAssetFolderTarget,
+  type AssetLibraryIndex,
+} from "@/domain/asset/AssetLibrary";
 import { isImageAsset, isMarkdownAsset, type AssetRecord } from "@/domain/asset/AssetRecord";
 import { useAssetImageUrl } from "@/presentation/hooks/useAssetImageUrl";
 
 interface AssetGridProps {
   library: AssetLibraryIndex;
   workspacePath: string;
-  selectedFolderId: string;
+  selectedFolderId: string | null;
   selectedAssetId: string | null;
   draggingAssetId: string | null;
   onSelectAsset: (assetId: string | null) => void;
@@ -83,7 +87,10 @@ export function AssetGrid({
   onBeginAssetPointerDrag,
   onConsumeSuppressClick,
 }: AssetGridProps) {
-  const assets = listAssetsInFolder(library, selectedFolderId);
+  const assets = listAssetsInFolder(
+    library,
+    resolveAssetFolderTarget(selectedFolderId),
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

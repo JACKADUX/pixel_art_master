@@ -52,6 +52,24 @@ export interface ReferenceLayer {
 
 export type Layer = DrawingLayer | ReferenceLayer;
 
+/** 深拷贝单个图层，保证可变的像素缓冲与嵌套对象与原图层互不影响。 */
+export function cloneLayer(layer: Layer): Layer {
+  if (layer.type === "drawing") {
+    return { ...layer, pixels: new Uint32Array(layer.pixels) };
+  }
+  return {
+    ...layer,
+    crop: layer.crop ? { ...layer.crop } : null,
+    position: { ...layer.position },
+    grid: { ...layer.grid },
+  };
+}
+
+/** 深拷贝图层列表。 */
+export function cloneLayers(layers: Layer[]): Layer[] {
+  return layers.map(cloneLayer);
+}
+
 export function createDrawingLayer(
   grid: PixelGrid,
   name?: string,

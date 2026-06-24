@@ -146,6 +146,24 @@ export function useAppShortcuts() {
 
       if (ctrl && (event.key === "v" || event.key === "V")) {
         if (usePixelRestoreStore.getState().open) return;
+        const currentStore = useAppStore.getState();
+        if (
+          currentStore.layersPanelTab === "reference" &&
+          currentStore.activeRegion === "layers" &&
+          !shouldDeferShortcutToTextEntry(event)
+        ) {
+          event.preventDefault();
+          void currentStore.importReferenceLayerFromClipboardAction();
+          return;
+        }
+        if (
+          currentStore.activeRegion === "assetLibrary" &&
+          !shouldDeferShortcutToTextEntry(event)
+        ) {
+          event.preventDefault();
+          void currentStore.importAssetFromClipboardAction();
+          return;
+        }
         event.preventDefault();
         void store.pasteSelection();
         return;
@@ -157,7 +175,7 @@ export function useAppShortcuts() {
         return;
       }
 
-      if (ctrl && (event.key === "'" || event.code === "Quote")) {
+      if (ctrl && (event.key === "'" || event.code === "Quote" || event.key === "2")) {
         if (store.project) {
           event.preventDefault();
           store.toggleGrid();

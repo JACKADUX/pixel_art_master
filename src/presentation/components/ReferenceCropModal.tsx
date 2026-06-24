@@ -29,8 +29,8 @@ import {
 import { renderCanvasGrid } from "@/infrastructure/canvas/CanvasGridRenderer";
 import {
   blitWithDisplayMode,
-  OklabDisplayGlRenderer,
-} from "@/infrastructure/canvas/OklabDisplayGlRenderer";
+  OklchDisplayGlRenderer,
+} from "@/infrastructure/canvas/OklchDisplayGlRenderer";
 import { useAppStore } from "../stores/appStore";
 
 const MIN_CROP = 1;
@@ -138,7 +138,7 @@ export function ReferenceCropModal() {
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const gridCanvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
-  const rendererRef = useRef<OklabDisplayGlRenderer | null>(null);
+  const rendererRef = useRef<OklchDisplayGlRenderer | null>(null);
   const glCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const zoomRef = useRef(1);
   const isPanningRef = useRef(false);
@@ -170,7 +170,7 @@ export function ReferenceCropModal() {
   const [imageReady, setImageReady] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [showPixelGrid, setShowPixelGrid] = useState(false);
-  const [showOklabLightness, setShowOklabLightness] = useState(false);
+  const [showOklchLightness, setShowOklchLightness] = useState(false);
 
   zoomRef.current = zoom;
 
@@ -205,7 +205,7 @@ export function ReferenceCropModal() {
     setImageReady(false);
     setZoom(1);
     setShowPixelGrid(false);
-    setShowOklabLightness(false);
+    setShowOklchLightness(false);
     setCrop(null);
     setMarquee(null);
   }, [refLayer?.id, refLayer?.imageData, refLayer?.imageSize, refLayer?.crop]);
@@ -226,7 +226,7 @@ export function ReferenceCropModal() {
   const displayCrop = marquee ?? resolvedCrop;
 
   useEffect(() => {
-    rendererRef.current = new OklabDisplayGlRenderer();
+    rendererRef.current = new OklchDisplayGlRenderer();
     glCanvasRef.current = document.createElement("canvas");
     return () => {
       rendererRef.current?.dispose();
@@ -251,7 +251,7 @@ export function ReferenceCropModal() {
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, displayWidth, displayHeight);
 
-    if (showOklabLightness) {
+    if (showOklchLightness) {
       const renderer = rendererRef.current;
       const glCanvas = glCanvasRef.current;
       if (renderer && glCanvas) {
@@ -261,7 +261,7 @@ export function ReferenceCropModal() {
           image,
           displayWidth,
           displayHeight,
-          "oklabLightness",
+          "oklchLightness",
         );
         ctx.drawImage(glCanvas, 0, 0, displayWidth, displayHeight);
       }
@@ -269,7 +269,7 @@ export function ReferenceCropModal() {
     }
 
     ctx.drawImage(image, 0, 0, displayWidth, displayHeight);
-  }, [imageSize, displayWidth, displayHeight, showOklabLightness]);
+  }, [imageSize, displayWidth, displayHeight, showOklchLightness]);
 
   const drawCropOverlay = useCallback(() => {
     const canvas = overlayCanvasRef.current;
@@ -704,20 +704,20 @@ export function ReferenceCropModal() {
         <div>
           <h2 className="text-sm font-medium text-zinc-100">裁剪参考层 — {refLayer.name}</h2>
           <p className="mt-0.5 text-xs text-zinc-500">
-            滚轮缩放 · 中键平移 · 左键框选 · 右键全图选区 · 方向键调整左上角 · Shift+方向键调整右下角 · 缩放 {formatZoomLabel(zoom)} · Oklab 明度 / 像素网格可开关
+            滚轮缩放 · 中键平移 · 左键框选 · 右键全图选区 · 方向键调整左上角 · Shift+方向键调整右下角 · 缩放 {formatZoomLabel(zoom)} · OKLCH 明度 / 像素网格可开关
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setShowOklabLightness((v) => !v)}
+            onClick={() => setShowOklchLightness((v) => !v)}
             className={`rounded border px-2.5 py-1 text-xs font-medium transition ${
-              showOklabLightness
+              showOklchLightness
                 ? "border-blue-500 bg-blue-500/15 text-blue-300"
                 : "border-zinc-600 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
             }`}
           >
-            Oklab 明度
+            OKLCH 明度
           </button>
           <button
             type="button"
