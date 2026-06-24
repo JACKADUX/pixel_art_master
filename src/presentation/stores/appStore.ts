@@ -131,6 +131,7 @@ import {
 import { resolveColorAtCanvasPointAsync } from "@/application/use-cases/PickColorAtPoint";
 import { loadEditorPreferences } from "@/application/use-cases/LoadEditorPreferences";
 import { loadProject } from "@/application/use-cases/LoadProject";
+import { createEmptyProjectWithDefaultPalette } from "@/application/use-cases/PalettePresetUseCases";
 import { openLastProjectOnStartup } from "@/application/use-cases/OpenLastProjectOnStartup";
 import { saveEditorPreferences } from "@/application/use-cases/SaveEditorPreferences";
 import { saveLastOpenedProject } from "@/application/use-cases/SaveLastOpenedProject";
@@ -1265,10 +1266,14 @@ export const useAppStore = create<AppState>((set, get) => {
     get().historyStack.clear();
 
     const appSettings = get().appSettings;
+    const palettePresetLibrary = get().palettePresetLibrary;
 
     set({
 
-      project: applyAppSettingsGridDefaults(createEmptyProject(), appSettings),
+      project: applyAppSettingsGridDefaults(
+        createEmptyProjectWithDefaultPalette(palettePresetLibrary),
+        appSettings,
+      ),
 
       manualScaleOverride: null,
 

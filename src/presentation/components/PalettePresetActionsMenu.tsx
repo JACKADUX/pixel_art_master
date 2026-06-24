@@ -3,23 +3,29 @@ import {
   ArrowDownOnSquareIcon,
   ArrowPathIcon,
   BookmarkSquareIcon,
+  CheckIcon,
   EllipsisVerticalIcon,
+  StarIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 
 interface PalettePresetActionsMenuProps {
   canUseCurrent: boolean;
+  isDefault: boolean;
   onMerge: () => void;
   onReplace: () => void;
   onOverwrite: () => void;
+  onSetAsDefault: () => void;
   onDelete: () => void;
 }
 
 export function PalettePresetActionsMenu({
   canUseCurrent,
+  isDefault,
   onMerge,
   onReplace,
   onOverwrite,
+  onSetAsDefault,
   onDelete,
 }: PalettePresetActionsMenuProps) {
   const [open, setOpen] = useState(false);
@@ -107,6 +113,19 @@ export function PalettePresetActionsMenu({
           >
             <BookmarkSquareIcon className="h-4 w-4 shrink-0 text-zinc-400" />
             <span className="flex-1">用当前色板覆盖</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => runAction(onSetAsDefault)}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition hover:bg-zinc-800 hover:text-zinc-100"
+          >
+            {isDefault ? (
+              <CheckIcon className="h-4 w-4 shrink-0 text-amber-400" />
+            ) : (
+              <StarIcon className="h-4 w-4 shrink-0 text-zinc-400" />
+            )}
+            <span className="flex-1">设为默认色板</span>
           </button>
 
           <div className="my-1 border-t border-zinc-700" />

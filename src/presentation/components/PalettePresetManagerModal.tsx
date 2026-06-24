@@ -20,6 +20,7 @@ export function PalettePresetManagerModal() {
   const overwritePalettePreset = useAppStore((s) => s.overwritePalettePreset);
   const renamePalettePresetAction = useAppStore((s) => s.renamePalettePresetAction);
   const importPresetToPalette = useAppStore((s) => s.importPresetToPalette);
+  const setDefaultPalettePresetAction = useAppStore((s) => s.setDefaultPalettePresetAction);
   const requestDeletePalettePreset = useAppStore((s) => s.requestDeletePalettePreset);
   const cancelDeletePalettePreset = useAppStore((s) => s.cancelDeletePalettePreset);
   const confirmDeletePalettePreset = useAppStore((s) => s.confirmDeletePalettePreset);
@@ -38,6 +39,7 @@ export function PalettePresetManagerModal() {
   if (!open && !deleteTarget) return null;
 
   const presets = listPalettePresets(library);
+  const defaultPresetId = library.defaultPresetId;
   const currentColorsCount = project?.palette.getColors().length ?? 0;
   const canUseCurrent = currentColorsCount > 0;
 
@@ -111,12 +113,19 @@ export function PalettePresetManagerModal() {
                         />
                         <span className="shrink-0 text-[11px] text-zinc-500">
                           {preset.colors.length} 色
+                          {defaultPresetId === preset.id && (
+                            <span className="ml-1.5 rounded bg-amber-500/15 px-1 py-0.5 text-[10px] text-amber-300">
+                              默认
+                            </span>
+                          )}
                         </span>
                         <PalettePresetActionsMenu
                           canUseCurrent={canUseCurrent}
+                          isDefault={defaultPresetId === preset.id}
                           onMerge={() => importPresetToPalette(preset.id, "merge")}
                           onReplace={() => importPresetToPalette(preset.id, "replace")}
                           onOverwrite={() => overwritePalettePreset(preset.id)}
+                          onSetAsDefault={() => setDefaultPalettePresetAction(preset.id)}
                           onDelete={() => requestDeletePalettePreset(preset.id)}
                         />
                       </div>

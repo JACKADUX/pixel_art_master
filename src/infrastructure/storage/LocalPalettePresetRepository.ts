@@ -24,7 +24,10 @@ interface SerializedPalettePreset {
 interface SerializedPalettePresetLibrary {
   version: number;
   presets: SerializedPalettePreset[];
+  defaultPresetId?: string | null;
 }
+
+const SUPPORTED_LIBRARY_VERSIONS = [1, 2] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -65,7 +68,17 @@ function serializeLibrary(library: PalettePresetLibrary): SerializedPalettePrese
       createdAt: preset.createdAt,
       updatedAt: preset.updatedAt,
     })),
+    defaultPresetId: library.defaultPresetId,
   };
+}
+
+function parseDefaultPresetId(
+  parsed: Record<string, unknown>,
+  presets: PalettePreset[],
+): string | null {
+  const raw = parsed.defaultPresetId;
+  if (typeof raw !== "string" || raw.length === 0) return null;
+  return presets.some((preset) => preset.id === raw) ? raw : null;
 }
 
 export class LocalPalettePresetRepository implements IPalettePresetRepository {
@@ -75,7 +88,12 @@ export class LocalPalettePresetRepository implements IPalettePresetRepository {
       if (!stored) return null;
 
       const parsed: unknown = JSON.parse(stored);
-      if (!isRecord(parsed) || parsed.version !== PALETTE_PRESET_LIBRARY_VERSION) {
+      if (
+        !isRecord(parsed) ||
+        !SUPPORTED_LIBRARY_VERSIONS.includes(
+          parsed.version as (typeof SUPPORTED_LIBRARY_VERSIONS)[number],
+        )
+      ) {
         return null;
       }
 
@@ -87,6 +105,10 @@ export class LocalPalettePresetRepository implements IPalettePresetRepository {
       const library: PalettePresetLibrary = {
         version: PALETTE_PRESET_LIBRARY_VERSION,
         presets,
+        defaultPresetId:
+          parsed.version === PALETTE_PRESET_LIBRARY_VERSION
+            ? parseDefaultPresetId(parsed, presets)
+            : null,
       };
       return library;
     } catch {

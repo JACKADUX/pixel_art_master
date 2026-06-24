@@ -9,6 +9,7 @@ import {
   getPalettePreset,
   removePalettePreset,
   renamePalettePresetInLibrary,
+  setDefaultPalettePreset,
   updatePresetColorsInLibrary,
   type PalettePresetLibrary,
 } from "@/domain/palette/PalettePresetLibrary";
@@ -35,6 +36,7 @@ export interface PalettePresetSliceActions {
   cancelDeletePalettePreset: () => void;
   confirmDeletePalettePreset: () => void;
   importPresetToPalette: (id: string, mode: PalettePresetImportMode) => void;
+  setDefaultPalettePresetAction: (id: string) => void;
   openPalettePresetManager: () => void;
   closePalettePresetManager: () => void;
 }
@@ -77,7 +79,14 @@ export function createPalettePresetSlice(
     loadPalettePresets: () => {
       const loaded = deps.palettePresetRepository.load();
       if (loaded && typeof loaded === "object" && "presets" in loaded) {
-        set({ palettePresetLibrary: loaded as PalettePresetLibrary });
+        const library = loaded as PalettePresetLibrary;
+        set({
+          palettePresetLibrary: {
+            ...createEmptyPalettePresetLibrary(),
+            ...library,
+            defaultPresetId: library.defaultPresetId ?? null,
+          },
+        });
       }
     },
 
@@ -152,6 +161,18 @@ export function createPalettePresetSlice(
           ? `已用预设「${preset.name}」替换色板`
           : `已从预设「${preset.name}」合并到色板`,
       );
+    },
+
+    setDefaultPalettePresetAction: (id) => {
+      const library = get().palettePresetLibrary;
+      const preset = getPalettePreset(library, id);
+      if (!preset) return;
+      if (library.defaultPresetId === id) {
+        toast.info(`「${preset.name}」已是默认色板`);
+        return;
+      }
+      persist(setDefaultPalettePreset(library, id));
+      toast.info(`已将「${preset.name}」设为默认色板`);
     },
 
     openPalettePresetManager: () => set({ palettePresetManagerOpen: true }),

@@ -6,18 +6,36 @@ import {
   updatePalettePresetColors,
 } from "./PalettePreset";
 
-export const PALETTE_PRESET_LIBRARY_VERSION = 1;
+export const PALETTE_PRESET_LIBRARY_VERSION = 2;
 
 export interface PalettePresetLibrary {
   version: number;
   presets: PalettePreset[];
+  defaultPresetId: string | null;
 }
 
 export function createEmptyPalettePresetLibrary(): PalettePresetLibrary {
   return {
     version: PALETTE_PRESET_LIBRARY_VERSION,
     presets: [],
+    defaultPresetId: null,
   };
+}
+
+export function getDefaultPalettePreset(
+  library: PalettePresetLibrary,
+): PalettePreset | null {
+  if (!library.defaultPresetId) return null;
+  return getPalettePreset(library, library.defaultPresetId);
+}
+
+export function setDefaultPalettePreset(
+  library: PalettePresetLibrary,
+  id: string,
+): PalettePresetLibrary {
+  const preset = getPalettePreset(library, id);
+  if (!preset) return library;
+  return { ...library, defaultPresetId: id };
 }
 
 export function listPalettePresets(library: PalettePresetLibrary): PalettePreset[] {
@@ -52,6 +70,7 @@ export function removePalettePreset(
   return {
     ...library,
     presets: library.presets.filter((p) => p.id !== id),
+    defaultPresetId: library.defaultPresetId === id ? null : library.defaultPresetId,
   };
 }
 
