@@ -23,5 +23,5 @@ export async function* streamImageRecognition(
   const text = prompt.trim() || DEFAULT_VISION_PROMPT;
   const userMessage: ChatMessage = createChatMessage("user", text, { images });
 
-  yield* client.streamChat(settings, [userMessage], signal);
+  yield* client.streamChat(settings, [userMessage], undefined, signal);
 }

@@ -10,6 +10,7 @@ export function TopBar() {
   const saveCurrentProject = useAppStore((s) => s.saveCurrentProject);
   const saveProjectAs = useAppStore((s) => s.saveProjectAs);
   const importImage = useAppStore((s) => s.importImage);
+  const openExportImageModal = useAppStore((s) => s.openExportImageModal);
   const openCanvasSizeModal = useAppStore((s) => s.openCanvasSizeModal);
   const openProjectManager = useAppStore((s) => s.openProjectManager);
   const toggleAlwaysOnTop = useAppStore((s) => s.toggleAlwaysOnTop);
@@ -28,8 +29,10 @@ export function TopBar() {
   const pasteSelection = useAppStore((s) => s.pasteSelection);
   const openPixelRestorePage = useAppStore((s) => s.openPixelRestorePage);
   const openColorEditPage = useAppStore((s) => s.openColorEditPage);
+  const openWorldPage = useAppStore((s) => s.openWorldPage);
   const openAiChatTestPage = useAppStore((s) => s.openAiChatTestPage);
   const openAiVisionTestPage = useAppStore((s) => s.openAiVisionTestPage);
+  const openComfyUiPage = useAppStore((s) => s.openComfyUiPage);
   const openAssetLibraryModal = useAppStore((s) => s.openAssetLibraryModal);
   const openSettingsModal = useAppStore((s) => s.openSettingsModal);
   const project = useAppStore((s) => s.project);
@@ -41,6 +44,8 @@ export function TopBar() {
         openProject: () => void openProject(),
         saveCurrentProject: () => void saveCurrentProject(),
         saveProjectAs: () => void saveProjectAs(),
+        exportImage: openExportImageModal,
+        hasOpenProject: () => project !== null,
         importImage: () => void importImage(),
         openCanvasSizeModal,
         openProjectManager,
@@ -60,8 +65,10 @@ export function TopBar() {
         pasteSelection: () => void pasteSelection(),
         openPixelRestorePage,
         openColorEditPage,
+        openWorldPage,
         openAiChatTestPage,
         openAiVisionTestPage,
+        openComfyUiPage,
         openAssetLibrary: openAssetLibraryModal,
         openSettingsModal,
       }),
@@ -70,6 +77,8 @@ export function TopBar() {
       openProject,
       saveCurrentProject,
       saveProjectAs,
+      openExportImageModal,
+      project,
       importImage,
       openCanvasSizeModal,
       openProjectManager,
@@ -89,8 +98,10 @@ export function TopBar() {
       pasteSelection,
       openPixelRestorePage,
       openColorEditPage,
+      openWorldPage,
       openAiChatTestPage,
       openAiVisionTestPage,
+      openComfyUiPage,
       openAssetLibraryModal,
       openSettingsModal,
     ],

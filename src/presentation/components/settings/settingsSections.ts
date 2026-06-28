@@ -1,9 +1,10 @@
 import type { ComponentType } from "react";
 import { AiSettingsSection } from "./AiSettingsSection";
 import { CanvasSettingsSection } from "./CanvasSettingsSection";
+import { ComfyUiSettingsSection } from "./ComfyUiSettingsSection";
 import { GeneralSettingsSection } from "./GeneralSettingsSection";
 
-export type SettingsSectionId = "general" | "canvas" | "ai";
+export type SettingsSectionId = "general" | "canvas" | "ai" | "comfyui";
 
 export interface SettingsSectionDefinition {
   id: SettingsSectionId;
@@ -30,5 +31,11 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
     label: "AI",
     description: "LLM 提供商与连接配置",
     component: AiSettingsSection,
+  },
+  {
+    id: "comfyui",
+    label: "ComfyUI",
+    description: "ComfyUI 服务器地址",
+    component: ComfyUiSettingsSection,
   },
 ];

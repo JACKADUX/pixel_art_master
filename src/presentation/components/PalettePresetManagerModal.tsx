@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { BookmarkSquareIcon } from "@heroicons/react/24/outline";
+import { useBackdropDismiss } from "@/presentation/hooks/useBackdropDismiss";
 import { listPalettePresets } from "@/domain/palette/PalettePresetLibrary";
 import { useAppStore } from "../stores/appStore";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -36,6 +37,8 @@ export function PalettePresetManagerModal() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, close]);
 
+  const backdropProps = useBackdropDismiss<HTMLDivElement>(close);
+
   if (!open && !deleteTarget) return null;
 
   const presets = listPalettePresets(library);
@@ -48,9 +51,7 @@ export function PalettePresetManagerModal() {
       {open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) close();
-          }}
+          {...backdropProps}
         >
           <div className="flex h-[72vh] w-[90vw] max-w-2xl flex-col overflow-hidden rounded-lg border border-zinc-600 bg-zinc-900 shadow-xl">
             <div className="flex shrink-0 items-center justify-between border-b border-zinc-700 px-4 py-3">

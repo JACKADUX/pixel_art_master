@@ -8,11 +8,15 @@ import { Toolbar } from "./presentation/components/Toolbar";
 import { ToolPropertiesBar } from "./presentation/components/ToolPropertiesBar";
 import { ProjectManagerModal } from "./presentation/components/ProjectManagerModal";
 import { CanvasSizeModal } from "./presentation/components/CanvasSizeModal";
+import { ExportImageModal } from "./presentation/components/ExportImageModal";
 import { PixelRestorePage } from "./presentation/components/pixelRestore/PixelRestorePage";
 import { ColorEditPage } from "./presentation/components/colorEdit/ColorEditPage";
+import { WorldCreatorPage } from "./presentation/components/world/WorldCreatorPage";
 import { AiChatTestPage } from "./presentation/components/ai/AiChatTestPage";
 import { AiVisionTestPage } from "./presentation/components/ai/AiVisionTestPage";
+import { ComfyUiPage } from "./presentation/components/comfyui/ComfyUiPage";
 import { SettingsModal } from "./presentation/components/settings/SettingsModal";
+import { AiTextFieldHost } from "./presentation/components/aiTextField/AiTextFieldHost";
 import { ToastContainer } from "./presentation/components/ToastContainer";
 import { TopBar } from "./presentation/components/TopBar";
 import { useAppShortcuts } from "./presentation/hooks/useAppShortcuts";
@@ -47,11 +51,15 @@ function App() {
       <ProjectManagerModal />
       <AssetLibraryModal />
       <CanvasSizeModal />
+      <ExportImageModal />
       <SettingsModal />
       <PixelRestorePage />
       <ColorEditPage />
+      <WorldCreatorPage />
       <AiChatTestPage />
       <AiVisionTestPage />
+      <ComfyUiPage />
+      <AiTextFieldHost />
       <ToastContainer />
     </div>
   );

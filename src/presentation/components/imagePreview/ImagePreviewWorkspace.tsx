@@ -19,6 +19,10 @@ import {
 } from "@/domain/viewport/ViewportPan";
 import type { CanvasDisplayMode } from "@/domain/color/CanvasDisplayMode";
 import { OklchDisplayGlRenderer } from "@/infrastructure/canvas/OklchDisplayGlRenderer";
+import {
+  renderTransparencyCheckerboard,
+  type CheckerboardOptions,
+} from "@/infrastructure/canvas/CanvasBackgroundRenderer";
 import { ensureImageData } from "@/infrastructure/image/ImageDataCodec";
 import {
   applyWheelZoomRatio,
@@ -45,6 +49,8 @@ export interface ImagePreviewWorkspaceProps {
   displayMode?: CanvasDisplayMode;
   pickMode?: boolean;
   onPickPixel?: (x: number, y: number) => void;
+  /** 透明棋盘格底色；传入时在图像下方绘制，便于查看带透明通道的图片。 */
+  checkerboard?: CheckerboardOptions | null;
 }
 
 export function ImagePreviewWorkspace({
@@ -58,9 +64,11 @@ export function ImagePreviewWorkspace({
   displayMode = "normal",
   pickMode = false,
   onPickPixel,
+  checkerboard = null,
 }: ImagePreviewWorkspaceProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const checkerboardCanvasRef = useRef<HTMLCanvasElement>(null);
   const oklchRendererRef = useRef<OklchDisplayGlRenderer | null>(null);
   const zoomRef = useRef(1);
   const isPanningRef = useRef(false);
@@ -147,6 +155,22 @@ export function ImagePreviewWorkspace({
     ctx.imageSmoothingEnabled = false;
     ctx.putImageData(ensureImageData(imageData), 0, 0);
   }, [imageData, imageWidth, imageHeight, displayWidth, displayHeight, displayMode]);
+
+  useLayoutEffect(() => {
+    const canvas = checkerboardCanvasRef.current;
+    if (!canvas || !imageData || !checkerboard) return;
+
+    // 以逻辑分辨率绘制棋盘格，再交由 CSS 像素化缩放，使格子随缩放一致放大。
+    canvas.width = imageWidth;
+    canvas.height = imageHeight;
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, imageWidth, imageHeight);
+    renderTransparencyCheckerboard(ctx, imageWidth, imageHeight, 1, checkerboard);
+  }, [imageData, imageWidth, imageHeight, displayWidth, displayHeight, checkerboard]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -452,10 +476,20 @@ export function ImagePreviewWorkspace({
                   imageRendering: pixelated ? "pixelated" : "auto",
                 }}
               >
+                {checkerboard && (
+                  <canvas
+                    ref={checkerboardCanvasRef}
+                    className="pointer-events-none absolute left-0 top-0 block border border-transparent"
+                    style={{ imageRendering: "pixelated" }}
+                    aria-hidden
+                  />
+                )}
                 <canvas
                   ref={canvasRef}
                   onMouseDown={handleCanvasMouseDown}
-                  className={`block touch-none select-none border border-zinc-800 bg-zinc-900${
+                  className={`relative block touch-none select-none border border-zinc-800${
+                    checkerboard ? "" : " bg-zinc-900"
+                  }${
                     isPanning
                       ? " cursor-grabbing"
                       : pickMode

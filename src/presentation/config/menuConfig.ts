@@ -2,15 +2,18 @@ import type { MenuGroup } from "../components/MenuDropdown";
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
+  ArrowUpTrayIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   ArrowsPointingOutIcon,
   ChatBubbleLeftRightIcon,
+  CommandLineIcon,
   DocumentDuplicateIcon,
   Cog6ToothIcon,
   DocumentPlusIcon,
   EyeIcon,
   FolderOpenIcon,
+  GlobeAltIcon,
   MapPinIcon,
   PhotoIcon,
   RectangleStackIcon,
@@ -43,6 +46,8 @@ export interface MenuActions {
   openProject: () => void;
   saveCurrentProject: () => void;
   saveProjectAs: () => void;
+  exportImage: () => void;
+  hasOpenProject: () => boolean;
   importImage: () => void;
   openCanvasSizeModal: () => void;
   openProjectManager: () => void;
@@ -62,8 +67,10 @@ export interface MenuActions {
   pasteSelection: () => void;
   openPixelRestorePage: () => void;
   openColorEditPage: () => void;
+  openWorldPage: () => void;
   openAiChatTestPage: () => void;
   openAiVisionTestPage: () => void;
+  openComfyUiPage: () => void;
   openAssetLibrary: () => void;
   openSettingsModal: () => void;
 }
@@ -102,6 +109,13 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           icon: DocumentDuplicateIcon,
           shortcut: SHORTCUT_LABELS.saveProjectAs,
           onClick: actions.saveProjectAs,
+        },
+        {
+          type: "action",
+          label: "导出为图片…",
+          icon: ArrowUpTrayIcon,
+          disabled: !actions.hasOpenProject(),
+          onClick: actions.exportImage,
         },
         { type: "separator" },
         {
@@ -211,6 +225,12 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
         },
         {
           type: "action",
+          label: "世界创建器…",
+          icon: GlobeAltIcon,
+          onClick: actions.openWorldPage,
+        },
+        {
+          type: "action",
           label: "AI 对话测试…",
           icon: ChatBubbleLeftRightIcon,
           onClick: actions.openAiChatTestPage,
@@ -220,6 +240,12 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           label: "AI 识图测试…",
           icon: EyeIcon,
           onClick: actions.openAiVisionTestPage,
+        },
+        {
+          type: "action",
+          label: "ComfyUI 工作流…",
+          icon: CommandLineIcon,
+          onClick: actions.openComfyUiPage,
         },
       ],
     },

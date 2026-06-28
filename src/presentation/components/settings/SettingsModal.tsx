@@ -18,7 +18,7 @@ export function SettingsModal() {
     SETTINGS_SECTIONS[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60">
       <div className="flex h-[70vh] w-[90vw] max-w-3xl flex-col overflow-hidden rounded-lg border border-zinc-600 bg-zinc-900 shadow-xl">
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-700 px-4 py-3">
           <h2 className="text-sm font-medium text-zinc-200">设置</h2>

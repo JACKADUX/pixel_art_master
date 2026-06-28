@@ -37,6 +37,11 @@ export function isMarkdownAsset(asset: AssetRecord): asset is MarkdownAssetRecor
   return asset.kind === "markdown";
 }
 
+/** 返回资产在资产库根目录下的相对文件路径。 */
+export function getAssetRelativeFilePath(asset: AssetRecord): string {
+  return isImageAsset(asset) ? asset.imageFile : asset.contentFile;
+}
+
 /** @deprecated Use createImageAssetRecord */
 export function createAssetRecord(
   folderId: string,

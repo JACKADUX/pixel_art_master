@@ -72,6 +72,7 @@ export function AssetLibraryContent({
   const importAssetToNewReferenceLayer = useAppStore((s) => s.importAssetToNewReferenceLayer);
   const importAssetColorsToPalette = useAppStore((s) => s.importAssetColorsToPalette);
   const sendAssetToToolPage = useAppStore((s) => s.sendAssetToToolPage);
+  const revealAssetInFolder = useAppStore((s) => s.revealAssetInFolder);
 
   const [contextMenu, setContextMenu] = useState<{
     assetId: string;
@@ -90,6 +91,7 @@ export function AssetLibraryContent({
       onImportReferenceLayer: (assetId) => void importAssetToNewReferenceLayer(assetId),
       onImportColors: (assetId) => void importAssetColorsToPalette(assetId),
       onSendToToolPage: (assetId, toolPageId) => void sendAssetToToolPage(assetId, toolPageId),
+      onRevealInFolder: (assetId) => void revealAssetInFolder(assetId),
     });
   }, [
     contextMenuAsset,
@@ -98,6 +100,7 @@ export function AssetLibraryContent({
     importAssetToNewReferenceLayer,
     importAssetColorsToPalette,
     sendAssetToToolPage,
+    revealAssetInFolder,
   ]);
 
   const openAssetContextMenu = (assetId: string, clientX: number, clientY: number) => {

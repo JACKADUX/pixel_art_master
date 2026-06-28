@@ -22,7 +22,7 @@ describe("streamChatCompletion", () => {
       chunks.push(chunk);
     }
 
-    expect(client.streamChat).toHaveBeenCalledWith(DEFAULT_LLM_SETTINGS, messages, undefined);
+    expect(client.streamChat).toHaveBeenCalledWith(DEFAULT_LLM_SETTINGS, messages, undefined, undefined);
     expect(chunks).toEqual(["a", "b"]);
   });
 });

@@ -2,6 +2,7 @@ import type { ILlmClient } from "@/application/ports/ILlmClient";
 import { toApiMessages, type ChatMessage } from "@/domain/llm/ChatMessage";
 import { LlmError } from "@/domain/llm/LlmError";
 import { providerRequiresApiKey } from "@/domain/llm/LlmProvider";
+import type { GenerationOptions } from "@/domain/llm/GenerationOptions";
 import {
   resolveChatCompletionsUrl,
   validateLlmSettings,
@@ -46,6 +47,7 @@ export class OpenAiCompatibleLlmClient implements ILlmClient {
   async *streamChat(
     settings: LlmSettings,
     messages: ChatMessage[],
+    options?: GenerationOptions,
     signal?: AbortSignal,
   ): AsyncGenerator<string, void, unknown> {
     validateLlmSettings(settings);
@@ -57,15 +59,34 @@ export class OpenAiCompatibleLlmClient implements ILlmClient {
     const onAbort = () => controller.abort();
     signal?.addEventListener("abort", onAbort);
 
+    const body: Record<string, any> = {
+      model: settings.model,
+      messages: toApiMessages(messages),
+      stream: true,
+    };
+
+    if (options) {
+      if (options.temperature !== undefined) body.temperature = options.temperature;
+      if (options.topP !== undefined) body.top_p = options.topP;
+      if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+      
+      if (options.thinkingEnabled) {
+        let budgetTokens = 2048;
+        if (options.thinkingEffort === "low") budgetTokens = 1024;
+        else if (options.thinkingEffort === "high") budgetTokens = 4096;
+
+        body.thinking = {
+          type: "enabled",
+          budget_tokens: budgetTokens,
+        };
+      }
+    }
+
     try {
       const response = await fetch(url, {
         method: "POST",
         headers: buildHeaders(settings),
-        body: JSON.stringify({
-          model: settings.model,
-          messages: toApiMessages(messages),
-          stream: true,
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 

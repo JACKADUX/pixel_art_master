@@ -8,6 +8,7 @@ export interface AssetContextMenuActions {
   onImportReferenceLayer: (assetId: string) => void;
   onImportColors: (assetId: string) => void;
   onSendToToolPage: (assetId: string, toolPageId: ToolPageId) => void;
+  onRevealInFolder: (assetId: string) => void;
 }
 
 export function buildAssetContextMenuItems(
@@ -15,8 +16,14 @@ export function buildAssetContextMenuItems(
   hasProject: boolean,
   actions: AssetContextMenuActions,
 ): MenuItem[] {
+  const revealItem: MenuItem = {
+    type: "action",
+    label: "打开文件夹路径",
+    onClick: () => actions.onRevealInFolder(asset.id),
+  };
+
   if (!isImageAsset(asset)) {
-    return [];
+    return [revealItem];
   }
 
   return [
@@ -48,5 +55,7 @@ export function buildAssetContextMenuItems(
         onClick: () => actions.onSendToToolPage(asset.id, tool.id),
       })),
     },
+    { type: "separator" },
+    revealItem,
   ];
 }

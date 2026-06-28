@@ -90,6 +90,7 @@ export const useAiChatStore = create<AiChatStore>((set, get) => ({
         llmClient,
         llmSettings,
         history,
+        undefined,
         abortController.signal,
       )) {
         accumulated += chunk;

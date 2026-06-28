@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useBackdropDismiss } from "@/presentation/hooks/useBackdropDismiss";
 import type { AssetNotesModalMode } from "./AssetNotesSection";
 
 interface AssetNotesModalProps {
@@ -84,16 +85,14 @@ export function AssetNotesModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, handleClose]);
 
+  const backdropProps = useBackdropDismiss<HTMLDivElement>(handleClose);
+
   if (!open) return null;
 
   return (
     <div
       className="fixed inset-0 z-[75] flex items-center justify-center bg-black/70 p-4"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          handleClose();
-        }
-      }}
+      {...backdropProps}
     >
       <div className="flex h-[90vh] w-[95vw] max-w-6xl flex-col overflow-hidden rounded-lg border border-zinc-600 bg-zinc-900 shadow-xl">
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-700 px-4 py-2">

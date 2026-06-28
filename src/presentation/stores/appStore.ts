@@ -69,6 +69,8 @@ import { usePixelRestoreStore } from "@/presentation/stores/pixelRestoreStore";
 import { useColorEditStore } from "@/presentation/stores/colorEditStore";
 import { useAiChatStore } from "@/presentation/stores/aiChatStore";
 import { useAiVisionStore } from "@/presentation/stores/aiVisionStore";
+import { useComfyUiStore } from "@/presentation/stores/comfyUiStore";
+import { useWorldStore } from "@/presentation/stores/worldStore";
 import type { ToolPageId } from "@/presentation/config/toolPagesConfig";
 
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
@@ -130,6 +132,7 @@ import {
 
 import { resolveColorAtCanvasPointAsync } from "@/application/use-cases/PickColorAtPoint";
 import { loadEditorPreferences } from "@/application/use-cases/LoadEditorPreferences";
+import { exportImage } from "@/application/use-cases/ExportImageUseCases";
 import { loadProject } from "@/application/use-cases/LoadProject";
 import { createEmptyProjectWithDefaultPalette } from "@/application/use-cases/PalettePresetUseCases";
 import { openLastProjectOnStartup } from "@/application/use-cases/OpenLastProjectOnStartup";
@@ -180,9 +183,10 @@ import type { SymmetryAxisKind } from "@/domain/symmetry/SymmetryMirror";
 import { snapSymmetryOrigin } from "@/domain/symmetry/SymmetryMirror";
 
 import { findAssetById, ROOT_FOLDER_ID } from "@/domain/asset/AssetLibrary";
-import { isImageAsset } from "@/domain/asset/AssetRecord";
+import { getAssetRelativeFilePath, isImageAsset } from "@/domain/asset/AssetRecord";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { loadAssetImageAsImageData } from "@/infrastructure/storage/AssetImageLoader";
+import { revealAssetFileInFolder } from "@/infrastructure/storage/AssetFileReveal";
 import { toast } from "@/presentation/stores/toastStore";
 
 import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
@@ -260,6 +264,16 @@ import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
 import { projectRepository } from "@/infrastructure/storage/JsonProjectRepository";
 
 import { editorPreferencesRepository } from "@/infrastructure/storage/LocalEditorPreferencesRepository";
+import {
+  imageExportPreferencesRepository,
+  loadImageExportPreferences,
+} from "@/infrastructure/storage/LocalImageExportPreferencesRepository";
+import type {
+  ImageExportFormat,
+  ImageExportPreferences,
+  ImageExportScalePreset,
+  ImageExportScope,
+} from "@/domain/export/ImageExportPreferences";
 import { lastOpenedProjectStore } from "@/infrastructure/storage/LocalLastOpenedProjectStore";
 import { projectsWorkspaceStore } from "@/infrastructure/storage/LocalProjectsWorkspaceStore";
 
@@ -480,6 +494,10 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   importTargetLayerId: string | null;
 
   canvasSizeModalOpen: boolean;
+
+  exportImageModalOpen: boolean;
+
+  imageExportPreferences: ImageExportPreferences;
 
   historyStack: HistoryStack;
 
@@ -758,10 +776,17 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   openColorEditPage: () => void;
 
+  openWorldPage: () => void;
+
   openAiChatTestPage: () => void;
   openAiVisionTestPage: () => void;
+  openComfyUiPage: () => void;
+
+  saveImageToAssetLibrary: (imageData: ImageData, title: string) => Promise<void>;
 
   sendAssetToToolPage: (assetId: string, toolPageId: ToolPageId) => Promise<void>;
+
+  revealAssetInFolder: (assetId: string) => Promise<void>;
 
   sendPixelRestoreResultToColorEdit: (imageData: ImageData) => void;
 
@@ -772,6 +797,21 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   closeCanvasSizeModal: () => void;
 
   applyCanvasSize: (width: number, height: number) => void;
+
+  openExportImageModal: () => void;
+
+  closeExportImageModal: () => void;
+
+  pickExportDirectory: () => Promise<string | null>;
+
+  executeExportImage: (input: {
+    directory: string;
+    fileName: string;
+    format: ImageExportFormat;
+    scope: ImageExportScope;
+    scalePreset: ImageExportScalePreset;
+    customLongestEdge: number;
+  }) => Promise<{ filePath: string } | null>;
 
   getCompositeGrid: () => PixelGrid | null;
 
@@ -891,7 +931,13 @@ function mergeDrawOptions(
   return { ...base, tileRegion };
 }
 
-type ActiveToolPage = "pixelRestore" | "colorEdit" | "aiChat" | "aiVision";
+type ActiveToolPage =
+  | "pixelRestore"
+  | "colorEdit"
+  | "world"
+  | "aiChat"
+  | "aiVision"
+  | "comfyui";
 
 function closeOtherToolPages(except?: ActiveToolPage): void {
   if (except !== "pixelRestore") {
@@ -900,11 +946,17 @@ function closeOtherToolPages(except?: ActiveToolPage): void {
   if (except !== "colorEdit") {
     useColorEditStore.getState().closePage();
   }
+  if (except !== "world") {
+    useWorldStore.getState().closePage();
+  }
   if (except !== "aiChat") {
     useAiChatStore.getState().closePage();
   }
   if (except !== "aiVision") {
     useAiVisionStore.getState().closePage();
+  }
+  if (except !== "comfyui") {
+    useComfyUiStore.getState().closePage();
   }
 }
 
@@ -1069,6 +1121,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
   canvasSizeModalOpen: false,
 
+  exportImageModalOpen: false,
+
+  imageExportPreferences: loadImageExportPreferences(),
+
   historyStack: new HistoryStack(),
 
   selection: null,
@@ -1189,6 +1245,8 @@ export const useAppStore = create<AppState>((set, get) => {
     void get().refreshPatternBrushLibrary();
 
     get().loadPalettePresets();
+
+    set({ imageExportPreferences: loadImageExportPreferences() });
 
     const stored = windowService.getStoredPreference();
 
@@ -3692,6 +3750,52 @@ export const useAppStore = create<AppState>((set, get) => {
 
   closeCanvasSizeModal: () => set({ canvasSizeModalOpen: false }),
 
+  openExportImageModal: () => {
+    const { project } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    set({ exportImageModalOpen: true });
+  },
+
+  closeExportImageModal: () => set({ exportImageModalOpen: false }),
+
+  pickExportDirectory: async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+    });
+    if (!selected || typeof selected !== "string") return null;
+    return selected;
+  },
+
+  executeExportImage: async (input) => {
+    const { project, selection } = get();
+    if (!project) return null;
+
+    try {
+      const result = await exportImage({
+        project,
+        selection,
+        directory: input.directory,
+        fileName: input.fileName,
+        format: input.format,
+        scope: input.scope,
+        scalePreset: input.scalePreset,
+        customLongestEdge: input.customLongestEdge,
+        preferencesRepository: imageExportPreferencesRepository,
+      });
+      if (!result) return null;
+      set({ imageExportPreferences: loadImageExportPreferences() });
+      toast.info(`已导出至 ${result.filePath}`);
+      return result;
+    } catch {
+      toast.error("导出失败，请重试");
+      return null;
+    }
+  },
+
   applyCanvasSize: (width, height) => {
     const { project } = get();
     if (!project) return;
@@ -3791,6 +3895,11 @@ export const useAppStore = create<AppState>((set, get) => {
     useColorEditStore.getState().openPage();
   },
 
+  openWorldPage: () => {
+    closeOtherToolPages("world");
+    useWorldStore.getState().openPage();
+  },
+
   openAiChatTestPage: () => {
     closeOtherToolPages("aiChat");
     useAiChatStore.getState().reset();
@@ -3801,6 +3910,11 @@ export const useAppStore = create<AppState>((set, get) => {
     closeOtherToolPages("aiVision");
     useAiVisionStore.getState().reset();
     useAiVisionStore.getState().openPage();
+  },
+
+  openComfyUiPage: () => {
+    closeOtherToolPages("comfyui");
+    useComfyUiStore.getState().openPage();
   },
 
   sendAssetToToolPage: async (assetId, toolPageId) => {
@@ -3841,6 +3955,27 @@ export const useAppStore = create<AppState>((set, get) => {
     store.reset();
     store.openPage();
     store.importFromImageData(imageData);
+  },
+
+  revealAssetInFolder: async (assetId) => {
+    const { projectsWorkspacePath, assetLibrary } = get();
+    if (!projectsWorkspacePath || !assetLibrary) {
+      toast.error("无法访问资产库");
+      return;
+    }
+    const asset = findAssetById(assetLibrary, assetId);
+    if (!asset) {
+      toast.error("资产不存在");
+      return;
+    }
+    try {
+      await revealAssetFileInFolder(
+        projectsWorkspacePath,
+        getAssetRelativeFilePath(asset),
+      );
+    } catch {
+      toast.error("打开文件夹失败");
+    }
   },
 
   sendPixelRestoreResultToColorEdit: (imageData) => {
@@ -3890,6 +4025,44 @@ export const useAppStore = create<AppState>((set, get) => {
       usePixelRestoreStore.getState().closePage();
     } catch {
       toast.error("导出到资产库失败，请重试");
+    }
+  },
+
+  saveImageToAssetLibrary: async (imageData, title) => {
+    const path = get().projectsWorkspacePath ?? projectsWorkspaceStore.getPath();
+    if (!path) {
+      toast.info("请先选择项目文件夹");
+      return;
+    }
+    const accessible = await ensureWorkspaceAccess(projectsWorkspaceStore);
+    if (!accessible) {
+      toast.error("无法访问项目目录，请重新授权");
+      return;
+    }
+
+    let library = get().assetLibrary;
+    if (!library) {
+      library = await loadAssetLibrary(assetLibraryRepository, accessible);
+    }
+
+    try {
+      const result = await importAssetFromImageData(
+        assetLibraryRepository,
+        accessible,
+        library,
+        ROOT_FOLDER_ID,
+        imageData,
+        title,
+      );
+      set({
+        assetLibrary: result.library,
+        selectedAssetId: result.asset.id,
+        selectedAssetFolderId: null,
+        assetLibraryDrawerExpanded: true,
+      });
+      toast.info("已导入到资产库");
+    } catch {
+      toast.error("导入资产库失败，请重试");
     }
   },
 
