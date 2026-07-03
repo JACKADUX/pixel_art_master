@@ -3611,6 +3611,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-persisted-scope",
  "tauri-plugin-screenshots",
+ "webview2-com",
 ]
 
 [[package]]

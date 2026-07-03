@@ -30,6 +30,7 @@ export interface AppSettingsSliceActions {
   setCheckerboardLightHex: (hex: string) => void;
   setCheckerboardDarkHex: (hex: string) => void;
   setImageViewerCheckerboardEnabled: (enabled: boolean) => void;
+  setImageViewerSelectionModeEnabled: (enabled: boolean) => void;
   setSymmetryAxisVisible: (visible: boolean) => void;
   setSymmetryAxisColorHex: (hex: string) => void;
   setSymmetryAxisLineWidth: (width: number) => void;
@@ -173,6 +174,11 @@ export function createAppSettingsSlice(
     setImageViewerCheckerboardEnabled: (enabled) =>
       set((state) => ({
         appSettings: { ...state.appSettings, imageViewerCheckerboardEnabled: enabled },
+      })),
+
+    setImageViewerSelectionModeEnabled: (enabled) =>
+      set((state) => ({
+        appSettings: { ...state.appSettings, imageViewerSelectionModeEnabled: enabled },
       })),
 
     setSymmetryAxisVisible: (visible) =>

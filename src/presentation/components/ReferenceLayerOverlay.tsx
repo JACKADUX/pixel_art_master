@@ -31,6 +31,7 @@ import {
 import { ensureReferenceLayerPixelCache } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 
 import { useAltKeyHeld } from "../hooks/useAltKeyHeld";
+import { useSpaceKeyHeldRef } from "../hooks/useSpaceKeyHeld";
 
 import { useAppStore, type ColorSlot } from "../stores/appStore";
 
@@ -90,6 +91,7 @@ export function ReferenceLayerOverlay({
   const backgroundColor = useAppStore((s) => s.backgroundColor);
 
   const altHeld = useAltKeyHeld();
+  const spaceKeyHeldRef = useSpaceKeyHeldRef();
 
   const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(
 
@@ -366,7 +368,7 @@ export function ReferenceLayerOverlay({
 
           altKey: e.altKey,
 
-          spaceKey: e.getModifierState("Space"),
+          spaceKey: spaceKeyHeldRef.current,
 
         },
 

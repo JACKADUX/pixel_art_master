@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { isRecoveryPath } from "@/infrastructure/storage/RecoveryPath";
 import { buildMenuGroups } from "../config/menuConfig";
 import { useAppStore } from "../stores/appStore";
+import { useComfyAppStore } from "../stores/comfyAppStore";
 import { MenuBar } from "./MenuBar";
 
 export function TopBar() {
@@ -37,10 +38,18 @@ export function TopBar() {
   const openSettingsModal = useAppStore((s) => s.openSettingsModal);
   const project = useAppStore((s) => s.project);
 
+  const comfyApps = useComfyAppStore((s) => s.apps);
+  const refreshComfyApps = useComfyAppStore((s) => s.refreshApps);
+  const openComfyAppWindow = useComfyAppStore((s) => s.openRunner);
+
+  useEffect(() => {
+    void refreshComfyApps();
+  }, [refreshComfyApps]);
+
   const menus = useMemo(
     () =>
       buildMenuGroups({
-        newProject,
+        newProject: () => void newProject(),
         openProject: () => void openProject(),
         saveCurrentProject: () => void saveCurrentProject(),
         saveProjectAs: () => void saveProjectAs(),
@@ -69,6 +78,8 @@ export function TopBar() {
         openAiChatTestPage,
         openAiVisionTestPage,
         openComfyUiPage,
+        comfyApps: comfyApps.map((app) => ({ id: app.id, name: app.name })),
+        openComfyAppWindow: (appId: string) => void openComfyAppWindow(appId, "canvas"),
         openAssetLibrary: openAssetLibraryModal,
         openSettingsModal,
       }),
@@ -102,6 +113,8 @@ export function TopBar() {
       openAiChatTestPage,
       openAiVisionTestPage,
       openComfyUiPage,
+      comfyApps,
+      openComfyAppWindow,
       openAssetLibraryModal,
       openSettingsModal,
     ],

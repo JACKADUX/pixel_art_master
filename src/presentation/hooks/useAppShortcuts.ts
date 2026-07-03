@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { isSelectionEmpty } from "@/domain/selection/SelectionState";
-import { toolFromShortcutCode } from "../config/toolShortcuts";
-import { toast } from "../stores/toastStore";
+import {
+  selectionModeFromShortcutCode,
+  toolFromShortcutCode,
+} from "../config/toolShortcuts";
 import { useAppStore } from "../stores/appStore";
 import { usePixelRestoreStore } from "../stores/pixelRestoreStore";
 import { focusCanvasKeyboard } from "../utils/canvasKeyboardFocus";
@@ -202,6 +204,14 @@ export function useAppShortcuts() {
       }
 
       if (!ctrl) {
+        const selectionMode = selectionModeFromShortcutCode(event.code);
+        if (selectionMode) {
+          event.preventDefault();
+          store.setActiveTool("select");
+          store.setToolSettings({ selectionMode });
+          return;
+        }
+
         const tool = toolFromShortcutCode(event.code);
         if (tool) {
           event.preventDefault();
@@ -277,7 +287,7 @@ export function useAppShortcuts() {
 
       if (event.key === "n" || event.key === "N") {
         event.preventDefault();
-        store.newProject();
+        void store.newProject();
         return;
       }
 
@@ -292,11 +302,7 @@ export function useAppShortcuts() {
         if (event.shiftKey) {
           void store.saveProjectAs();
         } else {
-          void store.saveCurrentProject().then((saved) => {
-            if (saved) {
-              toast.info("保存成功");
-            }
-          });
+          void store.saveCurrentProject();
         }
       }
     };

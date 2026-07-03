@@ -17,6 +17,7 @@ import {
   type NavigatorResizeCorner,
   type NavigatorResizeStart,
 } from "@/domain/viewport/NavigatorPanelResize";
+import { computeFloatingPanelZIndex } from "@/domain/viewport/FloatingPanelStack";
 import { renderTransparencyCheckerboard } from "@/infrastructure/canvas/CanvasBackgroundRenderer";
 import { renderPixelGrid1x } from "@/infrastructure/canvas/PixelGridCanvasRenderer";
 import { useAppStore } from "../stores/appStore";
@@ -81,6 +82,8 @@ export function NavigatorPanel() {
   );
   const panNavigatorPreview = useAppStore((s) => s.panNavigatorPreview);
   const navigateToPreviewPoint = useAppStore((s) => s.navigateToPreviewPoint);
+  const floatingPanelStack = useAppStore((s) => s.floatingPanelStack);
+  const bringFloatingPanelToFront = useAppStore((s) => s.bringFloatingPanelToFront);
 
   const [renderTick, setRenderTick] = useState(0);
   const [isPanning, setIsPanning] = useState(false);
@@ -287,6 +290,10 @@ export function NavigatorPanel() {
     getPreviewPoint,
   ]);
 
+  useEffect(() => {
+    if (navigator.visible) bringFloatingPanelToFront("navigator");
+  }, [navigator.visible, bringFloatingPanelToFront]);
+
   if (!navigator.visible || !project) return null;
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
@@ -384,14 +391,18 @@ export function NavigatorPanel() {
   return (
     <div
       ref={panelRef}
-      className="pointer-events-auto absolute z-30 flex flex-col overflow-hidden rounded border-2 border-zinc-600 bg-zinc-900 shadow-xl"
+      className="pointer-events-auto absolute flex flex-col overflow-hidden rounded border-2 border-zinc-600 bg-zinc-900 shadow-xl"
       style={{
         left: navigator.position.x,
         top: navigator.position.y,
         width: navigator.size.width,
         height: panelHeight,
+        zIndex: computeFloatingPanelZIndex(floatingPanelStack, "navigator"),
       }}
-      onMouseDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        bringFloatingPanelToFront("navigator");
+      }}
     >
       <div
         className="flex cursor-move select-none items-center justify-between border-b-2 border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-300"

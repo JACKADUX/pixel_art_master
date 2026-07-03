@@ -7,7 +7,7 @@ import {
   renameAssetFolder,
   validateFolderParent,
 } from "./AssetFolder";
-import type { AssetRecord } from "./AssetRecord";
+import type { AssetRecord, ImageAssetRecord } from "./AssetRecord";
 import {
   createImageAssetRecord,
   createMarkdownAssetRecord,
@@ -234,7 +234,7 @@ export function addAssetToLibrary(
   imageFile: string,
   metadata: AssetMetadata,
   title?: string,
-): { library: AssetLibraryIndex; asset: AssetRecord } {
+): { library: AssetLibraryIndex; asset: ImageAssetRecord } {
   const asset = createImageAssetRecord(folderId, imageFile, metadata, title);
   return {
     library: { ...library, assets: [...library.assets, asset] },

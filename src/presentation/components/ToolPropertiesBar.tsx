@@ -7,6 +7,7 @@ import type {
   ToolType,
   TransformMode,
 } from "@/domain/tool/ToolType";
+import { SELECTION_MODE_SHORTCUTS } from "../config/toolShortcuts";
 import { getBrushShapeIcon, getSelectionModeIcon, getShapeIcon, SymmetryHorizontalIcon, SymmetryVerticalIcon } from "../icons/ToolIcons";
 import { useAppStore } from "../stores/appStore";
 import { BrushSizeInput } from "./BrushSizeInput";
@@ -295,16 +296,19 @@ export function ToolPropertiesBar() {
           <label className="flex items-center gap-2 text-zinc-400">
             模式
             <span className="flex gap-1">
-              {SELECTION_MODES.map((item) => (
+              {SELECTION_MODES.map((item) => {
+                const shortcut = SELECTION_MODE_SHORTCUTS[item.mode];
+                return (
                 <SegmentedButton
                   key={item.mode}
                   active={toolSettings.selectionMode === item.mode}
-                  title={item.label}
+                  title={shortcut ? `${item.label} (${shortcut})` : item.label}
                   onClick={() => setToolSettings({ selectionMode: item.mode })}
                 >
                   {getSelectionModeIcon(item.mode)}
                 </SegmentedButton>
-              ))}
+                );
+              })}
             </span>
           </label>
           {toolSettings.selectionMode === "magicWand" && (

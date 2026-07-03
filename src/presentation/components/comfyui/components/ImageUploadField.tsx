@@ -6,6 +6,7 @@ import {
   useComfyAppStore,
   type ImageRunnerValue,
 } from "@/presentation/stores/comfyAppStore";
+import { useComfyAppRunnerScope } from "../ComfyAppRunnerScopeContext";
 
 export function ImageUploadField({
   component,
@@ -16,6 +17,7 @@ export function ImageUploadField({
   value: ImageRunnerValue;
   disabled: boolean;
 }) {
+  const scope = useComfyAppRunnerScope();
   const uploadRunnerImage = useComfyAppStore((s) => s.uploadRunnerImage);
   const [busy, setBusy] = useState(false);
 
@@ -33,7 +35,7 @@ export function ImageUploadField({
       const bytes = await readFile(selected);
       const previewUrl = URL.createObjectURL(new Blob([bytes as BlobPart]));
       const filename = selected.split(/[\\/]/).pop() ?? "image.png";
-      await uploadRunnerImage(component.id, bytes, filename, previewUrl);
+      await uploadRunnerImage(scope, component.id, bytes, filename, previewUrl);
     } finally {
       setBusy(false);
     }

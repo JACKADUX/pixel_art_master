@@ -58,6 +58,12 @@ import type { ComfyApiWorkflow } from "@/domain/comfyui/ComfyWorkflow";
 import { comfyUiClient } from "@/infrastructure/comfyui/createComfyUiClient";
 import { comfyAppRepository } from "@/infrastructure/storage/FileComfyAppRepository";
 import { projectsWorkspaceStore } from "@/infrastructure/storage/LocalProjectsWorkspaceStore";
+import type { RunnerScope } from "@/domain/comfyApp/RunnerScope";
+import {
+  createInitialRunnerPanel,
+  type RunnerPanelState,
+} from "@/domain/comfyApp/RunnerPanelState";
+import type { PanelEdgeAnchor } from "@/domain/viewport/FloatingPanelAnchor";
 import { toast } from "@/presentation/stores/toastStore";
 import { useComfyUiStore, type ComfyResultItem } from "@/presentation/stores/comfyUiStore";
 
@@ -103,6 +109,57 @@ export type RunnerComponentValue =
   | PaletteRunnerValue
   | RandomNumberRunnerValue
   | PromptRunnerValue;
+
+/** 单个作用域下的 ComfyUI 应用运行态 */
+interface RunnerInstanceState {
+  app: ComfyApp | null;
+  workflow: ComfyApiWorkflow | null;
+  values: Record<string, RunnerComponentValue>;
+  activePresetId: string | null;
+  running: boolean;
+  progress: ComfyRunProgress;
+  results: ComfyResultItem[];
+  error: string | null;
+  abortController: AbortController | null;
+  editing: boolean;
+  panel: RunnerPanelState;
+}
+
+type RunnersState = Record<RunnerScope, RunnerInstanceState>;
+
+function createInitialRunnerInstance(): RunnerInstanceState {
+  return {
+    app: null,
+    workflow: null,
+    values: {},
+    activePresetId: null,
+    running: false,
+    progress: initialRunProgress,
+    results: [],
+    error: null,
+    abortController: null,
+    editing: false,
+    panel: createInitialRunnerPanel(),
+  };
+}
+
+function createInitialRunners(): RunnersState {
+  return {
+    canvas: createInitialRunnerInstance(),
+    workflow: createInitialRunnerInstance(),
+  };
+}
+
+function patchRunner(
+  state: { runners: RunnersState },
+  scope: RunnerScope,
+  patch: Partial<RunnerInstanceState>,
+): RunnersState {
+  return {
+    ...state.runners,
+    [scope]: { ...state.runners[scope], ...patch },
+  };
+}
 
 function revokeResults(results: ComfyResultItem[]): void {
   for (const item of results) {
@@ -242,39 +299,55 @@ interface ComfyAppStore {
   updateApp: () => Promise<boolean>;
   editApp: (appId: string) => Promise<void>;
 
-  // ----- 运行弹窗 -----
-  runnerApp: ComfyApp | null;
-  runnerWorkflow: ComfyApiWorkflow | null;
-  runnerValues: Record<string, RunnerComponentValue>;
-  runnerActivePresetId: string | null;
-  runnerRunning: boolean;
-  runnerProgress: ComfyRunProgress;
-  runnerResults: ComfyResultItem[];
-  runnerError: string | null;
-  runnerAbortController: AbortController | null;
-  openRunner: (appId: string) => Promise<void>;
-  closeRunner: () => void;
-  setRunnerValue: (componentId: string, value: RunnerComponentValue) => void;
+  // ----- 运行弹窗（画布 / 工作流页各一套独立实例） -----
+  runners: RunnersState;
+  openRunner: (appId: string, scope: RunnerScope) => Promise<void>;
+  closeRunner: (scope: RunnerScope) => void;
+  /** 设置浮窗位置（吸附计算由组件层完成后写回纯几何数据） */
+  setRunnerPanelPosition: (
+    scope: RunnerScope,
+    position: { x: number; y: number },
+    edgeAnchor?: PanelEdgeAnchor,
+  ) => void;
+  /** 设置浮窗整体边界（角拖拽缩放后写回） */
+  setRunnerPanelBounds: (
+    scope: RunnerScope,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) => void;
+  /** 固化贴边锚点（拖动结束时调用） */
+  setRunnerPanelEdgeAnchor: (scope: RunnerScope, edgeAnchor: PanelEdgeAnchor) => void;
+  setRunnerValue: (
+    scope: RunnerScope,
+    componentId: string,
+    value: RunnerComponentValue,
+  ) => void;
+  setRunnerEditing: (scope: RunnerScope, editing: boolean) => void;
+  /** 切换某组件在运行窗口中的隐藏状态（持久化到应用文件） */
+  toggleRunnerComponentHidden: (scope: RunnerScope, componentId: string) => void;
 
   // ----- 参数预设 -----
   /** 切换到指定预设（null 表示「自定义」，仅清除高亮不改取值） */
-  selectRunnerPreset: (presetId: string | null) => void;
+  selectRunnerPreset: (scope: RunnerScope, presetId: string | null) => void;
   /** 用当前取值新建预设并设为默认 */
-  saveRunnerPreset: (name: string) => Promise<void>;
+  saveRunnerPreset: (scope: RunnerScope, name: string) => Promise<void>;
   /** 用当前取值覆盖指定预设 */
-  updateRunnerPreset: (presetId: string) => Promise<void>;
+  updateRunnerPreset: (scope: RunnerScope, presetId: string) => Promise<void>;
   /** 重命名预设 */
-  renameRunnerPreset: (presetId: string, name: string) => Promise<void>;
+  renameRunnerPreset: (scope: RunnerScope, presetId: string, name: string) => Promise<void>;
   /** 删除预设 */
-  deleteRunnerPreset: (presetId: string) => Promise<void>;
+  deleteRunnerPreset: (scope: RunnerScope, presetId: string) => Promise<void>;
   uploadRunnerImage: (
+    scope: RunnerScope,
     componentId: string,
     bytes: Uint8Array,
     filename: string,
     previewUrl: string,
   ) => Promise<void>;
-  runApp: () => Promise<void>;
-  abortRunner: () => void;
+  runApp: (scope: RunnerScope) => Promise<void>;
+  abortRunner: (scope: RunnerScope) => void;
 
   // ----- 提示词预设库（跨参数复用，localStorage 持久化） -----
   promptPresetLibrary: PromptPresetLibrary;
@@ -392,6 +465,7 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
       presets: editingApp?.presets,
       defaultPresetId: editingApp?.defaultPresetId,
       defaultValues: editingApp?.defaultValues,
+      hiddenComponentIds: editingApp?.hiddenComponentIds,
     });
 
     try {
@@ -412,7 +486,9 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
       toast.error("当前没有正在编辑的应用");
       return false;
     }
-    return get().saveAsApp(editingApp.name);
+    // 使用编辑器中（可能已被用户修改的）当前名称，而非载入时的旧名称
+    const currentName = useComfyUiStore.getState().workflowName?.replace(/\.json$/i, "").trim();
+    return get().saveAsApp(currentName || editingApp.name);
   },
 
   editApp: async (appId) => {
@@ -439,17 +515,38 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
     }
   },
 
-  runnerApp: null,
-  runnerWorkflow: null,
-  runnerValues: {},
-  runnerActivePresetId: null,
-  runnerRunning: false,
-  runnerProgress: initialRunProgress,
-  runnerResults: [],
-  runnerError: null,
-  runnerAbortController: null,
+  runners: createInitialRunners(),
 
-  openRunner: async (appId) => {
+  setRunnerPanelPosition: (scope, position, edgeAnchor) =>
+    set((state) => ({
+      runners: patchRunner(state, scope, {
+        panel: {
+          ...state.runners[scope].panel,
+          position,
+          ...(edgeAnchor ? { edgeAnchor } : {}),
+        },
+      }),
+    })),
+
+  setRunnerPanelBounds: (scope, x, y, width, height) =>
+    set((state) => ({
+      runners: patchRunner(state, scope, {
+        panel: {
+          ...state.runners[scope].panel,
+          position: { x, y },
+          size: { width, height },
+        },
+      }),
+    })),
+
+  setRunnerPanelEdgeAnchor: (scope, edgeAnchor) =>
+    set((state) => ({
+      runners: patchRunner(state, scope, {
+        panel: { ...state.runners[scope].panel, edgeAnchor },
+      }),
+    })),
+
+  openRunner: async (appId, scope) => {
     try {
       const record = await loadComfyApp(projectsWorkspaceStore, comfyAppRepository, appId);
       if (!record) {
@@ -523,185 +620,238 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
         }
       }
 
-      revokeResults(get().runnerResults);
-      set({
-        runnerApp: record.app,
-        runnerWorkflow: record.workflow,
-        runnerValues: values,
-        runnerActivePresetId: activePresetId,
-        runnerResults: [],
-        runnerProgress: initialRunProgress,
-        runnerError: null,
-        runnerRunning: false,
-      });
+      revokeResults(get().runners[scope].results);
+      set((state) => ({
+        runners: patchRunner(state, scope, {
+          app: record.app,
+          workflow: record.workflow,
+          values,
+          activePresetId,
+          results: [],
+          progress: initialRunProgress,
+          error: null,
+          running: false,
+          editing: false,
+        }),
+      }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "打开应用失败");
     }
   },
 
-  closeRunner: () => {
-    get().abortRunner();
-    // 关闭前把当前取值记为默认参数，下次开启直接沿用
-    const { runnerApp, runnerWorkflow, runnerValues, runnerActivePresetId } = get();
-    if (runnerApp && runnerWorkflow) {
+  closeRunner: (scope) => {
+    get().abortRunner(scope);
+    const runner = get().runners[scope];
+    const { app, workflow, values, activePresetId } = runner;
+    if (app && workflow) {
       const nextApp: ComfyApp = {
-        ...runnerApp,
-        defaultPresetId: runnerActivePresetId ?? undefined,
-        defaultValues: snapshotRunnerValues(runnerValues),
+        ...app,
+        defaultPresetId: activePresetId ?? undefined,
+        defaultValues: snapshotRunnerValues(values),
       };
-      void writeRunnerApp(nextApp, runnerWorkflow).then((saved) => {
+      void writeRunnerApp(nextApp, workflow).then((saved) => {
         if (saved) {
           set((state) => ({ apps: state.apps.map((a) => (a.id === saved.id ? saved : a)) }));
         }
       });
     }
-    revokeResults(get().runnerResults);
-    set({
-      runnerApp: null,
-      runnerWorkflow: null,
-      runnerValues: {},
-      runnerActivePresetId: null,
-      runnerResults: [],
-      runnerProgress: initialRunProgress,
-      runnerError: null,
-    });
+    revokeResults(runner.results);
+    set((state) => ({
+      runners: patchRunner(state, scope, {
+        app: null,
+        workflow: null,
+        values: {},
+        activePresetId: null,
+        results: [],
+        progress: initialRunProgress,
+        error: null,
+        editing: false,
+      }),
+    }));
   },
 
-  setRunnerValue: (componentId, value) =>
+  setRunnerValue: (scope, componentId, value) =>
     set((state) => ({
-      runnerValues: { ...state.runnerValues, [componentId]: value },
-      // 手动修改即视为「自定义」，取消预设高亮
-      runnerActivePresetId: null,
+      runners: patchRunner(state, scope, {
+        values: { ...state.runners[scope].values, [componentId]: value },
+        activePresetId: null,
+      }),
     })),
 
-  selectRunnerPreset: (presetId) => {
-    const { runnerApp, runnerValues, runnerWorkflow } = get();
-    if (!runnerApp) return;
-    if (presetId === null) {
-      set({ runnerActivePresetId: null });
-      return;
-    }
-    const preset = runnerApp.presets.find((item) => item.id === presetId);
-    if (!preset) return;
-    const nextValues = applyPresetToRunnerValues(runnerValues, preset.values);
-    set({ runnerValues: nextValues, runnerActivePresetId: presetId });
+  setRunnerEditing: (scope, editing) =>
+    set((state) => ({
+      runners: patchRunner(state, scope, { editing }),
+    })),
 
-    // 切换即记为默认，下次开启自动使用
+  toggleRunnerComponentHidden: (scope, componentId) => {
+    const { app, workflow } = get().runners[scope];
+    if (!app) return;
+    const current = app.hiddenComponentIds ?? [];
+    const nextHidden = current.includes(componentId)
+      ? current.filter((id) => id !== componentId)
+      : [...current, componentId];
     const nextApp: ComfyApp = {
-      ...runnerApp,
-      defaultPresetId: presetId,
-      defaultValues: snapshotRunnerValues(nextValues),
+      ...app,
+      hiddenComponentIds: nextHidden.length > 0 ? nextHidden : undefined,
     };
-    void writeRunnerApp(nextApp, runnerWorkflow).then((saved) => {
+    set((state) => ({
+      runners: patchRunner(state, scope, { app: nextApp }),
+    }));
+    void writeRunnerApp(nextApp, workflow).then((saved) => {
       if (saved) {
         set((state) => ({
-          runnerApp: state.runnerApp?.id === saved.id ? saved : state.runnerApp,
+          runners: patchRunner(state, scope, {
+            app: state.runners[scope].app?.id === saved.id ? saved : state.runners[scope].app,
+          }),
           apps: state.apps.map((a) => (a.id === saved.id ? saved : a)),
         }));
       }
     });
   },
 
-  saveRunnerPreset: async (name) => {
-    const { runnerApp, runnerWorkflow, runnerValues } = get();
-    if (!runnerApp) return;
-    const preset = createParameterPreset(name, snapshotRunnerValues(runnerValues));
+  selectRunnerPreset: (scope, presetId) => {
+    const { app, values, workflow } = get().runners[scope];
+    if (!app) return;
+    if (presetId === null) {
+      set((state) => ({
+        runners: patchRunner(state, scope, { activePresetId: null }),
+      }));
+      return;
+    }
+    const preset = app.presets.find((item) => item.id === presetId);
+    if (!preset) return;
+    const nextValues = applyPresetToRunnerValues(values, preset.values);
+    set((state) => ({
+      runners: patchRunner(state, scope, {
+        values: nextValues,
+        activePresetId: presetId,
+      }),
+    }));
+
     const nextApp: ComfyApp = {
-      ...runnerApp,
-      presets: [...runnerApp.presets, preset],
+      ...app,
+      defaultPresetId: presetId,
+      defaultValues: snapshotRunnerValues(nextValues),
+    };
+    void writeRunnerApp(nextApp, workflow).then((saved) => {
+      if (saved) {
+        set((state) => ({
+          runners: patchRunner(state, scope, {
+            app: state.runners[scope].app?.id === saved.id ? saved : state.runners[scope].app,
+          }),
+          apps: state.apps.map((a) => (a.id === saved.id ? saved : a)),
+        }));
+      }
+    });
+  },
+
+  saveRunnerPreset: async (scope, name) => {
+    const { app, workflow, values } = get().runners[scope];
+    if (!app) return;
+    const preset = createParameterPreset(name, snapshotRunnerValues(values));
+    const nextApp: ComfyApp = {
+      ...app,
+      presets: [...app.presets, preset],
       defaultPresetId: preset.id,
       defaultValues: clonePresetValues(preset.values),
     };
-    set({ runnerActivePresetId: preset.id });
-    const saved = await writeRunnerApp(nextApp, runnerWorkflow);
+    set((state) => ({
+      runners: patchRunner(state, scope, { activePresetId: preset.id }),
+    }));
+    const saved = await writeRunnerApp(nextApp, workflow);
     if (saved) {
       set((state) => ({
-        runnerApp: saved,
+        runners: patchRunner(state, scope, { app: saved }),
         apps: state.apps.map((a) => (a.id === saved.id ? saved : a)),
       }));
       toast.info(`已保存预设「${preset.name}」`);
     }
   },
 
-  updateRunnerPreset: async (presetId) => {
-    const { runnerApp, runnerWorkflow, runnerValues } = get();
-    if (!runnerApp) return;
-    const snapshot = snapshotRunnerValues(runnerValues);
-    const presets = runnerApp.presets.map((preset) =>
+  updateRunnerPreset: async (scope, presetId) => {
+    const { app, workflow, values } = get().runners[scope];
+    if (!app) return;
+    const snapshot = snapshotRunnerValues(values);
+    const presets = app.presets.map((preset) =>
       preset.id === presetId ? { ...preset, values: clonePresetValues(snapshot) } : preset,
     );
     const target = presets.find((preset) => preset.id === presetId);
     if (!target) return;
     const nextApp: ComfyApp = {
-      ...runnerApp,
+      ...app,
       presets,
       defaultPresetId: presetId,
       defaultValues: clonePresetValues(snapshot),
     };
-    set({ runnerActivePresetId: presetId });
-    const saved = await writeRunnerApp(nextApp, runnerWorkflow);
+    set((state) => ({
+      runners: patchRunner(state, scope, { activePresetId: presetId }),
+    }));
+    const saved = await writeRunnerApp(nextApp, workflow);
     if (saved) {
       set((state) => ({
-        runnerApp: saved,
+        runners: patchRunner(state, scope, { app: saved }),
         apps: state.apps.map((a) => (a.id === saved.id ? saved : a)),
       }));
       toast.info(`已更新预设「${target.name}」`);
     }
   },
 
-  renameRunnerPreset: async (presetId, name) => {
-    const { runnerApp, runnerWorkflow } = get();
-    if (!runnerApp) return;
+  renameRunnerPreset: async (scope, presetId, name) => {
+    const { app, workflow } = get().runners[scope];
+    if (!app) return;
     const trimmed = name.trim();
     if (!trimmed) return;
-    const presets = runnerApp.presets.map((preset) =>
+    const presets = app.presets.map((preset) =>
       preset.id === presetId ? { ...preset, name: trimmed } : preset,
     );
-    const nextApp: ComfyApp = { ...runnerApp, presets };
-    const saved = await writeRunnerApp(nextApp, runnerWorkflow);
+    const nextApp: ComfyApp = { ...app, presets };
+    const saved = await writeRunnerApp(nextApp, workflow);
     if (saved) {
       set((state) => ({
-        runnerApp: saved,
+        runners: patchRunner(state, scope, { app: saved }),
         apps: state.apps.map((a) => (a.id === saved.id ? saved : a)),
       }));
     }
   },
 
-  deleteRunnerPreset: async (presetId) => {
-    const { runnerApp, runnerWorkflow, runnerActivePresetId } = get();
-    if (!runnerApp) return;
-    const presets = runnerApp.presets.filter((preset) => preset.id !== presetId);
-    const stillActive = runnerActivePresetId === presetId ? null : runnerActivePresetId;
+  deleteRunnerPreset: async (scope, presetId) => {
+    const { app, workflow, activePresetId } = get().runners[scope];
+    if (!app) return;
+    const presets = app.presets.filter((preset) => preset.id !== presetId);
+    const stillActive = activePresetId === presetId ? null : activePresetId;
     const nextApp: ComfyApp = {
-      ...runnerApp,
+      ...app,
       presets,
-      defaultPresetId:
-        runnerApp.defaultPresetId === presetId ? undefined : runnerApp.defaultPresetId,
+      defaultPresetId: app.defaultPresetId === presetId ? undefined : app.defaultPresetId,
     };
-    set({ runnerActivePresetId: stillActive });
-    const saved = await writeRunnerApp(nextApp, runnerWorkflow);
+    set((state) => ({
+      runners: patchRunner(state, scope, { activePresetId: stillActive }),
+    }));
+    const saved = await writeRunnerApp(nextApp, workflow);
     if (saved) {
       set((state) => ({
-        runnerApp: saved,
+        runners: patchRunner(state, scope, { app: saved }),
         apps: state.apps.map((a) => (a.id === saved.id ? saved : a)),
       }));
       toast.info("已删除预设");
     }
   },
 
-  uploadRunnerImage: async (componentId, bytes, filename, previewUrl) => {
+  uploadRunnerImage: async (scope, componentId, bytes, filename, previewUrl) => {
     const serverConfig = useComfyUiStore.getState().serverConfig;
     try {
       const result = await uploadComfyImage(comfyUiClient, serverConfig, bytes, filename);
-      const previous = get().runnerValues[componentId];
+      const previous = get().runners[scope].values[componentId];
       if (previous && previous.kind === "image" && previous.previewUrl) {
         URL.revokeObjectURL(previous.previewUrl);
       }
       set((state) => ({
-        runnerValues: {
-          ...state.runnerValues,
-          [componentId]: { kind: "image", filename: result.filename, previewUrl },
-        },
+        runners: patchRunner(state, scope, {
+          values: {
+            ...state.runners[scope].values,
+            [componentId]: { kind: "image", filename: result.filename, previewUrl },
+          },
+        }),
       }));
       toast.info(`已上传图片：${result.filename}`);
     } catch (error) {
@@ -710,21 +860,24 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
     }
   },
 
-  runApp: async () => {
-    const { runnerRunning, runnerApp, runnerWorkflow, runnerValues, runnerActivePresetId } = get();
-    if (runnerRunning) return;
-    if (!runnerApp || !runnerWorkflow) return;
+  runApp: async (scope) => {
+    const runner = get().runners[scope];
+    const { running, app, workflow, values, activePresetId } = runner;
+    if (running) return;
+    if (!app || !workflow) return;
 
     // 生成时把当前取值记为默认参数，下次开启自动使用
     const nextApp: ComfyApp = {
-      ...runnerApp,
-      defaultPresetId: runnerActivePresetId ?? undefined,
-      defaultValues: snapshotRunnerValues(runnerValues),
+      ...app,
+      defaultPresetId: activePresetId ?? undefined,
+      defaultValues: snapshotRunnerValues(values),
     };
-    void writeRunnerApp(nextApp, runnerWorkflow).then((saved) => {
+    void writeRunnerApp(nextApp, workflow).then((saved) => {
       if (saved) {
         set((state) => ({
-          runnerApp: state.runnerApp?.id === saved.id ? saved : state.runnerApp,
+          runners: patchRunner(state, scope, {
+            app: state.runners[scope].app?.id === saved.id ? saved : state.runners[scope].app,
+          }),
           apps: state.apps.map((a) => (a.id === saved.id ? saved : a)),
         }));
       }
@@ -733,9 +886,9 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
     const serverConfig = useComfyUiStore.getState().serverConfig;
 
     // 基础参数 + 组件取值覆盖
-    let parameters = extractEditableParameters(runnerWorkflow);
-    for (const component of runnerApp.components) {
-      const value = runnerValues[component.id];
+    let parameters = extractEditableParameters(workflow);
+    for (const component of app.components) {
+      const value = values[component.id];
       if (!value) continue;
 
       if (component.type === "ratioSize" && value.kind === "ratio") {
@@ -797,8 +950,8 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
 
     // 随机数组件：本次任务沿用当前值，发送后用新随机正整数覆盖界面值
     const randomizedValues: Record<string, RunnerComponentValue> = {};
-    for (const component of runnerApp.components) {
-      const value = runnerValues[component.id];
+    for (const component of app.components) {
+      const value = values[component.id];
       if (
         component.type === "randomNumber" &&
         value?.kind === "randomNumber" &&
@@ -808,18 +961,20 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
       }
     }
 
-    revokeResults(get().runnerResults);
+    revokeResults(runner.results);
     const abortController = new AbortController();
     set((state) => ({
-      runnerRunning: true,
-      runnerError: null,
-      runnerResults: [],
-      runnerAbortController: abortController,
-      runnerProgress: { ...initialRunProgress, status: "queued" },
-      runnerValues:
-        Object.keys(randomizedValues).length > 0
-          ? { ...state.runnerValues, ...randomizedValues }
-          : state.runnerValues,
+      runners: patchRunner(state, scope, {
+        running: true,
+        error: null,
+        results: [],
+        abortController,
+        progress: { ...initialRunProgress, status: "queued" },
+        values:
+          Object.keys(randomizedValues).length > 0
+            ? { ...state.runners[scope].values, ...randomizedValues }
+            : state.runners[scope].values,
+      }),
     }));
 
     const clientId = randomId("client");
@@ -828,18 +983,24 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
       for await (const event of runComfyWorkflow(
         comfyUiClient,
         serverConfig,
-        runnerWorkflow,
+        workflow,
         parameters,
         clientId,
         abortController.signal,
-        { allowedOutputNodeIds: runnerApp.outputNodeIds },
+        { allowedOutputNodeIds: app.outputNodeIds },
       )) {
         if (event.kind === "progress") {
-          set((state) => ({ runnerProgress: reduceProgress(state.runnerProgress, event.event) }));
+          set((state) => ({
+            runners: patchRunner(state, scope, {
+              progress: reduceProgress(state.runners[scope].progress, event.event),
+            }),
+          }));
         } else if (event.kind === "error") {
           set((state) => ({
-            runnerError: event.message,
-            runnerProgress: { ...state.runnerProgress, status: "error" },
+            runners: patchRunner(state, scope, {
+              error: event.message,
+              progress: { ...state.runners[scope].progress, status: "error" },
+            }),
           }));
         } else if (event.kind === "result") {
           const items: ComfyResultItem[] = event.images.map((image) => ({
@@ -849,28 +1010,45 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
             objectUrl: URL.createObjectURL(image.blob),
           }));
           set((state) => ({
-            runnerResults: items,
-            runnerProgress: { ...state.runnerProgress, status: "completed", percent: 100 },
+            runners: patchRunner(state, scope, {
+              results: items,
+              progress: { ...state.runners[scope].progress, status: "completed", percent: 100 },
+            }),
           }));
         }
       }
     } catch (error) {
       const aborted = isComfyError(error) && error.code === "aborted";
       set((state) => ({
-        runnerError: aborted ? null : comfyErrorMessage(error),
-        runnerProgress: { ...state.runnerProgress, status: aborted ? "idle" : "error" },
+        runners: patchRunner(state, scope, {
+          error: aborted ? null : comfyErrorMessage(error),
+          progress: {
+            ...state.runners[scope].progress,
+            status: aborted ? "idle" : "error",
+          },
+        }),
       }));
     } finally {
-      set({ runnerRunning: false, runnerAbortController: null });
+      set((state) => ({
+        runners: patchRunner(state, scope, {
+          running: false,
+          abortController: null,
+        }),
+      }));
     }
   },
 
-  abortRunner: () => {
-    const { runnerAbortController } = get();
-    if (runnerAbortController) {
-      runnerAbortController.abort();
+  abortRunner: (scope) => {
+    const { abortController } = get().runners[scope];
+    if (abortController) {
+      abortController.abort();
     }
-    set({ runnerAbortController: null, runnerRunning: false });
+    set((state) => ({
+      runners: patchRunner(state, scope, {
+        abortController: null,
+        running: false,
+      }),
+    }));
   },
 
   savePromptPresetGroup: (name, prompts) => {

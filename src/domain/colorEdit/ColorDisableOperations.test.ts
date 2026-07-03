@@ -133,7 +133,6 @@ describe("applyDisabledColors", () => {
   it("applies multiple disabled colors at once", () => {
     const red = rgba(220, 20, 20, 255);
     const darkRed = rgba(180, 10, 10, 255);
-    const blue = rgba(20, 20, 220, 255);
     const image = createImageData(
       [
         [220, 20, 20, 255],

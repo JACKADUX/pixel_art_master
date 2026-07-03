@@ -81,7 +81,7 @@ export function ComfyAppPanel({ onEditApp }: { onEditApp: () => void }) {
             <div className="mt-auto flex flex-wrap gap-1.5 pt-2">
               <button
                 type="button"
-                onClick={() => void openRunner(app.id)}
+                onClick={() => void openRunner(app.id, "workflow")}
                 className="rounded bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white transition hover:bg-blue-500"
               >
                 运行

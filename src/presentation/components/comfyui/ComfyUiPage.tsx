@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAppStore } from "@/presentation/stores/appStore";
 import { useComfyUiStore } from "@/presentation/stores/comfyUiStore";
 import { useComfyAppStore } from "@/presentation/stores/comfyAppStore";
@@ -9,7 +9,7 @@ import { ComfyProgressBar } from "./ComfyProgressBar";
 import { ComfyResultGallery } from "./ComfyResultGallery";
 import { ComfyAppPanel } from "./ComfyAppPanel";
 import { SaveComfyAppModal } from "./SaveComfyAppModal";
-import { ComfyAppRunnerModal } from "./ComfyAppRunnerModal";
+import { ComfyAppFloatingRunner } from "./ComfyAppFloatingRunner";
 
 type ComfyView = "editor" | "apps";
 
@@ -33,11 +33,15 @@ export function ComfyUiPage() {
   const [view, setView] = useState<ComfyView>("editor");
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [outputTypesModalOpen, setOutputTypesModalOpen] = useState(false);
+  const pageRef = useRef<HTMLDivElement>(null);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100">
+    <div
+      ref={pageRef}
+      className="fixed inset-0 z-50 flex flex-col bg-zinc-950 text-zinc-100"
+    >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3">
           <button
@@ -196,7 +200,7 @@ export function ComfyUiPage() {
         <ComfyOutputTypesModal onClose={() => setOutputTypesModalOpen(false)} />
       )}
 
-      <ComfyAppRunnerModal />
+      <ComfyAppFloatingRunner scope="workflow" containerRef={pageRef} />
     </div>
   );
 }

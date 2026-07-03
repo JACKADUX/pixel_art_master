@@ -37,6 +37,7 @@ export interface AppSettings {
   checkerboardLightHex: string;
   checkerboardDarkHex: string;
   imageViewerCheckerboardEnabled: boolean;
+  imageViewerSelectionModeEnabled: boolean;
   symmetryAxisVisible: boolean;
   symmetryAxisColorHex: string;
   symmetryAxisLineWidth: number;
@@ -55,6 +56,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   checkerboardLightHex: DEFAULT_CHECKERBOARD_LIGHT_HEX,
   checkerboardDarkHex: DEFAULT_CHECKERBOARD_DARK_HEX,
   imageViewerCheckerboardEnabled: true,
+  imageViewerSelectionModeEnabled: false,
   symmetryAxisVisible: true,
   symmetryAxisColorHex: DEFAULT_SYMMETRY_AXIS_COLOR_HEX,
   symmetryAxisLineWidth: 2,
@@ -182,6 +184,10 @@ export function parseAppSettings(raw: unknown): AppSettings {
       typeof raw.imageViewerCheckerboardEnabled === "boolean"
         ? raw.imageViewerCheckerboardEnabled
         : defaults.imageViewerCheckerboardEnabled,
+    imageViewerSelectionModeEnabled:
+      typeof raw.imageViewerSelectionModeEnabled === "boolean"
+        ? raw.imageViewerSelectionModeEnabled
+        : defaults.imageViewerSelectionModeEnabled,
     symmetryAxisVisible:
       typeof raw.symmetryAxisVisible === "boolean"
         ? raw.symmetryAxisVisible

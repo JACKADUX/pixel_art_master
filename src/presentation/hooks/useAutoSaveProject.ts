@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { autoSaveProject } from "@/application/use-cases/AutoSaveProject";
-import { isUnsavedEmptyProject, withProjectFilePath } from "@/domain/project/Project";
+import { isUnsavedEmptyProject, touchProject } from "@/domain/project/Project";
 import { projectRepository } from "@/infrastructure/storage/JsonProjectRepository";
 import { useAppStore } from "../stores/appStore";
 
@@ -21,8 +21,12 @@ export function useAutoSaveProject() {
             return {};
           }
 
+          if (state.project.updatedAt === saved.updatedAt) {
+            return {};
+          }
+
           return {
-            project: withProjectFilePath(state.project, saved.filePath),
+            project: touchProject(state.project),
           };
         });
       });

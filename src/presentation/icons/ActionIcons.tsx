@@ -19,5 +19,6 @@ export {
   PhotoIcon,
   PlayIcon,
   RectangleStackIcon,
+  Squares2X2Icon,
   SwatchIcon,
 } from "@heroicons/react/24/outline";

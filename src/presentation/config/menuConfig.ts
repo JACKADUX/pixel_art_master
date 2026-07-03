@@ -17,6 +17,7 @@ import {
   MapPinIcon,
   PhotoIcon,
   RectangleStackIcon,
+  Squares2X2Icon,
   SwatchIcon,
 } from "../icons/ActionIcons";
 
@@ -71,6 +72,10 @@ export interface MenuActions {
   openAiChatTestPage: () => void;
   openAiVisionTestPage: () => void;
   openComfyUiPage: () => void;
+  /** 已保存的 ComfyUI 应用列表（用于工具菜单二级子菜单） */
+  comfyApps: { id: string; name: string }[];
+  /** 在画布上以悬浮窗口打开指定 ComfyUI 应用 */
+  openComfyAppWindow: (appId: string) => void;
   openAssetLibrary: () => void;
   openSettingsModal: () => void;
 }
@@ -246,6 +251,26 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           label: "ComfyUI 工作流…",
           icon: CommandLineIcon,
           onClick: actions.openComfyUiPage,
+        },
+        {
+          type: "submenu",
+          label: "ComfyUI 应用",
+          icon: Squares2X2Icon,
+          items:
+            actions.comfyApps.length > 0
+              ? actions.comfyApps.map((app) => ({
+                  type: "action" as const,
+                  label: app.name,
+                  onClick: () => actions.openComfyAppWindow(app.id),
+                }))
+              : [
+                  {
+                    type: "action" as const,
+                    label: "暂无应用",
+                    onClick: () => {},
+                    disabled: true,
+                  },
+                ],
         },
       ],
     },

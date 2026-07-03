@@ -9,7 +9,7 @@ import {
   buildAssetImageRelativePath,
 } from "@/domain/asset/AssetLibraryPaths";
 import { metadataFromPixelGrid } from "@/domain/asset/AssetMetadata";
-import type { AssetRecord, ImageAssetRecord } from "@/domain/asset/AssetRecord";
+import type { ImageAssetRecord } from "@/domain/asset/AssetRecord";
 import { pixelGridToPngBlob } from "./ClipboardUseCases";
 
 async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {

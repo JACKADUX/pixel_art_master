@@ -29,3 +29,8 @@ tauri-plugin-persisted-scope = "2"
 tauri-plugin-clipboard-manager = "2"
 base64 = "0.22"
 
+# Windows 上需要直接访问 WebView2 控制器，拦截单独的 Alt 键以避免画布失焦。
+# 版本与 Tauri 内部使用的 webview2-com 保持一致，确保 ICoreWebView2Controller 类型兼容。
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+

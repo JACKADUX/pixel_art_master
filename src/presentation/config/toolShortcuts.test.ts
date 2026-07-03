@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { toolFromShortcutCode } from "@/presentation/config/toolShortcuts";
+import {
+  selectionModeFromShortcutCode,
+  toolFromShortcutCode,
+} from "@/presentation/config/toolShortcuts";
 import { isTextInputType } from "@/presentation/utils/editableFocus";
 
 describe("toolFromShortcutCode", () => {
@@ -8,13 +11,25 @@ describe("toolFromShortcutCode", () => {
     expect(toolFromShortcutCode("KeyG")).toBe("fill");
     expect(toolFromShortcutCode("KeyE")).toBe("eraser");
     expect(toolFromShortcutCode("KeyU")).toBe("shape");
-    expect(toolFromShortcutCode("KeyM")).toBe("select");
     expect(toolFromShortcutCode("KeyV")).toBe("transform");
   });
 
   it("returns null for unknown codes", () => {
     expect(toolFromShortcutCode("KeyA")).toBeNull();
+    expect(toolFromShortcutCode("KeyM")).toBeNull();
     expect(toolFromShortcutCode("Space")).toBeNull();
+  });
+});
+
+describe("selectionModeFromShortcutCode", () => {
+  it("maps physical key codes to selection modes", () => {
+    expect(selectionModeFromShortcutCode("KeyM")).toBe("rectangle");
+    expect(selectionModeFromShortcutCode("KeyW")).toBe("magicWand");
+  });
+
+  it("returns null for unknown codes", () => {
+    expect(selectionModeFromShortcutCode("KeyA")).toBeNull();
+    expect(selectionModeFromShortcutCode("KeyB")).toBeNull();
   });
 });
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { getDefaultColorPickerPanelWidth } from "@/domain/color/ColorPickerLayout";
+import { computeFloatingPanelZIndex } from "@/domain/viewport/FloatingPanelStack";
 import { useAppStore } from "@/presentation/stores/appStore";
 import { ColorPickerView } from "./ColorPickerView";
 
@@ -24,6 +25,8 @@ export function FloatingColorPickerPanel() {
     (s) => s.finalizeFloatingColorPickerDrag,
   );
   const closeFloatingColorPicker = useAppStore((s) => s.closeFloatingColorPicker);
+  const floatingPanelStack = useAppStore((s) => s.floatingPanelStack);
+  const bringFloatingPanelToFront = useAppStore((s) => s.bringFloatingPanelToFront);
 
   const panelWidth = getDefaultColorPickerPanelWidth(orientation);
 
@@ -76,6 +79,10 @@ export function FloatingColorPickerPanel() {
     };
   }, [setFloatingColorPickerPositionWithAnchor, finalizeFloatingColorPickerDrag]);
 
+  useEffect(() => {
+    if (floatingColorPicker.visible) bringFloatingPanelToFront("colorPicker");
+  }, [floatingColorPicker.visible, bringFloatingPanelToFront]);
+
   if (!floatingColorPicker.visible || !project) return null;
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
@@ -96,13 +103,17 @@ export function FloatingColorPickerPanel() {
       ref={panelRef}
       role="dialog"
       aria-label="悬浮色彩选择器"
-      className="pointer-events-auto absolute z-40 flex flex-col overflow-hidden rounded-lg border-2 border-zinc-600 bg-zinc-900 shadow-xl"
+      className="pointer-events-auto absolute flex flex-col overflow-hidden rounded-lg border-2 border-zinc-600 bg-zinc-900 shadow-xl"
       style={{
         left: floatingColorPicker.position.x,
         top: floatingColorPicker.position.y,
         width: panelWidth,
+        zIndex: computeFloatingPanelZIndex(floatingPanelStack, "colorPicker"),
       }}
-      onMouseDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        bringFloatingPanelToFront("colorPicker");
+      }}
     >
       <ColorPickerView
         currentColor={activeColor}

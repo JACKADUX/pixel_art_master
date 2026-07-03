@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { EllipsisVerticalIcon } from "@heroicons/react/24/outline";
 import { useComfyAppStore } from "@/presentation/stores/comfyAppStore";
+import { useComfyAppRunnerScope } from "../ComfyAppRunnerScopeContext";
 import { ContextMenu } from "@/presentation/components/ContextMenu";
 import { ConfirmDialog } from "@/presentation/components/ConfirmDialog";
 import type { MenuItem } from "@/presentation/components/MenuDropdown";
@@ -10,8 +11,9 @@ type ConfirmKind = "update" | "delete";
 
 /** 运行弹窗顶部的参数预设栏：下拉切换 + 更多操作菜单（保存/更新/重命名/删除） */
 export function ParameterPresetBar({ disabled }: { disabled: boolean }) {
-  const presets = useComfyAppStore((s) => s.runnerApp?.presets ?? []);
-  const activePresetId = useComfyAppStore((s) => s.runnerActivePresetId);
+  const scope = useComfyAppRunnerScope();
+  const presets = useComfyAppStore((s) => s.runners[scope].app?.presets ?? []);
+  const activePresetId = useComfyAppStore((s) => s.runners[scope].activePresetId);
   const selectRunnerPreset = useComfyAppStore((s) => s.selectRunnerPreset);
   const saveRunnerPreset = useComfyAppStore((s) => s.saveRunnerPreset);
   const updateRunnerPreset = useComfyAppStore((s) => s.updateRunnerPreset);
@@ -51,9 +53,9 @@ export function ParameterPresetBar({ disabled }: { disabled: boolean }) {
     const name = draftName.trim();
     if (!name) return;
     if (mode === "create") {
-      void saveRunnerPreset(name);
+      void saveRunnerPreset(scope, name);
     } else if (mode === "rename" && activePreset) {
-      void renameRunnerPreset(activePreset.id, name);
+      void renameRunnerPreset(scope, activePreset.id, name);
     }
     cancelEdit();
   };
@@ -66,9 +68,9 @@ export function ParameterPresetBar({ disabled }: { disabled: boolean }) {
 
   const handleConfirm = () => {
     if (confirmKind === "update" && activePreset) {
-      void updateRunnerPreset(activePreset.id);
+      void updateRunnerPreset(scope, activePreset.id);
     } else if (confirmKind === "delete" && activePreset) {
-      void deleteRunnerPreset(activePreset.id);
+      void deleteRunnerPreset(scope, activePreset.id);
     }
     setConfirmKind(null);
   };
@@ -123,7 +125,9 @@ export function ParameterPresetBar({ disabled }: { disabled: boolean }) {
         <select
           value={activePresetId ?? ""}
           disabled={disabled}
-          onChange={(e) => selectRunnerPreset(e.target.value === "" ? null : e.target.value)}
+          onChange={(e) =>
+            selectRunnerPreset(scope, e.target.value === "" ? null : e.target.value)
+          }
           className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 outline-none focus:border-blue-500 disabled:opacity-50"
         >
           <option value="">（自定义参数）</option>

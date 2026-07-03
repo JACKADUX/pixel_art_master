@@ -7,6 +7,7 @@ import { useAppStore } from "../stores/appStore";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { PaletteGridView } from "./PaletteGridView";
 import { PalettePresetActionsMenu } from "./PalettePresetActionsMenu";
+import { PalettePresetImportMenu } from "./PalettePresetImportMenu";
 
 export function PalettePresetManagerModal() {
   const open = useAppStore((s) => s.palettePresetManagerOpen);
@@ -18,6 +19,10 @@ export function PalettePresetManagerModal() {
   const setColorSlot = useAppStore((s) => s.setColorSlot);
 
   const saveCurrentPaletteAsPreset = useAppStore((s) => s.saveCurrentPaletteAsPreset);
+  const importPalettePresetFromHexFile = useAppStore((s) => s.importPalettePresetFromHexFile);
+  const importPalettePresetFromImageFile = useAppStore(
+    (s) => s.importPalettePresetFromImageFile,
+  );
   const overwritePalettePreset = useAppStore((s) => s.overwritePalettePreset);
   const renamePalettePresetAction = useAppStore((s) => s.renamePalettePresetAction);
   const importPresetToPalette = useAppStore((s) => s.importPresetToPalette);
@@ -62,6 +67,10 @@ export function PalettePresetManagerModal() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <PalettePresetImportMenu
+                  onImportHexFile={() => void importPalettePresetFromHexFile()}
+                  onImportImageFile={() => void importPalettePresetFromImageFile()}
+                />
                 <button
                   type="button"
                   disabled={!canUseCurrent}

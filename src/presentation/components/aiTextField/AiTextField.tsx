@@ -34,7 +34,6 @@ export function AiTextField({
   const register = useAiFieldRegistryStore((s) => s.register);
   const unregister = useAiFieldRegistryStore((s) => s.unregister);
   const isOpen = useAiTextFieldSessionStore((s) => s.isOpen);
-  const activeFieldId = useAiTextFieldSessionStore((s) => s.activeFieldId);
   const openSession = useAiTextFieldSessionStore((s) => s.openSession);
 
   useEffect(() => {

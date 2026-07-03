@@ -1,14 +1,64 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { readDir } from "@tauri-apps/plugin-fs";
+import { readDir, remove, writeTextFile } from "@tauri-apps/plugin-fs";
 import type { IProjectsWorkspaceStore } from "../ports/IProjectsWorkspaceStore";
 
-export async function probeWorkspaceAccess(path: string): Promise<boolean> {
+const ACCESS_PROBE_FILE = "pixelart-access-probe.tmp";
+
+const verifiedPaths = new Set<string>();
+let pendingAccess: Promise<string | null> | null = null;
+
+export function normalizeWorkspaceAccessPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+export function markWorkspaceAccessGranted(path: string): void {
+  verifiedPaths.add(normalizeWorkspaceAccessPath(path));
+}
+
+/** 仅用于测试：重置会话内的工作区授权缓存。 */
+export function clearWorkspaceAccessCache(): void {
+  verifiedPaths.clear();
+  pendingAccess = null;
+}
+
+function buildAccessProbePath(path: string): string {
+  const separator = path.includes("\\") ? "\\" : "/";
+  const normalized = path.replace(/[/\\]+$/, "");
+  return `${normalized}${separator}${ACCESS_PROBE_FILE}`;
+}
+
+async function probeWorkspaceWriteAccess(path: string): Promise<boolean> {
   try {
-    await readDir(path);
+    const probePath = buildAccessProbePath(path);
+    await writeTextFile(probePath, "ok");
+    try {
+      await remove(probePath);
+    } catch {
+      // 写入已成功即可证明可写；清理失败不应触发重复授权。
+    }
     return true;
   } catch {
     return false;
   }
+}
+
+export async function probeWorkspaceAccess(path: string): Promise<boolean> {
+  const key = normalizeWorkspaceAccessPath(path);
+  if (verifiedPaths.has(key)) {
+    return true;
+  }
+
+  try {
+    await readDir(path);
+  } catch {
+    return false;
+  }
+
+  const canWrite = await probeWorkspaceWriteAccess(path);
+  if (canWrite) {
+    verifiedPaths.add(key);
+  }
+  return canWrite;
 }
 
 export async function requestWorkspaceAccess(currentPath: string): Promise<string | null> {
@@ -25,12 +75,17 @@ export async function requestWorkspaceAccess(currentPath: string): Promise<strin
   return selected;
 }
 
-export async function ensureWorkspaceAccess(
+async function ensureWorkspaceAccessInternal(
   workspaceStore: IProjectsWorkspaceStore,
 ): Promise<string | null> {
   const path = workspaceStore.getPath();
   if (!path) {
     return null;
+  }
+
+  const key = normalizeWorkspaceAccessPath(path);
+  if (verifiedPaths.has(key)) {
+    return path;
   }
 
   if (await probeWorkspaceAccess(path)) {
@@ -43,9 +98,25 @@ export async function ensureWorkspaceAccess(
   }
 
   workspaceStore.setPath(selected);
-  if (await probeWorkspaceAccess(selected)) {
+  markWorkspaceAccessGranted(selected);
+
+  try {
+    await readDir(selected);
     return selected;
+  } catch {
+    return null;
+  }
+}
+
+export async function ensureWorkspaceAccess(
+  workspaceStore: IProjectsWorkspaceStore,
+): Promise<string | null> {
+  if (pendingAccess) {
+    return pendingAccess;
   }
 
-  return null;
+  pendingAccess = ensureWorkspaceAccessInternal(workspaceStore).finally(() => {
+    pendingAccess = null;
+  });
+  return pendingAccess;
 }

@@ -26,6 +26,7 @@ interface SerializedManifest {
   presets: ParameterPreset[];
   defaultPresetId?: string;
   defaultValues?: PresetValues;
+  hiddenComponentIds?: string[];
 }
 
 const COMPONENT_TYPES: AppComponentType[] = [
@@ -100,6 +101,7 @@ export function serializeComfyApp(app: ComfyApp): string {
     presets: app.presets,
     defaultPresetId: app.defaultPresetId,
     defaultValues: app.defaultValues,
+    hiddenComponentIds: app.hiddenComponentIds,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -133,6 +135,10 @@ export function parseComfyAppManifest(raw: unknown): ComfyApp | null {
   const defaultValues =
     raw.defaultValues === undefined ? undefined : parsePresetValues(raw.defaultValues);
 
+  const hiddenComponentIds = Array.isArray(raw.hiddenComponentIds)
+    ? raw.hiddenComponentIds.filter((id): id is string => typeof id === "string")
+    : undefined;
+
   return {
     id: raw.id,
     name: typeof raw.name === "string" && raw.name.trim() !== "" ? raw.name : "未命名应用",
@@ -146,6 +152,7 @@ export function parseComfyAppManifest(raw: unknown): ComfyApp | null {
     presets,
     defaultPresetId,
     defaultValues,
+    hiddenComponentIds,
   };
 }
 

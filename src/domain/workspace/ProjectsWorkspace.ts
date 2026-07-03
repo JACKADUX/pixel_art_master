@@ -38,3 +38,12 @@ export function buildProjectFilePath(workspacePath: string, name: string, suffix
 export function isProjectFileName(fileName: string): boolean {
   return fileName.endsWith(PROJECT_EXTENSION);
 }
+
+export function isPathInWorkspace(filePath: string, workspacePath: string): boolean {
+  const normalizedFile = filePath.replace(/\\/g, "/").toLowerCase();
+  const normalizedWorkspace = workspacePath.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  return (
+    normalizedFile === normalizedWorkspace ||
+    normalizedFile.startsWith(`${normalizedWorkspace}/`)
+  );
+}

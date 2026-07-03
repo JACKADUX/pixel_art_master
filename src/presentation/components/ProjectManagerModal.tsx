@@ -48,15 +48,15 @@ export function ProjectManagerModal() {
         <div className="flex max-h-[80vh] w-[90vw] max-w-4xl flex-col overflow-hidden rounded-lg border border-zinc-600 bg-zinc-900 shadow-xl">
           <div className="flex items-center justify-between border-b border-zinc-700 px-4 py-3">
             <h2 className="text-sm font-medium text-zinc-200">项目管理</h2>
-            {!isStartPage && (
-              <button
-                type="button"
-                onClick={closeProjectManager}
-                className="text-zinc-400 hover:text-zinc-200"
-              >
-                ✕
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={closeProjectManager}
+              className="rounded px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+              aria-label="关闭"
+              title="关闭"
+            >
+              ✕
+            </button>
           </div>
 
           {!workspacePath ? (

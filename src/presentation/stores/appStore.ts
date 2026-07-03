@@ -138,12 +138,16 @@ import { createEmptyProjectWithDefaultPalette } from "@/application/use-cases/Pa
 import { openLastProjectOnStartup } from "@/application/use-cases/OpenLastProjectOnStartup";
 import { saveEditorPreferences } from "@/application/use-cases/SaveEditorPreferences";
 import { saveLastOpenedProject } from "@/application/use-cases/SaveLastOpenedProject";
+import { getPersistedProjectPath } from "@/application/use-cases/ProjectPersistence";
 
 import { deleteProject } from "@/application/use-cases/DeleteProject";
 
 import { renameProjectInWorkspace } from "@/application/use-cases/RenameProjectInWorkspace";
 
-import { ensureWorkspaceAccess } from "@/application/use-cases/EnsureWorkspaceAccess";
+import {
+  ensureWorkspaceAccess,
+  markWorkspaceAccessGranted,
+} from "@/application/use-cases/EnsureWorkspaceAccess";
 import { listProjectsInWorkspace } from "@/application/use-cases/ListProjectsInWorkspace";
 
 import {
@@ -345,6 +349,10 @@ import {
   type PanelEdgeAnchor,
 } from "@/domain/viewport/FloatingPanelAnchor";
 import { resolveNavigatorResizeConstraints } from "@/domain/viewport/NavigatorPanelResize";
+import {
+  bringPanelToFront,
+  type FloatingPanelId,
+} from "@/domain/viewport/FloatingPanelStack";
 
 import { open, save } from "@tauri-apps/plugin-dialog";
 
@@ -479,6 +487,9 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   navigator: NavigatorState;
 
+  /** 悬浮窗口层级堆叠顺序（末尾为最上层，最近激活者置顶） */
+  floatingPanelStack: FloatingPanelId[];
+
   mousePositionOverlayVisible: boolean;
 
   canvasDisplayMode: CanvasDisplayMode;
@@ -525,7 +536,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   init: () => Promise<void>;
 
-  newProject: () => void;
+  newProject: () => Promise<void>;
 
   createBlankProject: () => void;
 
@@ -604,6 +615,9 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   ) => void;
 
   finalizeNavigatorDrag: () => void;
+
+  /** 将指定悬浮窗口提到最上层（激活/点击时调用） */
+  bringFloatingPanelToFront: (id: FloatingPanelId) => void;
 
   adaptFloatingPanelsToViewport: () => void;
 
@@ -734,6 +748,15 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   importAssetToNewReferenceLayer: (assetId: string) => Promise<void>;
 
   importAssetColorsToPalette: (assetId: string) => Promise<void>;
+
+  /** 把任意图像数据导入为新的绘制图层 */
+  importImageDataToDrawingLayer: (imageData: ImageData, name: string) => void;
+
+  /** 把任意图像数据导入为新的参考图层 */
+  importImageDataToReferenceLayer: (imageData: ImageData, name: string) => void;
+
+  /** 把 PNG 图像复制到系统剪贴板 */
+  copyImageToClipboard: (pngBlob: Blob) => Promise<void>;
 
   setActiveLayer: (layerId: string) => void;
 
@@ -1003,6 +1026,7 @@ export const useAppStore = create<AppState>((set, get) => {
     get,
     {
       palettePresetRepository,
+      imageProcessor,
     },
   );
 
@@ -1097,6 +1121,8 @@ export const useAppStore = create<AppState>((set, get) => {
     previewPan: { x: 0, y: 0 },
     edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
   },
+
+  floatingPanelStack: ["navigator", "colorPicker", "comfyRunner"],
 
   mousePositionOverlayVisible: false,
 
@@ -1309,11 +1335,16 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  newProject: () => {
+  newProject: async () => {
+
+    const { project } = get();
+
+    if (project && getPersistedProjectPath(project)) {
+      const saved = await get().saveCurrentProject();
+      if (!saved) return;
+    }
 
     get().createBlankProject();
-
-    get().openProjectManager();
 
   },
 
@@ -1415,6 +1446,11 @@ export const useAppStore = create<AppState>((set, get) => {
 
   saveCurrentProject: async () => {
 
+    const activeGrid = get().getActiveLayerGrid();
+    if (activeGrid) {
+      get().syncActiveLayer(activeGrid);
+    }
+
     const { project } = get();
 
     if (!project) return false;
@@ -1429,23 +1465,26 @@ export const useAppStore = create<AppState>((set, get) => {
 
       project,
 
-      async (defaultPath) => {
-
-        const selected = await save({
-
-          filters: [{ name: "像素画项目", extensions: ["pixelart.json"] }],
-
-          defaultPath: defaultPath ?? `${project.name}.pixelart.json`,
-
-        });
-
-        return selected && typeof selected === "string" ? selected : null;
-
-      },
-
     );
 
-    if (!result.saved || !result.project) return false;
+    set({ projectsWorkspacePath: projectsWorkspaceStore.getPath() });
+
+    if (!result.saved || !result.project) {
+      switch (result.reason) {
+        case "noWorkspace":
+          toast.info("请先在项目管理中选择项目文件夹");
+          get().openProjectManager();
+          break;
+        case "accessDenied":
+          toast.error("无法访问项目目录，请重新授权");
+          break;
+        case "ioError":
+        default:
+          toast.error("保存失败，请检查目录权限");
+          break;
+      }
+      return false;
+    }
 
     const savedProject = result.project;
 
@@ -1464,6 +1503,8 @@ export const useAppStore = create<AppState>((set, get) => {
       await get().refreshProjectList();
 
     }
+
+    toast.info("保存成功");
 
     return true;
 
@@ -2008,6 +2049,18 @@ export const useAppStore = create<AppState>((set, get) => {
           edgeAnchor,
         },
       };
+    }),
+
+  bringFloatingPanelToFront: (id) =>
+    set((s) => {
+      const next = bringPanelToFront(s.floatingPanelStack, id);
+      if (
+        next.length === s.floatingPanelStack.length &&
+        next[next.length - 1] === s.floatingPanelStack[s.floatingPanelStack.length - 1]
+      ) {
+        return {};
+      }
+      return { floatingPanelStack: next };
     }),
 
   adaptFloatingPanelsToViewport: () =>
@@ -3510,6 +3563,50 @@ export const useAppStore = create<AppState>((set, get) => {
     }
   },
 
+  importImageDataToDrawingLayer: (imageData, name) => {
+    const { project } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    try {
+      const grid = imageDataToPixelGrid(imageData);
+      const updated = importAssetGridToNewDrawingLayer(project, grid, name);
+      set({ project: updated });
+      toast.info("已导入到新图层");
+    } catch {
+      toast.error("导入到图层失败");
+    }
+  },
+
+  importImageDataToReferenceLayer: (imageData, name) => {
+    const { project } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    try {
+      const result = importAssetImageDataToNewReferenceLayer(project, imageData, name);
+      invalidateReferenceLayerPixelCache(result.layerId);
+      set({
+        project: setActiveReferenceLayer(result.project, result.layerId),
+        cropEditorLayerId: result.openCropEditor ? result.layerId : null,
+      });
+      toast.info("已导入到参考图层");
+    } catch {
+      toast.error("导入到参考图层失败");
+    }
+  },
+
+  copyImageToClipboard: async (pngBlob) => {
+    try {
+      await clipboardService.copyImage(pngBlob);
+      toast.info("已复制到剪贴板");
+    } catch {
+      toast.error("复制到剪贴板失败");
+    }
+  },
+
   importAssetColorsToPalette: async (assetId) => {
     const { project, projectsWorkspacePath, assetLibrary } = get();
     if (!project) {
@@ -4168,10 +4265,6 @@ export const useAppStore = create<AppState>((set, get) => {
 
   closeProjectManager: () => {
 
-    const { project } = get();
-
-    if (project && isUnsavedEmptyProject(project)) return;
-
     set({
 
       projectManagerOpen: false,
@@ -4209,6 +4302,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
     projectsWorkspaceStore.setPath(selected);
+    markWorkspaceAccessGranted(selected);
 
     set({
 
@@ -4420,7 +4514,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
       if (result.shouldReset) {
 
-        get().newProject();
+        get().createBlankProject();
+        get().openProjectManager();
 
       }
 

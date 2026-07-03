@@ -235,12 +235,7 @@ export function createPatternBrushSlice(
 
         cachePatternPixels(result.brush.id, cropped);
         get().deselectCanvas();
-        set({
-          patternBrushLibrary: result.library,
-          selectionDrag: null,
-          lassoPoints: [],
-          selectionPreviewRect: null,
-        });
+        set({ patternBrushLibrary: result.library });
         activatePatternBrush(result.brush.id, foregroundColor);
         toast.info(`已创建图案笔刷「${result.brush.title}」`);
       } catch {

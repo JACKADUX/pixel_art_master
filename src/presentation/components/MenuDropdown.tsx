@@ -1,5 +1,6 @@
 import type { ComponentType, SVGProps } from "react";
-import { CheckIcon } from "@heroicons/react/24/outline";
+import { useState } from "react";
+import { CheckIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 
 export type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -48,6 +49,8 @@ interface MenuDropdownProps {
 }
 
 export function MenuDropdown({ label, open, onToggle, onClose, items }: MenuDropdownProps) {
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+
   const handleItemClick = (onClick: () => void) => {
     onClick();
     onClose();
@@ -94,7 +97,51 @@ export function MenuDropdown({ label, open, onToggle, onClose, items }: MenuDrop
             }
 
             if (item.type === "submenu") {
-              return null;
+              const SubIcon = item.icon;
+              const isSubOpen = openSubmenu === item.label;
+              return (
+                <div
+                  key={item.label}
+                  className="relative"
+                  onMouseEnter={() => setOpenSubmenu(item.label)}
+                  onMouseLeave={() => setOpenSubmenu(null)}
+                >
+                  <button
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded={isSubOpen}
+                    className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition ${
+                      isSubOpen
+                        ? "bg-zinc-800 text-zinc-100"
+                        : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                    }`}
+                  >
+                    {SubIcon ? (
+                      <SubIcon className="h-4 w-4 shrink-0 text-zinc-400" />
+                    ) : (
+                      <span className="w-4 shrink-0" />
+                    )}
+                    <span className="flex-1">{item.label}</span>
+                    <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                  </button>
+
+                  {isSubOpen && (
+                    <div className="absolute left-full top-0 z-50 ml-0.5 max-h-[60vh] min-w-[180px] overflow-y-auto rounded border border-zinc-600 bg-zinc-900 py-1 shadow-xl">
+                      {item.items.map((subItem) => (
+                        <button
+                          key={subItem.label}
+                          type="button"
+                          disabled={subItem.disabled}
+                          onClick={() => handleItemClick(subItem.onClick)}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-zinc-300 transition hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          <span className="flex-1 truncate">{subItem.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
             }
 
             const Icon = item.icon;

@@ -7,7 +7,6 @@ import {
 } from "../icons/ActionIcons";
 import { SHORTCUT_LABELS } from "../config/menuConfig";
 import { PomodoroTimer } from "./PomodoroTimer";
-import { toast } from "../stores/toastStore";
 import { useAppStore } from "../stores/appStore";
 
 function StatusBarIconButton({
@@ -57,9 +56,7 @@ export function StatusBar() {
   if (!project) return null;
 
   const handleSave = () => {
-    void saveCurrentProject().then((saved) => {
-      if (saved) toast.info("保存成功");
-    });
+    void saveCurrentProject();
   };
 
   return (

@@ -1,8 +1,16 @@
+import { open } from "@tauri-apps/plugin-dialog";
+import { readTextFile } from "@tauri-apps/plugin-fs";
+import type { IImageProcessor } from "@/application/ports/IImageProcessor";
 import type { IPalettePresetRepository } from "@/application/ports/IPalettePresetRepository";
 import {
   importPresetIntoPalette,
   type PalettePresetImportMode,
 } from "@/application/use-cases/PalettePresetUseCases";
+import {
+  deriveHexPresetName,
+  parseHexPaletteContent,
+} from "@/domain/palette/HexPaletteFile";
+import { buildPaletteFromLeadingPixels } from "@/domain/palette/ImagePixelPalette";
 import {
   addPalettePreset,
   createEmptyPalettePresetLibrary,
@@ -30,6 +38,8 @@ export interface PalettePresetSliceState {
 export interface PalettePresetSliceActions {
   loadPalettePresets: () => void;
   saveCurrentPaletteAsPreset: (name?: string) => void;
+  importPalettePresetFromHexFile: () => Promise<void>;
+  importPalettePresetFromImageFile: () => Promise<void>;
   overwritePalettePreset: (id: string) => void;
   renamePalettePresetAction: (id: string, name: string) => void;
   requestDeletePalettePreset: (id: string) => void;
@@ -66,6 +76,7 @@ export function createPalettePresetSlice(
   get: PalettePresetGet,
   deps: {
     palettePresetRepository: IPalettePresetRepository;
+    imageProcessor: IImageProcessor;
   },
 ): PalettePresetSliceState & PalettePresetSliceActions {
   const persist = (library: PalettePresetLibrary) => {
@@ -105,6 +116,68 @@ export function createPalettePresetSlice(
       );
       persist(library);
       toast.info(`已保存预设「${preset.name}」`);
+    },
+
+    importPalettePresetFromHexFile: async () => {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "Hex 色板", extensions: ["hex", "txt"] }],
+      });
+      if (!selected || typeof selected !== "string") return;
+
+      let content: string;
+      try {
+        content = await readTextFile(selected);
+      } catch {
+        toast.error("无法读取所选文件");
+        return;
+      }
+
+      const colors = parseHexPaletteContent(content);
+      if (colors.length === 0) {
+        toast.info("未在文件中找到有效的十六进制颜色");
+        return;
+      }
+
+      const { library, preset } = addPalettePreset(
+        get().palettePresetLibrary,
+        colors,
+        deriveHexPresetName(selected),
+      );
+      persist(library);
+      toast.info(`已从 hex 文件导入预设「${preset.name}」（${colors.length} 色）`);
+    },
+
+    importPalettePresetFromImageFile: async () => {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          { name: "图片", extensions: ["png", "jpg", "jpeg", "gif", "webp", "bmp"] },
+        ],
+      });
+      if (!selected || typeof selected !== "string") return;
+
+      let imageData: ImageData;
+      try {
+        imageData = await deps.imageProcessor.loadImageFromPath(selected);
+      } catch {
+        toast.error("无法读取所选图片");
+        return;
+      }
+
+      const colors = buildPaletteFromLeadingPixels(imageData);
+      if (colors.length === 0) {
+        toast.info("未能从图片中提取颜色");
+        return;
+      }
+
+      const { library, preset } = addPalettePreset(
+        get().palettePresetLibrary,
+        colors,
+        deriveHexPresetName(selected),
+      );
+      persist(library);
+      toast.info(`已从图片导入预设「${preset.name}」（${colors.length} 色）`);
     },
 
     overwritePalettePreset: (id) => {

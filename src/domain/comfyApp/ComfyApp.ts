@@ -20,6 +20,8 @@ export interface ComfyApp {
   defaultPresetId?: string;
   /** 上次使用的参数取值快照，下次开启运行弹窗时自动还原 */
   defaultValues?: PresetValues;
+  /** 在运行窗口中被隐藏的组件 id（仅影响展示，不影响生成取值） */
+  hiddenComponentIds?: string[];
 }
 
 function generateId(): string {
@@ -38,6 +40,7 @@ export function createComfyApp(params: {
   presets?: ParameterPreset[];
   defaultPresetId?: string;
   defaultValues?: PresetValues;
+  hiddenComponentIds?: string[];
 }): ComfyApp {
   const now = Date.now();
   return {
@@ -51,6 +54,7 @@ export function createComfyApp(params: {
     presets: params.presets ? params.presets.map((preset) => ({ ...preset })) : [],
     defaultPresetId: params.defaultPresetId,
     defaultValues: params.defaultValues ? clonePresetValues(params.defaultValues) : undefined,
+    hiddenComponentIds: params.hiddenComponentIds ? [...params.hiddenComponentIds] : undefined,
   };
 }
 
@@ -73,5 +77,6 @@ export function duplicateComfyApp(app: ComfyApp): ComfyApp {
     presets: app.presets.map((preset) => ({ ...preset, values: clonePresetValues(preset.values) })),
     defaultPresetId: app.defaultPresetId,
     defaultValues: app.defaultValues ? clonePresetValues(app.defaultValues) : undefined,
+    hiddenComponentIds: app.hiddenComponentIds ? [...app.hiddenComponentIds] : undefined,
   };
 }

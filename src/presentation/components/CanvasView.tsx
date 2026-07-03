@@ -72,6 +72,7 @@ import { CanvasMousePositionGridHighlight } from "./CanvasMousePositionGridHighl
 import { ContextMenu } from "./ContextMenu";
 import { FloatingColorPickerPanel } from "./color-picker/FloatingColorPickerPanel";
 import { NavigatorPanel } from "./NavigatorPanel";
+import { ComfyAppFloatingRunner } from "./comfyui/ComfyAppFloatingRunner";
 import { ReferenceCropModal } from "./ReferenceCropModal";
 import { ReferenceLayerOverlay } from "./ReferenceLayerOverlay";
 
@@ -1715,6 +1716,7 @@ export function CanvasView() {
       )}
       <NavigatorPanel />
       <FloatingColorPickerPanel />
+      <ComfyAppFloatingRunner scope="canvas" floatingPanelId="comfyRunner" />
       <ReferenceCropModal />
       {referenceContextMenu && referenceContextMenuItems.length > 0 && (
         <ContextMenu
