@@ -7,12 +7,18 @@ import type {
   ToolType,
   TransformMode,
 } from "@/domain/tool/ToolType";
+import {
+  MAX_CANVAS_RESIZE_STEP,
+  MIN_CANVAS_RESIZE_STEP,
+  clampCanvasResizeStep,
+} from "@/domain/tool/ToolType";
 import { SELECTION_MODE_SHORTCUTS } from "../config/toolShortcuts";
 import { getBrushShapeIcon, getSelectionModeIcon, getShapeIcon, SymmetryHorizontalIcon, SymmetryVerticalIcon } from "../icons/ToolIcons";
 import { useAppStore } from "../stores/appStore";
 import { BrushSizeInput } from "./BrushSizeInput";
 import { PatternBrushScaleSlider } from "./PatternBrushScaleSlider";
 import { PatternBrushPickerPopover } from "./patternBrush/PatternBrushPickerPopover";
+import { formatPixelDimensions } from "@/domain/viewport/OverlayLabelLayout";
 import { getPatternBrush } from "@/domain/patternBrush/PatternBrushLibrary";
 
 const TOOL_LABELS: Record<ToolType, string> = {
@@ -23,6 +29,7 @@ const TOOL_LABELS: Record<ToolType, string> = {
   select: "选区",
   transform: "变换",
   repeatTile: "重复Tile",
+  canvasResize: "画布尺寸",
 };
 
 const SHAPES: { mode: ShapeMode; label: string }[] = [
@@ -376,6 +383,41 @@ export function ToolPropertiesBar() {
 
       {activeTool === "repeatTile" && tileSession.phase === "creating" && (
         <span className="text-zinc-500">拖拽画布创建 tile 区域 · Esc 取消</span>
+      )}
+
+      {activeTool === "canvasResize" && (
+        <>
+          <span className="tabular-nums text-zinc-300">
+            {formatPixelDimensions(project.canvas.width, project.canvas.height)}
+          </span>
+          <label className="flex items-center gap-2 text-zinc-400">
+            步长
+            <input
+              type="number"
+              min={MIN_CANVAS_RESIZE_STEP}
+              max={MAX_CANVAS_RESIZE_STEP}
+              value={toolSettings.canvasResizeStep}
+              onChange={(e) => {
+                const parsed = Number(e.target.value);
+                if (Number.isFinite(parsed)) {
+                  setToolSettings({ canvasResizeStep: clampCanvasResizeStep(parsed) });
+                }
+              }}
+              className="h-7 w-14 rounded border border-zinc-600 bg-zinc-800 px-1.5 text-center text-zinc-200 outline-none focus:border-blue-500"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-zinc-400">
+            <input
+              type="checkbox"
+              checked={toolSettings.canvasResizeFixedStep}
+              onChange={(e) =>
+                setToolSettings({ canvasResizeFixedStep: e.target.checked })
+              }
+            />
+            保持固定
+          </label>
+          <span className="text-zinc-500">左键扩展 / 右键缩小 / 拖拽调整 · Shift 临时步长对齐</span>
+        </>
       )}
 
       {tileSession.phase === "drawing" && (

@@ -4,7 +4,6 @@ import {
   applyGridRestore,
   applyRegionGridRestore,
 } from "@/application/use-cases/GridRestoreUseCases";
-import { loadPixelRestorePreferences } from "@/application/use-cases/LoadPixelRestorePreferences";
 import { savePixelRestorePreferences } from "@/application/use-cases/SavePixelRestorePreferences";
 import {
   analyzeSourceImage,
@@ -28,6 +27,7 @@ import {
   DEFAULT_PIXEL_RESTORE_PREFERENCES,
   extractPixelRestorePreferences,
   type PixelRestoreMode,
+  type PixelRestorePreferences,
 } from "@/domain/pixelRestore/PixelRestorePreferences";
 import {
   clampGridCount,
@@ -36,7 +36,11 @@ import {
 import { type GridScaleType } from "@/domain/pixelRestore/GridScaleType";
 import { clipboardService } from "@/infrastructure/clipboard/createClipboardService";
 import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
-import { pixelRestorePreferencesRepository } from "@/infrastructure/storage/LocalPixelRestorePreferencesRepository";
+import { pixelRestorePreferencesRepository } from "@/infrastructure/storage/FilePixelRestorePreferencesRepository";
+import {
+  getActiveSoftwareDataPath,
+  isUserDataHydrating,
+} from "@/infrastructure/storage/UserDataPersistenceContext";
 import { captureService } from "@/infrastructure/tauri/TauriCaptureService";
 
 export type RestoreMode = PixelRestoreMode;
@@ -64,6 +68,7 @@ interface PixelRestoreStore {
   openPage: () => void;
   closePage: () => void;
   reset: () => void;
+  hydratePreferences: (prefs: PixelRestorePreferences | null) => void;
   importFromPath: (path: string) => Promise<void>;
   importFromFile: (file: File) => Promise<void>;
   importFromImageData: (imageData: ImageData) => void;
@@ -92,10 +97,6 @@ interface PixelRestoreStore {
   applyGridRestoreResult: () => void;
 }
 
-const loadedPreferences =
-  loadPixelRestorePreferences(pixelRestorePreferencesRepository) ??
-  DEFAULT_PIXEL_RESTORE_PREFERENCES;
-
 const sessionDefaults = {
   open: false,
   sourceImageData: null as ImageData | null,
@@ -113,18 +114,16 @@ const sessionDefaults = {
 
 const initialState = {
   ...sessionDefaults,
-  restoreMode: loadedPreferences.restoreMode,
-  selectedScale: loadedPreferences.selectedScale,
-  mergeAlgorithm: loadedPreferences.mergeAlgorithm,
-  gridScaleType: loadedPreferences.gridScaleType,
-  gridColumnCount: loadedPreferences.gridColumnCount,
-  gridRowCount: loadedPreferences.gridRowCount,
+  restoreMode: DEFAULT_PIXEL_RESTORE_PREFERENCES.restoreMode,
+  selectedScale: DEFAULT_PIXEL_RESTORE_PREFERENCES.selectedScale,
+  mergeAlgorithm: DEFAULT_PIXEL_RESTORE_PREFERENCES.mergeAlgorithm,
+  gridScaleType: DEFAULT_PIXEL_RESTORE_PREFERENCES.gridScaleType,
+  gridColumnCount: DEFAULT_PIXEL_RESTORE_PREFERENCES.gridColumnCount,
+  gridRowCount: DEFAULT_PIXEL_RESTORE_PREFERENCES.gridRowCount,
 };
 
-let isHydratingPreferences = true;
+let isHydratingPreferences = false;
 let preferencesSaveTimer: ReturnType<typeof setTimeout> | null = null;
-
-isHydratingPreferences = false;
 
 function resetGridSelection() {
   return {
@@ -262,6 +261,20 @@ export const usePixelRestoreStore = create<PixelRestoreStore>((set, get) => ({
   openPage: () => set({ open: true }),
 
   closePage: () => set({ open: false, monitorPickerOpen: false }),
+
+  hydratePreferences: (prefs) => {
+    isHydratingPreferences = true;
+    const applied = prefs ?? DEFAULT_PIXEL_RESTORE_PREFERENCES;
+    set({
+      restoreMode: applied.restoreMode,
+      selectedScale: applied.selectedScale,
+      mergeAlgorithm: applied.mergeAlgorithm,
+      gridScaleType: applied.gridScaleType,
+      gridColumnCount: applied.gridColumnCount,
+      gridRowCount: applied.gridRowCount,
+    });
+    isHydratingPreferences = false;
+  },
 
   reset: () => {
     const prefs = pickPreferenceFields(get());
@@ -601,7 +614,7 @@ export const usePixelRestoreStore = create<PixelRestoreStore>((set, get) => ({
 }));
 
 usePixelRestoreStore.subscribe((state, prev) => {
-  if (isHydratingPreferences) return;
+  if (isHydratingPreferences || isUserDataHydrating()) return;
 
   if (
     state.restoreMode === prev.restoreMode &&
@@ -619,8 +632,14 @@ usePixelRestoreStore.subscribe((state, prev) => {
   }
 
   preferencesSaveTimer = setTimeout(() => {
-    savePixelRestorePreferences(
+    const softwareDataPath = getActiveSoftwareDataPath();
+    if (!softwareDataPath) {
+      preferencesSaveTimer = null;
+      return;
+    }
+    void savePixelRestorePreferences(
       pixelRestorePreferencesRepository,
+      softwareDataPath,
       extractPixelRestorePreferences(state),
     );
     preferencesSaveTimer = null;

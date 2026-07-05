@@ -42,7 +42,7 @@ export function ExportImageModal() {
   const project = useAppStore((s) => s.project);
   const selection = useAppStore((s) => s.selection);
   const preferences = useAppStore((s) => s.imageExportPreferences);
-  const projectsWorkspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
   const closeExportImageModal = useAppStore((s) => s.closeExportImageModal);
   const pickExportDirectory = useAppStore((s) => s.pickExportDirectory);
   const executeExportImage = useAppStore((s) => s.executeExportImage);
@@ -63,7 +63,7 @@ export function ExportImageModal() {
   useEffect(() => {
     if (!open || !project) return;
     setDirectory(
-      preferences.lastExportDirectory ?? projectsWorkspacePath ?? null,
+      preferences.lastExportDirectory ?? softwareDataPath ?? null,
     );
     setFileName(project.name);
     setFormat(preferences.format);
@@ -76,7 +76,7 @@ export function ExportImageModal() {
     setCustomLongestEdge(preferences.customLongestEdge);
     setError(null);
     setExporting(false);
-  }, [open, project, preferences, projectsWorkspacePath, hasSelection]);
+  }, [open, project, preferences, softwareDataPath, hasSelection]);
 
   useEffect(() => {
     if (!open) return;

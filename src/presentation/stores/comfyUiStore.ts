@@ -2,7 +2,6 @@ import { create } from "zustand";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { importComfyWorkflow } from "@/application/use-cases/ImportComfyWorkflow";
-import { loadComfyUiSettings } from "@/application/use-cases/LoadComfyUiSettings";
 import { saveComfyUiSettings } from "@/application/use-cases/SaveComfyUiSettings";
 import { runComfyWorkflow } from "@/application/use-cases/RunComfyWorkflow";
 import {
@@ -18,8 +17,11 @@ import {
   setParameterValue,
   type ComfyParameter,
 } from "@/domain/comfyui/ComfyParameter";
-import { getExportableNodeIds } from "@/domain/comfyui/ComfyOutputNode";
-import { loadComfyOutputClassTypes } from "@/application/use-cases/LoadComfyOutputClassTypes";
+import {
+  DEFAULT_OUTPUT_CLASS_TYPES,
+  getExportableNodeIds,
+  normalizeOutputClassTypes,
+} from "@/domain/comfyui/ComfyOutputNode";
 import { saveComfyOutputClassTypes } from "@/application/use-cases/SaveComfyOutputClassTypes";
 import {
   initialRunProgress,
@@ -29,7 +31,11 @@ import {
 import type { ComfyImageRef } from "@/domain/comfyui/ComfyResult";
 import { getNodeTitle, type ComfyApiWorkflow } from "@/domain/comfyui/ComfyWorkflow";
 import { comfyUiClient } from "@/infrastructure/comfyui/createComfyUiClient";
-import { comfyUiSettingsRepository } from "@/infrastructure/storage/LocalComfyUiSettingsRepository";
+import { comfyUiSettingsRepository } from "@/infrastructure/storage/FileComfyUiSettingsRepository";
+import {
+  getActiveSoftwareDataPath,
+  isUserDataHydrating,
+} from "@/infrastructure/storage/UserDataPersistenceContext";
 import { toast } from "@/presentation/stores/toastStore";
 
 export interface ComfyResultItem {
@@ -58,6 +64,7 @@ interface ComfyUiStore {
   openPage: () => void;
   closePage: () => void;
   reset: () => void;
+  hydrateSettings: (serverConfig: ComfyServerConfig, outputClassTypes: string[]) => void;
   setServerAddress: (address: string) => void;
   importWorkflow: (jsonText: string, name: string) => void;
   importWorkflowFromFile: (file: File) => Promise<void>;
@@ -79,6 +86,24 @@ function revokeResults(results: ComfyResultItem[]): void {
   }
 }
 
+function applyOutputClassTypes(
+  state: Pick<ComfyUiStore, "workflow" | "outputClassTypes" | "selectedOutputNodeIds">,
+  normalized: string[],
+): Partial<Pick<ComfyUiStore, "outputClassTypes" | "selectedOutputNodeIds">> {
+  const { workflow, outputClassTypes: prevTypes, selectedOutputNodeIds } = state;
+  if (!workflow) {
+    return { outputClassTypes: normalized };
+  }
+  const prevExportable = new Set(getExportableNodeIds(workflow, prevTypes));
+  const nextExportable = getExportableNodeIds(workflow, normalized);
+  const keep = selectedOutputNodeIds.filter((id) => nextExportable.includes(id));
+  const added = nextExportable.filter((id) => !prevExportable.has(id));
+  return {
+    outputClassTypes: normalized,
+    selectedOutputNodeIds: [...new Set([...keep, ...added])],
+  };
+}
+
 const sessionDefaults = {
   workflow: null as ComfyApiWorkflow | null,
   workflowName: null as string | null,
@@ -93,8 +118,8 @@ const sessionDefaults = {
 
 export const useComfyUiStore = create<ComfyUiStore>((set, get) => ({
   open: false,
-  serverConfig: loadComfyUiSettings(comfyUiSettingsRepository),
-  outputClassTypes: loadComfyOutputClassTypes(comfyUiSettingsRepository),
+  serverConfig: createComfyServerConfig(),
+  outputClassTypes: [...DEFAULT_OUTPUT_CLASS_TYPES],
   ...sessionDefaults,
 
   openPage: () => set({ open: true }),
@@ -110,10 +135,17 @@ export const useComfyUiStore = create<ComfyUiStore>((set, get) => ({
     set({ ...sessionDefaults });
   },
 
+  hydrateSettings: (serverConfig, outputClassTypes) => {
+    set({ serverConfig, outputClassTypes });
+  },
+
   setServerAddress: (address) => {
     const serverConfig = createComfyServerConfig(address);
     set({ serverConfig });
-    saveComfyUiSettings(comfyUiSettingsRepository, serverConfig);
+    if (isUserDataHydrating()) return;
+    const softwareDataPath = getActiveSoftwareDataPath();
+    if (!softwareDataPath) return;
+    void saveComfyUiSettings(comfyUiSettingsRepository, softwareDataPath, serverConfig);
   },
 
   importWorkflow: (jsonText, name) => {
@@ -180,22 +212,12 @@ export const useComfyUiStore = create<ComfyUiStore>((set, get) => ({
   setSelectedOutputNodeIds: (nodeIds) => set({ selectedOutputNodeIds: [...nodeIds] }),
 
   setOutputClassTypes: (types) => {
-    const normalized = saveComfyOutputClassTypes(comfyUiSettingsRepository, types);
-    set((state) => {
-      const { workflow, outputClassTypes: prevTypes, selectedOutputNodeIds } = state;
-      if (!workflow) {
-        return { outputClassTypes: normalized };
-      }
-      // 白名单变更后重算选择：保留仍可导出的，已选 + 新增可导出节点默认勾选
-      const prevExportable = new Set(getExportableNodeIds(workflow, prevTypes));
-      const nextExportable = getExportableNodeIds(workflow, normalized);
-      const keep = selectedOutputNodeIds.filter((id) => nextExportable.includes(id));
-      const added = nextExportable.filter((id) => !prevExportable.has(id));
-      return {
-        outputClassTypes: normalized,
-        selectedOutputNodeIds: [...new Set([...keep, ...added])],
-      };
-    });
+    const normalized = normalizeOutputClassTypes(types);
+    set((state) => applyOutputClassTypes(state, normalized));
+    if (isUserDataHydrating()) return;
+    const softwareDataPath = getActiveSoftwareDataPath();
+    if (!softwareDataPath) return;
+    void saveComfyOutputClassTypes(comfyUiSettingsRepository, softwareDataPath, normalized);
   },
 
   run: async () => {

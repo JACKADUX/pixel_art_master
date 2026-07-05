@@ -26,7 +26,7 @@ export async function saveProjectBeforeReplace(
 
   const persistedPath = getPersistedProjectPath(project);
   if (persistedPath) {
-    const saved = await saveProject(repository, project, persistedPath);
+    const saved = await saveProject(repository, project, persistedPath, null);
     return { savedProject: saved, cancelled: false };
   }
 
@@ -35,7 +35,7 @@ export async function saveProjectBeforeReplace(
     return { savedProject: null, cancelled: true };
   }
 
-  const saved = await saveProject(repository, project, selected);
+  const saved = await saveProject(repository, project, selected, null);
   return { savedProject: saved, cancelled: false };
 }
 

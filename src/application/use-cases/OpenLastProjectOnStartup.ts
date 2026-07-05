@@ -6,14 +6,15 @@ import { loadProject } from "./LoadProject";
 export async function openLastProjectOnStartup(
   store: ILastOpenedProjectStore,
   repository: IProjectRepository,
+  softwareDataPath: string,
 ): Promise<Project | null> {
-  const path = store.getPath();
+  const path = await store.getPath(softwareDataPath);
   if (!path) return null;
 
   try {
-    return await loadProject(repository, path);
+    return await loadProject(repository, path, softwareDataPath);
   } catch {
-    store.clearPath();
+    await store.clearPath(softwareDataPath);
     return null;
   }
 }

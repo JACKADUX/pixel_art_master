@@ -1,8 +1,9 @@
 import type { ILastOpenedProjectStore } from "../ports/ILastOpenedProjectStore";
 
-export function saveLastOpenedProject(
+export async function saveLastOpenedProject(
   store: ILastOpenedProjectStore,
+  softwareDataPath: string,
   filePath: string,
-): void {
-  store.setPath(filePath);
+): Promise<void> {
+  await store.setPath(softwareDataPath, filePath);
 }

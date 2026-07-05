@@ -11,7 +11,8 @@ import {
   getLayerGrid,
   resizeAllLayers,
 } from "../layer/LayerOperations";
-import { createCanvasSize } from "../canvas/CanvasSize";
+import { createCanvasSize, type CanvasSize } from "../canvas/CanvasSize";
+import { DEFAULT_CANVAS_SIZE } from "../canvas/CanvasSizePreset";
 import { isDrawingLayer, isReferenceLayer } from "../layer/LayerTypeGuards";
 import type { ReferenceLayer } from "../layer/Layer";
 import {
@@ -71,11 +72,12 @@ export function createDefaultProjectName(date = new Date()): string {
   return `${year}-${month}-${day} ${hours}-${minutes}-${seconds}`;
 }
 
-export function createEmptyProject(name?: string): Project {
+export function createEmptyProject(name?: string, size?: CanvasSize): Project {
   const projectName = name ?? createDefaultProjectName();
   const now = new Date().toISOString();
-  const width = 64;
-  const height = 64;
+  const canvasSize = size ?? DEFAULT_CANVAS_SIZE;
+  const width = canvasSize.width;
+  const height = canvasSize.height;
   const layers = createDefaultLayers(width, height);
   const drawingLayer = layers.find((l) => l.type === "drawing")!;
 

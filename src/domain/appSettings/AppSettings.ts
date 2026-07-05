@@ -1,4 +1,10 @@
 import { fromHex, toHex, type PixelColor } from "@/domain/canvas/PixelColor";
+import {
+  MAX_CANVAS_DIMENSION,
+  MIN_CANVAS_DIMENSION,
+} from "@/domain/canvas/CanvasSize";
+import type { CustomCanvasSizePresetRecord } from "@/domain/canvas/CanvasSizePresetOperations";
+import { DEFAULT_CANVAS_SIZE } from "@/domain/canvas/CanvasSizePreset";
 import { DEFAULT_GRID } from "@/domain/project/Project";
 
 export const APP_SETTINGS_VERSION = 1;
@@ -28,6 +34,9 @@ export const MAX_SYMMETRY_AXIS_LINE_WIDTH = 8;
 export interface AppSettings {
   autoSaveIntervalMinutes: number;
   pomodoroVisible: boolean;
+  defaultCanvasWidth: number;
+  defaultCanvasHeight: number;
+  customCanvasSizePresets: CustomCanvasSizePresetRecord[];
   defaultGridPrimary: number;
   defaultGridSecondary: number;
   gridColorHex: string;
@@ -47,6 +56,9 @@ export interface AppSettings {
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   autoSaveIntervalMinutes: DEFAULT_AUTO_SAVE_INTERVAL_MINUTES,
   pomodoroVisible: true,
+  defaultCanvasWidth: DEFAULT_CANVAS_SIZE.width,
+  defaultCanvasHeight: DEFAULT_CANVAS_SIZE.height,
+  customCanvasSizePresets: [],
   defaultGridPrimary: DEFAULT_GRID.primary,
   defaultGridSecondary: DEFAULT_GRID.secondary,
   gridColorHex: DEFAULT_GRID_COLOR_HEX,
@@ -81,6 +93,37 @@ function parseHexColor(raw: unknown, fallback: string): string {
 
 export function clampGridSize(value: number): number {
   return clampNumber(value, MIN_GRID_SIZE, MAX_GRID_SIZE, DEFAULT_GRID.primary);
+}
+
+export function clampCanvasDimension(value: number): number {
+  return clampNumber(
+    value,
+    MIN_CANVAS_DIMENSION,
+    MAX_CANVAS_DIMENSION,
+    DEFAULT_CANVAS_SIZE.width,
+  );
+}
+
+function parseCustomCanvasSizePresets(raw: unknown): CustomCanvasSizePresetRecord[] {
+  if (!Array.isArray(raw)) return [];
+
+  const presets: CustomCanvasSizePresetRecord[] = [];
+  for (const item of raw) {
+    if (!isRecord(item)) continue;
+    if (typeof item.id !== "string" || typeof item.label !== "string") continue;
+    if (typeof item.width !== "number" || typeof item.height !== "number") continue;
+
+    const width = clampCanvasDimension(item.width);
+    const height = clampCanvasDimension(item.height);
+    presets.push({
+      id: item.id,
+      label: item.label.trim() || `${width}×${height}`,
+      width,
+      height,
+    });
+  }
+
+  return presets;
 }
 
 export function clampAutoSaveIntervalMinutes(value: number): number {
@@ -162,6 +205,17 @@ export function parseAppSettings(raw: unknown): AppSettings {
     ),
     pomodoroVisible:
       typeof raw.pomodoroVisible === "boolean" ? raw.pomodoroVisible : defaults.pomodoroVisible,
+    defaultCanvasWidth: clampCanvasDimension(
+      typeof raw.defaultCanvasWidth === "number"
+        ? raw.defaultCanvasWidth
+        : defaults.defaultCanvasWidth,
+    ),
+    defaultCanvasHeight: clampCanvasDimension(
+      typeof raw.defaultCanvasHeight === "number"
+        ? raw.defaultCanvasHeight
+        : defaults.defaultCanvasHeight,
+    ),
+    customCanvasSizePresets: parseCustomCanvasSizePresets(raw.customCanvasSizePresets),
     defaultGridPrimary,
     defaultGridSecondary,
     gridColorHex: parseHexColor(raw.gridColorHex, defaults.gridColorHex),

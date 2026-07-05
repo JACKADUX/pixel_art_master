@@ -67,8 +67,6 @@ import {
 
 import { usePixelRestoreStore } from "@/presentation/stores/pixelRestoreStore";
 import { useColorEditStore } from "@/presentation/stores/colorEditStore";
-import { useAiChatStore } from "@/presentation/stores/aiChatStore";
-import { useAiVisionStore } from "@/presentation/stores/aiVisionStore";
 import { useComfyUiStore } from "@/presentation/stores/comfyUiStore";
 import { useWorldStore } from "@/presentation/stores/worldStore";
 import type { ToolPageId } from "@/presentation/config/toolPagesConfig";
@@ -131,24 +129,26 @@ import {
 } from "@/application/use-cases/LayerUseCases";
 
 import { resolveColorAtCanvasPointAsync } from "@/application/use-cases/PickColorAtPoint";
+import { loadAppSettings } from "@/application/use-cases/LoadAppSettings";
 import { loadEditorPreferences } from "@/application/use-cases/LoadEditorPreferences";
 import { exportImage } from "@/application/use-cases/ExportImageUseCases";
 import { loadProject } from "@/application/use-cases/LoadProject";
-import { createEmptyProjectWithDefaultPalette } from "@/application/use-cases/PalettePresetUseCases";
+import { createBlankProjectWithPreferences } from "@/application/use-cases/CanvasSizePreferences";
 import { openLastProjectOnStartup } from "@/application/use-cases/OpenLastProjectOnStartup";
 import { saveEditorPreferences } from "@/application/use-cases/SaveEditorPreferences";
 import { saveLastOpenedProject } from "@/application/use-cases/SaveLastOpenedProject";
 import { getPersistedProjectPath } from "@/application/use-cases/ProjectPersistence";
+import { migrateUserDataFromLocalStorage } from "@/application/use-cases/MigrateUserDataFromLocalStorage";
 
 import { deleteProject } from "@/application/use-cases/DeleteProject";
 
-import { renameProjectInWorkspace } from "@/application/use-cases/RenameProjectInWorkspace";
+import { renameProjectInSoftwareDataPath } from "@/application/use-cases/RenameProjectInSoftwareDataPath";
 
 import {
-  ensureWorkspaceAccess,
-  markWorkspaceAccessGranted,
-} from "@/application/use-cases/EnsureWorkspaceAccess";
-import { listProjectsInWorkspace } from "@/application/use-cases/ListProjectsInWorkspace";
+  ensureSoftwareDataPathAccess,
+  markSoftwareDataPathAccessGranted,
+} from "@/application/use-cases/EnsureSoftwareDataPathAccess";
+import { listProjectsInSoftwareDataPath } from "@/application/use-cases/ListProjectsInSoftwareDataPath";
 
 import {
 
@@ -159,6 +159,9 @@ import {
 import { saveCurrentProject as saveCurrentProjectUseCase } from "@/application/use-cases/SaveCurrentProject";
 import { saveProject } from "@/application/use-cases/SaveProject";
 import { resizeCanvas } from "@/application/use-cases/ResizeCanvas";
+import { resizeCanvasByEdge } from "@/application/use-cases/ResizeCanvasByEdge";
+import type { CanvasResizeEdge } from "@/domain/canvas/CanvasEdgeResizeOperations";
+import type { CanvasSize } from "@/domain/canvas/CanvasSize";
 
 import type { CanvasDisplayMode } from "@/domain/color/CanvasDisplayMode";
 import type { ColorMode } from "@/domain/color/ColorMode";
@@ -200,7 +203,7 @@ import {
 
   getActiveLayer,
 
-  createEmptyProject,
+  getCanvasSize,
 
   isUnsavedEmptyProject,
 
@@ -221,6 +224,7 @@ import type { Point } from "@/domain/tool/ITool";
 import {
   DEFAULT_TOOL_SETTINGS,
   clampStampSize,
+  clampCanvasResizeStep,
   type ToolSettings,
   type ToolType,
 } from "@/domain/tool/ToolType";
@@ -266,20 +270,22 @@ import {
 import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
 
 import { projectRepository } from "@/infrastructure/storage/JsonProjectRepository";
-
-import { editorPreferencesRepository } from "@/infrastructure/storage/LocalEditorPreferencesRepository";
 import {
-  imageExportPreferencesRepository,
-  loadImageExportPreferences,
-} from "@/infrastructure/storage/LocalImageExportPreferencesRepository";
-import type {
-  ImageExportFormat,
-  ImageExportPreferences,
-  ImageExportScalePreset,
-  ImageExportScope,
+  DEFAULT_IMAGE_EXPORT_PREFERENCES,
+  parseImageExportPreferences,
+  type ImageExportFormat,
+  type ImageExportPreferences,
+  type ImageExportScalePreset,
+  type ImageExportScope,
 } from "@/domain/export/ImageExportPreferences";
-import { lastOpenedProjectStore } from "@/infrastructure/storage/LocalLastOpenedProjectStore";
-import { projectsWorkspaceStore } from "@/infrastructure/storage/LocalProjectsWorkspaceStore";
+import { imageExportPreferencesRepository } from "@/infrastructure/storage/FileImageExportPreferencesRepository";
+import { lastOpenedProjectStore } from "@/infrastructure/storage/FileLastOpenedProjectStore";
+import { softwareDataPathStore } from "@/infrastructure/storage/LocalSoftwareDataPathStore";
+import {
+  getActiveSoftwareDataPath,
+  setActiveSoftwareDataPath,
+  setUserDataHydrating,
+} from "@/infrastructure/storage/UserDataPersistenceContext";
 
 import { assetLibraryRepository } from "@/infrastructure/storage/FileAssetLibraryRepository";
 import { patternBrushRepository } from "@/infrastructure/storage/FilePatternBrushRepository";
@@ -302,24 +308,25 @@ import {
 import {
   createAppSettingsSlice,
   subscribeAppSettingsPersistence,
-  applyAppSettingsGridDefaults,
+  setAppSettingsHydrating,
   type AppSettingsSliceActions,
   type AppSettingsSliceState,
 } from "@/presentation/stores/appSettingsSlice";
-import { appSettingsRepository } from "@/infrastructure/storage/LocalAppSettingsRepository";
 import {
   createLlmSettingsSlice,
   subscribeLlmSettingsPersistence,
   type LlmSettingsSliceActions,
   type LlmSettingsSliceState,
 } from "@/presentation/stores/llmSettingsSlice";
-import { llmSettingsRepository } from "@/infrastructure/storage/LocalLlmSettingsRepository";
 import {
   createPalettePresetSlice,
   type PalettePresetSliceActions,
   type PalettePresetSliceState,
 } from "@/presentation/stores/palettePresetSlice";
-import { palettePresetRepository } from "@/infrastructure/storage/LocalPalettePresetRepository";
+import { editorPreferencesRepository } from "@/infrastructure/storage/FileEditorPreferencesRepository";
+import { appSettingsRepository } from "@/infrastructure/storage/FileAppSettingsRepository";
+import { llmSettingsRepository } from "@/infrastructure/storage/FileLlmSettingsRepository";
+import { palettePresetRepository } from "@/infrastructure/storage/FilePalettePresetRepository";
 import {
   createWorkspaceRegionSlice,
   type WorkspaceRegionSliceActions,
@@ -475,7 +482,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   projectManagerOpen: boolean;
 
-  projectsWorkspacePath: string | null;
+  softwareDataPath: string | null;
 
   projectSummaries: ProjectSummary[];
 
@@ -801,8 +808,6 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   openWorldPage: () => void;
 
-  openAiChatTestPage: () => void;
-  openAiVisionTestPage: () => void;
   openComfyUiPage: () => void;
 
   saveImageToAssetLibrary: (imageData: ImageData, title: string) => Promise<void>;
@@ -820,6 +825,14 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   closeCanvasSizeModal: () => void;
 
   applyCanvasSize: (width: number, height: number) => void;
+
+  pushCanvasResizeHistory: () => void;
+
+  applyCanvasEdgeResize: (
+    edge: CanvasResizeEdge,
+    delta: number,
+    anchorSize?: CanvasSize,
+  ) => void;
 
   openExportImageModal: () => void;
 
@@ -848,7 +861,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   closeProjectManager: () => void;
 
-  pickProjectsWorkspace: () => Promise<void>;
+  pickSoftwareDataPath: () => Promise<void>;
 
   refreshProjectList: () => Promise<void>;
 
@@ -868,7 +881,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
 async function promptSaveAs(defaultName: string): Promise<string | null> {
 
-  const defaultPath = await resolveDefaultSavePath(projectsWorkspaceStore, defaultName);
+  const defaultPath = await resolveDefaultSavePath(softwareDataPathStore, defaultName);
 
   const selected = await save({
 
@@ -958,8 +971,6 @@ type ActiveToolPage =
   | "pixelRestore"
   | "colorEdit"
   | "world"
-  | "aiChat"
-  | "aiVision"
   | "comfyui";
 
 function closeOtherToolPages(except?: ActiveToolPage): void {
@@ -972,12 +983,6 @@ function closeOtherToolPages(except?: ActiveToolPage): void {
   if (except !== "world") {
     useWorldStore.getState().closePage();
   }
-  if (except !== "aiChat") {
-    useAiChatStore.getState().closePage();
-  }
-  if (except !== "aiVision") {
-    useAiVisionStore.getState().closePage();
-  }
   if (except !== "comfyui") {
     useComfyUiStore.getState().closePage();
   }
@@ -989,7 +994,7 @@ export const useAppStore = create<AppState>((set, get) => {
     set as Parameters<typeof createAssetLibrarySlice>[0],
     get,
     {
-      workspaceStore: projectsWorkspaceStore,
+      pathStore: softwareDataPathStore,
       assetRepository: assetLibraryRepository,
       clipboard: clipboardService,
       imageProcessor,
@@ -1000,7 +1005,7 @@ export const useAppStore = create<AppState>((set, get) => {
     set as Parameters<typeof createPatternBrushSlice>[0],
     get,
     {
-      workspaceStore: projectsWorkspaceStore,
+      pathStore: softwareDataPathStore,
       patternBrushRepository,
     },
   );
@@ -1025,6 +1030,7 @@ export const useAppStore = create<AppState>((set, get) => {
     set as Parameters<typeof createPalettePresetSlice>[0],
     get,
     {
+      pathStore: softwareDataPathStore,
       palettePresetRepository,
       imageProcessor,
     },
@@ -1051,7 +1057,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
   ...workspaceRegionSlice,
 
-  project: createEmptyProject(),
+  project: createBlankProjectWithPreferences(
+    appSettingsSlice.appSettings,
+    palettePresetSlice.palettePresetLibrary,
+  ),
 
   activeTool: "brush",
 
@@ -1103,7 +1112,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   projectManagerOpen: false,
 
-  projectsWorkspacePath: projectsWorkspaceStore.getPath(),
+  softwareDataPath: softwareDataPathStore.getPath(),
 
   projectSummaries: [],
 
@@ -1149,7 +1158,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   exportImageModalOpen: false,
 
-  imageExportPreferences: loadImageExportPreferences(),
+  imageExportPreferences: DEFAULT_IMAGE_EXPORT_PREFERENCES,
 
   historyStack: new HistoryStack(),
 
@@ -1178,149 +1187,168 @@ export const useAppStore = create<AppState>((set, get) => {
   init: async () => {
 
     isHydratingPreferences = true;
+    setUserDataHydrating(true);
+    setAppSettingsHydrating(true);
 
-    set({ projectsWorkspacePath: projectsWorkspaceStore.getPath() });
+    const softwareDataPath = softwareDataPathStore.getPath();
+    set({ softwareDataPath });
+    setActiveSoftwareDataPath(softwareDataPath);
 
-    const prefs = loadEditorPreferences(editorPreferencesRepository);
+    if (softwareDataPath) {
+      await migrateUserDataFromLocalStorage(softwareDataPath);
 
-    if (prefs) {
-
-      const current = get();
+      const [prefs, appSettings, imageExportRaw, alwaysOnTop] = await Promise.all([
+        loadEditorPreferences(editorPreferencesRepository, softwareDataPath),
+        loadAppSettings(appSettingsRepository, softwareDataPath),
+        imageExportPreferencesRepository.load(softwareDataPath),
+        windowService.getStoredPreference(softwareDataPath),
+      ]);
 
       set({
-
-        activeTool: prefs.activeTool,
-
-        toolSettings: prefs.toolSettings,
-
-        foregroundColor: prefs.foregroundColor,
-
-        backgroundColor: prefs.backgroundColor,
-
-        zoom: prefs.zoom,
-
-        paletteViewMode: prefs.paletteViewMode,
-
-        colorPickerMode: prefs.colorPickerMode,
-
-        colorPickerLayoutOrientation: prefs.colorPickerLayoutOrientation,
-
-        sidebarWidth: prefs.sidebarWidth,
-
-        splitPaneRatio: prefs.splitPaneRatio,
-
-        navigator: {
-
-          ...current.navigator,
-
-          visible: prefs.navigatorLayout.visible,
-
-          position: prefs.navigatorLayout.position,
-
-          size: prefs.navigatorLayout.size,
-
-          edgeAnchor: prefs.navigatorLayout.edgeAnchor,
-
-          previewScale: 1,
-
-          previewPan: { x: 0, y: 0 },
-
-        },
-
-        floatingColorPicker: {
-
-          ...current.floatingColorPicker,
-
-          visible: prefs.floatingColorPickerLayout.visible,
-
-          position: prefs.floatingColorPickerLayout.position,
-
-          panelWidth: prefs.floatingColorPickerLayout.panelWidth,
-
-          panelHeight: prefs.floatingColorPickerLayout.panelHeight,
-
-          activeSlot: prefs.floatingColorPickerLayout.activeSlot,
-
-          edgeAnchor: prefs.floatingColorPickerLayout.edgeAnchor,
-
-        },
-
-        mousePositionOverlayVisible: prefs.mousePositionOverlayVisible,
-
-        canvasDisplayMode: prefs.canvasDisplayMode,
-
-        assetLibraryDrawerExpanded: prefs.assetLibraryDrawerExpanded,
-
-        assetLibraryDrawerHeight: prefs.assetLibraryDrawerHeight,
-
-        assetFolderTreeWidth: prefs.assetFolderTreeWidth,
-
-        symmetry: prefs.symmetry,
-
-        activePatternBrushId: prefs.activePatternBrushId,
-
-        patternBrushAnchorForegroundColor:
-          prefs.activePatternBrushId && prefs.toolSettings.brushShape === "pattern"
-            ? prefs.foregroundColor
-            : null,
-
+        appSettings,
+        imageExportPreferences: parseImageExportPreferences(imageExportRaw),
       });
 
+      if (prefs) {
+
+        const current = get();
+
+        set({
+
+          activeTool: prefs.activeTool,
+
+          toolSettings: prefs.toolSettings,
+
+          foregroundColor: prefs.foregroundColor,
+
+          backgroundColor: prefs.backgroundColor,
+
+          zoom: prefs.zoom,
+
+          paletteViewMode: prefs.paletteViewMode,
+
+          colorPickerMode: prefs.colorPickerMode,
+
+          colorPickerLayoutOrientation: prefs.colorPickerLayoutOrientation,
+
+          sidebarWidth: prefs.sidebarWidth,
+
+          splitPaneRatio: prefs.splitPaneRatio,
+
+          navigator: {
+
+            ...current.navigator,
+
+            visible: prefs.navigatorLayout.visible,
+
+            position: prefs.navigatorLayout.position,
+
+            size: prefs.navigatorLayout.size,
+
+            edgeAnchor: prefs.navigatorLayout.edgeAnchor,
+
+            previewScale: 1,
+
+            previewPan: { x: 0, y: 0 },
+
+          },
+
+          floatingColorPicker: {
+
+            ...current.floatingColorPicker,
+
+            visible: prefs.floatingColorPickerLayout.visible,
+
+            position: prefs.floatingColorPickerLayout.position,
+
+            panelWidth: prefs.floatingColorPickerLayout.panelWidth,
+
+            panelHeight: prefs.floatingColorPickerLayout.panelHeight,
+
+            activeSlot: prefs.floatingColorPickerLayout.activeSlot,
+
+            edgeAnchor: prefs.floatingColorPickerLayout.edgeAnchor,
+
+          },
+
+          mousePositionOverlayVisible: prefs.mousePositionOverlayVisible,
+
+          canvasDisplayMode: prefs.canvasDisplayMode,
+
+          assetLibraryDrawerExpanded: prefs.assetLibraryDrawerExpanded,
+
+          assetLibraryDrawerHeight: prefs.assetLibraryDrawerHeight,
+
+          assetFolderTreeWidth: prefs.assetFolderTreeWidth,
+
+          symmetry: prefs.symmetry,
+
+          activePatternBrushId: prefs.activePatternBrushId,
+
+          patternBrushAnchorForegroundColor:
+            prefs.activePatternBrushId && prefs.toolSettings.brushShape === "pattern"
+              ? prefs.foregroundColor
+              : null,
+
+        });
+
+      }
+
+      if (alwaysOnTop) {
+
+        await windowService.setAlwaysOnTop(true, softwareDataPath);
+
+        set({ alwaysOnTop: true });
+
+      }
     }
 
     void get().refreshPatternBrushLibrary();
 
-    get().loadPalettePresets();
-
-    set({ imageExportPreferences: loadImageExportPreferences() });
-
-    const stored = windowService.getStoredPreference();
-
-    if (stored) {
-
-      await windowService.setAlwaysOnTop(true);
-
-      set({ alwaysOnTop: true });
-
-    }
+    void get().loadPalettePresets();
 
     isHydratingPreferences = false;
+    setUserDataHydrating(false);
+    setAppSettingsHydrating(false);
 
-    const lastProject = await openLastProjectOnStartup(
-      lastOpenedProjectStore,
-      projectRepository,
-    );
+    if (softwareDataPath) {
+      const lastProject = await openLastProjectOnStartup(
+        lastOpenedProjectStore,
+        projectRepository,
+        softwareDataPath,
+      );
 
-    if (lastProject) {
+      if (lastProject) {
 
-      get().historyStack.clear();
+        get().historyStack.clear();
 
-      set({
+        set({
 
-        project: lastProject,
+          project: lastProject,
 
-        manualScaleOverride: null,
+          manualScaleOverride: null,
 
-        detectedScale: lastProject.canvas.scaleFactor,
+          detectedScale: lastProject.canvas.scaleFactor,
 
-        projectManagerOpen: false,
+          projectManagerOpen: false,
 
-        deleteConfirmTarget: null,
+          deleteConfirmTarget: null,
 
-        projectManagerError: null,
+          projectManagerError: null,
 
-        selection: null,
+          selection: null,
 
-        selectionDrag: null,
+          selectionDrag: null,
 
-        lassoPoints: [],
+          lassoPoints: [],
 
-        selectionPreviewRect: null,
+          selectionPreviewRect: null,
 
-      });
+        });
 
-      return;
+        return;
 
+      }
     }
 
     const { project } = get();
@@ -1359,10 +1387,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     set({
 
-      project: applyAppSettingsGridDefaults(
-        createEmptyProjectWithDefaultPalette(palettePresetLibrary),
-        appSettings,
-      ),
+      project: createBlankProjectWithPreferences(appSettings, palettePresetLibrary),
 
       manualScaleOverride: null,
 
@@ -1406,9 +1431,12 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!selected || typeof selected !== "string") return;
 
-    const project = await loadProject(projectRepository, selected);
+    const softwareDataPath = get().softwareDataPath ?? softwareDataPathStore.getPath();
+    const project = await loadProject(projectRepository, selected, softwareDataPath);
 
-    saveLastOpenedProject(lastOpenedProjectStore, selected);
+    if (softwareDataPath) {
+      await saveLastOpenedProject(lastOpenedProjectStore, softwareDataPath, selected);
+    }
 
     get().historyStack.clear();
 
@@ -1459,7 +1487,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
       projectRepository,
 
-      projectsWorkspaceStore,
+      softwareDataPathStore,
 
       lastOpenedProjectStore,
 
@@ -1467,12 +1495,12 @@ export const useAppStore = create<AppState>((set, get) => {
 
     );
 
-    set({ projectsWorkspacePath: projectsWorkspaceStore.getPath() });
+    set({ softwareDataPath: softwareDataPathStore.getPath() });
 
     if (!result.saved || !result.project) {
       switch (result.reason) {
-        case "noWorkspace":
-          toast.info("请先在项目管理中选择项目文件夹");
+        case "noSoftwareDataPath":
+          toast.info("请先选择软件数据路径");
           get().openProjectManager();
           break;
         case "accessDenied":
@@ -1498,7 +1526,7 @@ export const useAppStore = create<AppState>((set, get) => {
       };
     });
 
-    if (projectsWorkspaceStore.getPath()) {
+    if (softwareDataPathStore.getPath()) {
 
       await get().refreshProjectList();
 
@@ -1518,7 +1546,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!project) return false;
 
-    const defaultPath = await resolveDefaultSavePath(projectsWorkspaceStore, project.name);
+    const defaultPath = await resolveDefaultSavePath(softwareDataPathStore, project.name);
 
     const selected = await save({
 
@@ -1530,9 +1558,17 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!selected || typeof selected !== "string") return false;
 
-    const saved = await saveProject(projectRepository, project, selected);
+    const softwareDataPath = get().softwareDataPath ?? softwareDataPathStore.getPath();
+    const saved = await saveProject(
+      projectRepository,
+      project,
+      selected,
+      softwareDataPath,
+    );
 
-    saveLastOpenedProject(lastOpenedProjectStore, selected);
+    if (softwareDataPath) {
+      await saveLastOpenedProject(lastOpenedProjectStore, softwareDataPath, selected);
+    }
 
     set((state) => {
       if (!state.project || state.project.id !== saved.id) {
@@ -1544,7 +1580,7 @@ export const useAppStore = create<AppState>((set, get) => {
       };
     });
 
-    if (projectsWorkspaceStore.getPath()) {
+    if (softwareDataPathStore.getPath()) {
 
       await get().refreshProjectList();
 
@@ -1668,6 +1704,9 @@ export const useAppStore = create<AppState>((set, get) => {
       }
       if (settings.patternBrushScale !== undefined) {
         next.patternBrushScale = clampPatternScale(settings.patternBrushScale);
+      }
+      if (settings.canvasResizeStep !== undefined) {
+        next.canvasResizeStep = clampCanvasResizeStep(settings.canvasResizeStep);
       }
       const patch: Partial<AppState> = { toolSettings: next };
       if (
@@ -2412,9 +2451,12 @@ export const useAppStore = create<AppState>((set, get) => {
 
   toggleAlwaysOnTop: async () => {
 
+    const softwareDataPath = get().softwareDataPath ?? softwareDataPathStore.getPath();
+    if (!softwareDataPath) return;
+
     const next = !get().alwaysOnTop;
 
-    await windowService.setAlwaysOnTop(next);
+    await windowService.setAlwaysOnTop(next, softwareDataPath);
 
     set({ alwaysOnTop: next });
 
@@ -3483,12 +3525,12 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   importAssetToNewDrawingLayer: async (assetId) => {
-    const { project, projectsWorkspacePath, assetLibrary } = get();
+    const { project, softwareDataPath, assetLibrary } = get();
     if (!project) {
       toast.info("请先打开项目");
       return;
     }
-    if (!projectsWorkspacePath || !assetLibrary) {
+    if (!softwareDataPath || !assetLibrary) {
       toast.error("无法访问资产库");
       return;
     }
@@ -3502,7 +3544,7 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
     const imageData = await loadAssetImageAsImageData(
-      projectsWorkspacePath,
+      softwareDataPath,
       asset.imageFile,
     );
     if (!imageData) {
@@ -3520,12 +3562,12 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   importAssetToNewReferenceLayer: async (assetId) => {
-    const { project, projectsWorkspacePath, assetLibrary } = get();
+    const { project, softwareDataPath, assetLibrary } = get();
     if (!project) {
       toast.info("请先打开项目");
       return;
     }
-    if (!projectsWorkspacePath || !assetLibrary) {
+    if (!softwareDataPath || !assetLibrary) {
       toast.error("无法访问资产库");
       return;
     }
@@ -3539,7 +3581,7 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
     const imageData = await loadAssetImageAsImageData(
-      projectsWorkspacePath,
+      softwareDataPath,
       asset.imageFile,
     );
     if (!imageData) {
@@ -3608,12 +3650,12 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   importAssetColorsToPalette: async (assetId) => {
-    const { project, projectsWorkspacePath, assetLibrary } = get();
+    const { project, softwareDataPath, assetLibrary } = get();
     if (!project) {
       toast.info("请先打开项目");
       return;
     }
-    if (!projectsWorkspacePath || !assetLibrary) {
+    if (!softwareDataPath || !assetLibrary) {
       toast.error("无法访问资产库");
       return;
     }
@@ -3627,7 +3669,7 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
     const imageData = await loadAssetImageAsImageData(
-      projectsWorkspacePath,
+      softwareDataPath,
       asset.imageFile,
     );
     if (!imageData) {
@@ -3868,8 +3910,13 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   executeExportImage: async (input) => {
-    const { project, selection } = get();
+    const { project, selection, softwareDataPath } = get();
     if (!project) return null;
+    const activeSoftwareDataPath = softwareDataPath ?? softwareDataPathStore.getPath();
+    if (!activeSoftwareDataPath) {
+      toast.info("请先选择软件数据路径");
+      return null;
+    }
 
     try {
       const result = await exportImage({
@@ -3881,10 +3928,12 @@ export const useAppStore = create<AppState>((set, get) => {
         scope: input.scope,
         scalePreset: input.scalePreset,
         customLongestEdge: input.customLongestEdge,
+        softwareDataPath: activeSoftwareDataPath,
         preferencesRepository: imageExportPreferencesRepository,
       });
       if (!result) return null;
-      set({ imageExportPreferences: loadImageExportPreferences() });
+      const imageExportRaw = await imageExportPreferencesRepository.load(activeSoftwareDataPath);
+      set({ imageExportPreferences: parseImageExportPreferences(imageExportRaw) });
       toast.info(`已导出至 ${result.filePath}`);
       return result;
     } catch {
@@ -3899,6 +3948,34 @@ export const useAppStore = create<AppState>((set, get) => {
     get().historyStack.clear();
     set({
       project: resizeCanvas(project, width, height),
+      selection: null,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+    });
+    get().resetSymmetryToCenter();
+  },
+
+  pushCanvasResizeHistory: () => {
+    const { project, historyStack, selection } = get();
+    if (!project) return;
+    pushStructureHistory(historyStack, project, selection);
+  },
+
+  applyCanvasEdgeResize: (edge, delta, anchorSize) => {
+    const { project } = get();
+    if (!project) return;
+    const currentSize = getCanvasSize(project);
+    const updated = resizeCanvasByEdge(project, edge, delta, anchorSize);
+    const newSize = getCanvasSize(updated);
+    if (
+      newSize.width === currentSize.width &&
+      newSize.height === currentSize.height
+    ) {
+      return;
+    }
+    set({
+      project: updated,
       selection: null,
       selectionDrag: null,
       lassoPoints: [],
@@ -3997,26 +4074,14 @@ export const useAppStore = create<AppState>((set, get) => {
     useWorldStore.getState().openPage();
   },
 
-  openAiChatTestPage: () => {
-    closeOtherToolPages("aiChat");
-    useAiChatStore.getState().reset();
-    useAiChatStore.getState().openPage();
-  },
-
-  openAiVisionTestPage: () => {
-    closeOtherToolPages("aiVision");
-    useAiVisionStore.getState().reset();
-    useAiVisionStore.getState().openPage();
-  },
-
   openComfyUiPage: () => {
     closeOtherToolPages("comfyui");
     useComfyUiStore.getState().openPage();
   },
 
   sendAssetToToolPage: async (assetId, toolPageId) => {
-    const { projectsWorkspacePath, assetLibrary } = get();
-    if (!projectsWorkspacePath || !assetLibrary) {
+    const { softwareDataPath, assetLibrary } = get();
+    if (!softwareDataPath || !assetLibrary) {
       toast.error("无法访问资产库");
       return;
     }
@@ -4030,7 +4095,7 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
     const imageData = await loadAssetImageAsImageData(
-      projectsWorkspacePath,
+      softwareDataPath,
       asset.imageFile,
     );
     if (!imageData) {
@@ -4055,8 +4120,8 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   revealAssetInFolder: async (assetId) => {
-    const { projectsWorkspacePath, assetLibrary } = get();
-    if (!projectsWorkspacePath || !assetLibrary) {
+    const { softwareDataPath, assetLibrary } = get();
+    if (!softwareDataPath || !assetLibrary) {
       toast.error("无法访问资产库");
       return;
     }
@@ -4067,7 +4132,7 @@ export const useAppStore = create<AppState>((set, get) => {
     }
     try {
       await revealAssetFileInFolder(
-        projectsWorkspacePath,
+        softwareDataPath,
         getAssetRelativeFilePath(asset),
       );
     } catch {
@@ -4087,12 +4152,12 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
   exportRestoredImageToAssetLibrary: async (imageData) => {
-    const path = get().projectsWorkspacePath ?? projectsWorkspaceStore.getPath();
+    const path = get().softwareDataPath ?? softwareDataPathStore.getPath();
     if (!path) {
-      toast.info("请先选择项目文件夹");
+      toast.info("请先选择软件数据路径");
       return;
     }
-    const accessible = await ensureWorkspaceAccess(projectsWorkspaceStore);
+    const accessible = await ensureSoftwareDataPathAccess(softwareDataPathStore);
     if (!accessible) {
       toast.error("无法访问项目目录，请重新授权");
       return;
@@ -4126,12 +4191,12 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   saveImageToAssetLibrary: async (imageData, title) => {
-    const path = get().projectsWorkspacePath ?? projectsWorkspaceStore.getPath();
+    const path = get().softwareDataPath ?? softwareDataPathStore.getPath();
     if (!path) {
-      toast.info("请先选择项目文件夹");
+      toast.info("请先选择软件数据路径");
       return;
     }
-    const accessible = await ensureWorkspaceAccess(projectsWorkspaceStore);
+    const accessible = await ensureSoftwareDataPathAccess(softwareDataPathStore);
     if (!accessible) {
       toast.error("无法访问项目目录，请重新授权");
       return;
@@ -4241,7 +4306,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  getRecentProjects: () => projectRepository.getRecent(),
+  getRecentProjects: () => [],
 
 
 
@@ -4251,7 +4316,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
       projectManagerOpen: true,
 
-      projectsWorkspacePath: projectsWorkspaceStore.getPath(),
+      softwareDataPath: softwareDataPathStore.getPath(),
 
       projectManagerError: null,
 
@@ -4279,9 +4344,9 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  pickProjectsWorkspace: async () => {
+  pickSoftwareDataPath: async () => {
 
-    const current = projectsWorkspaceStore.getPath();
+    const current = softwareDataPathStore.getPath();
 
     const selected = await open({
 
@@ -4293,7 +4358,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
       defaultPath: current ?? undefined,
 
-      title: "选择项目文件夹",
+      title: "选择软件数据路径",
 
     });
 
@@ -4301,12 +4366,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-    projectsWorkspaceStore.setPath(selected);
-    markWorkspaceAccessGranted(selected);
+    softwareDataPathStore.setPath(selected);
+    setActiveSoftwareDataPath(selected);
+    markSoftwareDataPathAccessGranted(selected);
 
     set({
 
-      projectsWorkspacePath: selected,
+      softwareDataPath: selected,
 
       projectManagerError: null,
 
@@ -4320,7 +4386,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   refreshProjectList: async () => {
 
-    const workspacePath = projectsWorkspaceStore.getPath();
+    const workspacePath = softwareDataPathStore.getPath();
 
     if (!workspacePath) {
 
@@ -4334,7 +4400,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     set({ projectListLoading: true, projectManagerError: null });
 
-    const accessiblePath = await ensureWorkspaceAccess(projectsWorkspaceStore);
+    const accessiblePath = await ensureSoftwareDataPathAccess(softwareDataPathStore);
 
     if (!accessiblePath) {
 
@@ -4346,7 +4412,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
         projectManagerError: "无法访问项目目录，请点击「更改目录」重新选择文件夹",
 
-        projectsWorkspacePath: projectsWorkspaceStore.getPath(),
+        softwareDataPath: softwareDataPathStore.getPath(),
 
       });
 
@@ -4356,13 +4422,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-    set({ projectsWorkspacePath: accessiblePath });
+    set({ softwareDataPath: accessiblePath });
 
 
 
     try {
 
-      const summaries = await listProjectsInWorkspace(projectRepository, projectsWorkspaceStore);
+      const summaries = await listProjectsInSoftwareDataPath(projectRepository, softwareDataPathStore);
 
       set({ projectSummaries: summaries, projectListLoading: false });
 
@@ -4388,9 +4454,12 @@ export const useAppStore = create<AppState>((set, get) => {
 
     try {
 
-      const project = await loadProject(projectRepository, path);
+      const softwareDataPath = get().softwareDataPath ?? softwareDataPathStore.getPath();
+      const project = await loadProject(projectRepository, path, softwareDataPath);
 
-      saveLastOpenedProject(lastOpenedProjectStore, path);
+      if (softwareDataPath) {
+        await saveLastOpenedProject(lastOpenedProjectStore, softwareDataPath, path);
+      }
 
       get().historyStack.clear();
 
@@ -4440,11 +4509,11 @@ export const useAppStore = create<AppState>((set, get) => {
 
     try {
 
-      const result = await renameProjectInWorkspace(
+      const result = await renameProjectInSoftwareDataPath(
 
         projectRepository,
 
-        projectsWorkspaceStore,
+        softwareDataPathStore,
 
         filePath,
 
@@ -4500,11 +4569,14 @@ export const useAppStore = create<AppState>((set, get) => {
 
     try {
 
+      const softwareDataPath = get().softwareDataPath ?? softwareDataPathStore.getPath();
       const result = await deleteProject(
 
         projectRepository,
 
         deleteConfirmTarget.filePath,
+
+        softwareDataPath,
 
         project,
 
@@ -4549,8 +4621,11 @@ useAppStore.subscribe(() => {
   }
 
   preferencesSaveTimer = setTimeout(() => {
-    saveEditorPreferences(
+    const softwareDataPath = getActiveSoftwareDataPath();
+    if (!softwareDataPath) return;
+    void saveEditorPreferences(
       editorPreferencesRepository,
+      softwareDataPath,
       extractEditorPreferences(useAppStore.getState()),
     );
     preferencesSaveTimer = null;

@@ -12,8 +12,8 @@ import {
 } from "./SettingsField";
 
 export function GeneralSettingsSection() {
-  const workspacePath = useAppStore((s) => s.projectsWorkspacePath);
-  const pickProjectsWorkspace = useAppStore((s) => s.pickProjectsWorkspace);
+  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
+  const pickSoftwareDataPath = useAppStore((s) => s.pickSoftwareDataPath);
   const autoSaveIntervalMinutes = useAppStore((s) => s.appSettings.autoSaveIntervalMinutes);
   const pomodoroVisible = useAppStore((s) => s.appSettings.pomodoroVisible);
   const setAutoSaveIntervalMinutes = useAppStore((s) => s.setAutoSaveIntervalMinutes);
@@ -22,14 +22,14 @@ export function GeneralSettingsSection() {
   return (
     <div className="flex flex-col gap-5">
       <SettingsGroup
-        title="项目文件夹"
+        title="软件数据路径"
         description="所有项目将默认保存到该目录，资产库保存在该目录下的 .pixelart-assets 中。"
       >
         <SettingsPathField
-          path={workspacePath}
-          emptyLabel="首次使用请选择项目文件夹，所有项目将默认保存到该目录。"
-          buttonLabel="选择项目文件夹"
-          onPick={() => void pickProjectsWorkspace()}
+          path={softwareDataPath}
+          emptyLabel="首次使用请选择软件数据路径，所有项目将默认保存到该目录。"
+          buttonLabel="选择软件数据路径"
+          onPick={() => void pickSoftwareDataPath()}
         />
       </SettingsGroup>
 

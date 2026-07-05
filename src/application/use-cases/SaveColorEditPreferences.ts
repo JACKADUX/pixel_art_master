@@ -1,9 +1,10 @@
 import type { ColorEditPreferences } from "@/domain/colorEdit/ColorEditPreferences";
 import type { IColorEditPreferencesRepository } from "../ports/IColorEditPreferencesRepository";
 
-export function saveColorEditPreferences(
+export async function saveColorEditPreferences(
   repository: IColorEditPreferencesRepository,
+  softwareDataPath: string,
   prefs: ColorEditPreferences,
-): void {
-  repository.save(prefs);
+): Promise<void> {
+  await repository.save(softwareDataPath, prefs);
 }

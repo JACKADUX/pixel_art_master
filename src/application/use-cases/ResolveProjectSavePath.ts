@@ -1,49 +1,49 @@
-import { buildProjectFilePath } from "@/domain/workspace/ProjectsWorkspace";
+import { buildProjectFilePath } from "@/domain/softwareDataPath/SoftwareDataPath";
 import { exists } from "@tauri-apps/plugin-fs";
-import type { IProjectsWorkspaceStore } from "../ports/IProjectsWorkspaceStore";
+import type { ISoftwareDataPathStore } from "../ports/ISoftwareDataPathStore";
 
 export async function resolveProjectSavePath(
-  workspaceStore: IProjectsWorkspaceStore,
+  pathStore: ISoftwareDataPathStore,
   projectName: string,
 ): Promise<string | null> {
-  const workspacePath = workspaceStore.getPath();
-  if (!workspacePath) {
+  const softwareDataPath = pathStore.getPath();
+  if (!softwareDataPath) {
     return null;
   }
 
   for (let suffix = 0; suffix < 1000; suffix++) {
-    const candidate = buildProjectFilePath(workspacePath, projectName, suffix);
+    const candidate = buildProjectFilePath(softwareDataPath, projectName, suffix);
     if (!(await exists(candidate))) {
       return candidate;
     }
   }
 
-  return buildProjectFilePath(workspacePath, projectName, Date.now());
+  return buildProjectFilePath(softwareDataPath, projectName, Date.now());
 }
 
 export async function resolveDefaultSavePath(
-  workspaceStore: IProjectsWorkspaceStore,
+  pathStore: ISoftwareDataPathStore,
   projectName: string,
 ): Promise<string | null> {
-  const workspacePath = workspaceStore.getPath();
-  if (!workspacePath) {
+  const softwareDataPath = pathStore.getPath();
+  if (!softwareDataPath) {
     return null;
   }
-  return buildProjectFilePath(workspacePath, projectName, 0);
+  return buildProjectFilePath(softwareDataPath, projectName, 0);
 }
 
 export async function resolveRenamedProjectSavePath(
-  workspacePath: string,
+  softwareDataPath: string,
   projectName: string,
   currentFilePath: string,
 ): Promise<string> {
   const normalizedCurrent = currentFilePath.replace(/\\/g, "/");
   for (let suffix = 0; suffix < 1000; suffix++) {
-    const candidate = buildProjectFilePath(workspacePath, projectName, suffix);
+    const candidate = buildProjectFilePath(softwareDataPath, projectName, suffix);
     const normalizedCandidate = candidate.replace(/\\/g, "/");
     if (normalizedCandidate === normalizedCurrent || !(await exists(candidate))) {
       return candidate;
     }
   }
-  return buildProjectFilePath(workspacePath, projectName, Date.now());
+  return buildProjectFilePath(softwareDataPath, projectName, Date.now());
 }

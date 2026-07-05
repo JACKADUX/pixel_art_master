@@ -1,9 +1,10 @@
 import type { ComfyServerConfig } from "@/domain/comfyui/ComfyServerConfig";
 import type { IComfyUiSettingsRepository } from "../ports/IComfyUiSettingsRepository";
 
-export function saveComfyUiSettings(
+export async function saveComfyUiSettings(
   repository: IComfyUiSettingsRepository,
+  softwareDataPath: string,
   config: ComfyServerConfig,
-): void {
-  repository.save(config);
+): Promise<void> {
+  await repository.save(softwareDataPath, config);
 }

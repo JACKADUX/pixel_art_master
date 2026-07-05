@@ -1,10 +1,9 @@
 import { create } from "zustand";
-import { loadAgentProfiles } from "@/application/use-cases/LoadAgentProfiles";
 import { saveAgentProfiles } from "@/application/use-cases/SaveAgentProfiles";
-import { loadFieldPromptConfigs } from "@/application/use-cases/LoadFieldPromptConfigs";
 import { saveFieldPromptConfigs } from "@/application/use-cases/SaveFieldPromptConfigs";
-import { agentProfileRepository } from "@/infrastructure/storage/LocalAgentProfileRepository";
-import { fieldPromptConfigRepository } from "@/infrastructure/storage/LocalFieldPromptConfigRepository";
+import { agentProfileRepository } from "@/infrastructure/storage/FileAgentProfileRepository";
+import { fieldPromptConfigRepository } from "@/infrastructure/storage/FileFieldPromptConfigRepository";
+import { getActiveSoftwareDataPath } from "@/infrastructure/storage/UserDataPersistenceContext";
 import {
   AgentProfile,
   BUILT_IN_AGENT_PROFILES,
@@ -84,6 +83,10 @@ interface AiTextFieldSessionStore {
   abortController: AbortController | null;
 
   init: () => void;
+  hydrateUserData: (
+    profiles: AgentProfile[],
+    fieldConfigs: Record<string, FieldPromptConfig>,
+  ) => void;
   openSession: (fieldId: string, label: string, anchorRect: DOMRect) => void;
   closeSession: () => void;
   setActiveTab: (tab: AiTextFieldTab) => void;
@@ -227,12 +230,15 @@ function buildCurrentProfileParams(state: AiTextFieldSessionStore): AgentProfile
   };
 }
 
-function persistSelectedProfileParams(state: AiTextFieldSessionStore): AgentProfile[] {
+async function persistSelectedProfileParams(state: AiTextFieldSessionStore): Promise<AgentProfile[]> {
   const params = buildCurrentProfileParams(state);
   const nextProfiles = state.profiles.map((profile) =>
     profile.id === state.selectedProfileId ? { ...profile, ...params } : profile,
   );
-  saveAgentProfiles(agentProfileRepository, nextProfiles);
+  const softwareDataPath = getActiveSoftwareDataPath();
+  if (softwareDataPath) {
+    await saveAgentProfiles(agentProfileRepository, softwareDataPath, nextProfiles);
+  }
   return nextProfiles;
 }
 
@@ -254,9 +260,10 @@ export const useAiTextFieldSessionStore = create<AiTextFieldSessionStore>((set, 
   const scheduleProfileParamsSave = () => {
     if (profileParamsSaveTimer) clearTimeout(profileParamsSaveTimer);
     profileParamsSaveTimer = setTimeout(() => {
-      const state = get();
-      set({ profiles: persistSelectedProfileParams(state) });
-      profileParamsSaveTimer = null;
+      void persistSelectedProfileParams(get()).then((profiles) => {
+        set({ profiles });
+        profileParamsSaveTimer = null;
+      });
     }, 300);
   };
 
@@ -356,11 +363,9 @@ export const useAiTextFieldSessionStore = create<AiTextFieldSessionStore>((set, 
   error: null,
   abortController: null,
 
-  init: () => {
-    const profiles = loadAgentProfiles(agentProfileRepository);
-    const fieldConfigs = loadFieldPromptConfigs(fieldPromptConfigRepository);
-    set({ profiles, fieldConfigs });
-  },
+  init: () => {},
+
+  hydrateUserData: (profiles, fieldConfigs) => set({ profiles, fieldConfigs }),
 
   openSession: (fieldId, label, anchorRect) => {
     const state = get();
@@ -498,7 +503,10 @@ export const useAiTextFieldSessionStore = create<AiTextFieldSessionStore>((set, 
     };
 
     set({ fieldConfigs: nextConfigs });
-    saveFieldPromptConfigs(fieldPromptConfigRepository, nextConfigs);
+    const softwareDataPath = getActiveSoftwareDataPath();
+    if (softwareDataPath) {
+      void saveFieldPromptConfigs(fieldPromptConfigRepository, softwareDataPath, nextConfigs);
+    }
   },
 
   setTemperature: (temperature) => {
@@ -535,8 +543,7 @@ export const useAiTextFieldSessionStore = create<AiTextFieldSessionStore>((set, 
     });
 
     if (profileParamsSaveTimer) clearTimeout(profileParamsSaveTimer);
-    const state = get();
-    set({ profiles: persistSelectedProfileParams(state) });
+    void persistSelectedProfileParams(get()).then((profiles) => set({ profiles }));
   },
 
   abortStream: () => {

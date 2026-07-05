@@ -1,9 +1,10 @@
 import type { EditorPreferences } from "@/domain/preferences/EditorPreferences";
 import type { IEditorPreferencesRepository } from "../ports/IEditorPreferencesRepository";
 
-export function saveEditorPreferences(
+export async function saveEditorPreferences(
   repository: IEditorPreferencesRepository,
+  softwareDataPath: string,
   prefs: EditorPreferences,
-): void {
-  repository.save(prefs);
+): Promise<void> {
+  await repository.save(softwareDataPath, prefs);
 }

@@ -22,12 +22,12 @@ import { mergePromptValue, type PromptItem } from "@/domain/comfyApp/PromptCompo
 import {
   addPromptPreset,
   createEmptyPromptPresetLibrary,
-  parsePromptPresetLibrary,
   removePromptPreset,
   renamePromptPresetInLibrary,
   type PromptPresetLibrary,
 } from "@/domain/comfyApp/PromptPresetLibrary";
-import { promptPresetRepository } from "@/infrastructure/storage/LocalPromptPresetRepository";
+import { promptPresetRepository } from "@/infrastructure/storage/FilePromptPresetRepository";
+import { getActiveSoftwareDataPath } from "@/infrastructure/storage/UserDataPersistenceContext";
 import {
   computeRatioSize,
   findAspectRatioPreset,
@@ -57,7 +57,7 @@ import {
 import type { ComfyApiWorkflow } from "@/domain/comfyui/ComfyWorkflow";
 import { comfyUiClient } from "@/infrastructure/comfyui/createComfyUiClient";
 import { comfyAppRepository } from "@/infrastructure/storage/FileComfyAppRepository";
-import { projectsWorkspaceStore } from "@/infrastructure/storage/LocalProjectsWorkspaceStore";
+import { softwareDataPathStore } from "@/infrastructure/storage/LocalSoftwareDataPathStore";
 import type { RunnerScope } from "@/domain/comfyApp/RunnerScope";
 import {
   createInitialRunnerPanel,
@@ -174,7 +174,7 @@ async function writeRunnerApp(
 ): Promise<ComfyApp | null> {
   if (!workflow) return null;
   try {
-    return await saveComfyApp(projectsWorkspaceStore, comfyAppRepository, app, workflow);
+    return await saveComfyApp(softwareDataPathStore, comfyAppRepository, app, workflow);
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "保存预设失败");
     return null;
@@ -349,28 +349,32 @@ interface ComfyAppStore {
   runApp: (scope: RunnerScope) => Promise<void>;
   abortRunner: (scope: RunnerScope) => void;
 
-  // ----- 提示词预设库（跨参数复用，localStorage 持久化） -----
+  // ----- 提示词预设库（跨参数复用，软件数据路径持久化） -----
   promptPresetLibrary: PromptPresetLibrary;
+  hydratePromptPresetLibrary: (library: PromptPresetLibrary) => void;
   savePromptPresetGroup: (name: string, prompts: string[]) => void;
   deletePromptPresetGroup: (id: string) => void;
   renamePromptPresetGroup: (id: string, name: string) => void;
 }
 
-function loadPromptPresetLibrary(): PromptPresetLibrary {
-  const raw = promptPresetRepository.load();
-  return raw ? parsePromptPresetLibrary(raw) : createEmptyPromptPresetLibrary();
+async function persistPromptPresetLibrary(library: PromptPresetLibrary): Promise<void> {
+  const softwareDataPath = getActiveSoftwareDataPath();
+  if (!softwareDataPath) return;
+  await promptPresetRepository.save(softwareDataPath, library);
 }
 
 export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
   apps: [],
   appsLoading: false,
   appsError: null,
-  promptPresetLibrary: loadPromptPresetLibrary(),
+  promptPresetLibrary: createEmptyPromptPresetLibrary(),
+
+  hydratePromptPresetLibrary: (library) => set({ promptPresetLibrary: library }),
 
   refreshApps: async () => {
     set({ appsLoading: true, appsError: null });
     try {
-      const apps = await listComfyApps(projectsWorkspaceStore, comfyAppRepository);
+      const apps = await listComfyApps(softwareDataPathStore, comfyAppRepository);
       set({ apps, appsLoading: false });
     } catch (error) {
       set({
@@ -382,7 +386,7 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
 
   deleteApp: async (appId) => {
     try {
-      await deleteComfyApp(projectsWorkspaceStore, comfyAppRepository, appId);
+      await deleteComfyApp(softwareDataPathStore, comfyAppRepository, appId);
       toast.info("已删除应用");
       await get().refreshApps();
     } catch (error) {
@@ -393,7 +397,7 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
   duplicateApp: async (appId) => {
     try {
       const copy = await duplicateComfyAppToWorkspace(
-        projectsWorkspaceStore,
+        softwareDataPathStore,
         comfyAppRepository,
         appId,
       );
@@ -469,7 +473,7 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
     });
 
     try {
-      const saved = await saveComfyApp(projectsWorkspaceStore, comfyAppRepository, app, workflow);
+      const saved = await saveComfyApp(softwareDataPathStore, comfyAppRepository, app, workflow);
       toast.info(`已保存应用「${app.name}」`);
       set({ editingAppId: saved.id, editingApp: saved, draftDescription: saved.description });
       await get().refreshApps();
@@ -493,7 +497,7 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
 
   editApp: async (appId) => {
     try {
-      const record = await loadComfyApp(projectsWorkspaceStore, comfyAppRepository, appId);
+      const record = await loadComfyApp(softwareDataPathStore, comfyAppRepository, appId);
       if (!record) {
         toast.error("未找到应用文件");
         return;
@@ -548,7 +552,7 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
 
   openRunner: async (appId, scope) => {
     try {
-      const record = await loadComfyApp(projectsWorkspaceStore, comfyAppRepository, appId);
+      const record = await loadComfyApp(softwareDataPathStore, comfyAppRepository, appId);
       if (!record) {
         toast.error("未找到应用文件");
         return;
@@ -1058,20 +1062,20 @@ export const useComfyAppStore = create<ComfyAppStore>((set, get) => ({
       return;
     }
     const { library, preset } = addPromptPreset(get().promptPresetLibrary, cleaned, name);
-    promptPresetRepository.save(library);
     set({ promptPresetLibrary: library });
+    void persistPromptPresetLibrary(library);
     toast.info(`已保存提示词预设「${preset.name}」`);
   },
 
   deletePromptPresetGroup: (id) => {
     const library = removePromptPreset(get().promptPresetLibrary, id);
-    promptPresetRepository.save(library);
     set({ promptPresetLibrary: library });
+    void persistPromptPresetLibrary(library);
   },
 
   renamePromptPresetGroup: (id, name) => {
     const library = renamePromptPresetInLibrary(get().promptPresetLibrary, id, name);
-    promptPresetRepository.save(library);
     set({ promptPresetLibrary: library });
+    void persistPromptPresetLibrary(library);
   },
 }));

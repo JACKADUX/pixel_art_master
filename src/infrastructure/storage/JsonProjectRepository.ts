@@ -1,24 +1,34 @@
+import type { IRecentProjectsStore } from "@/application/ports/IRecentProjectsStore";
 import type { IProjectRepository } from "@/application/ports/IProjectRepository";
 import type { ProjectSummary } from "@/domain/project/ProjectSummary";
-import { isProjectFileName } from "@/domain/workspace/ProjectsWorkspace";
+import { isProjectFileName } from "@/domain/softwareDataPath/SoftwareDataPath";
 import type { Project } from "@/domain/project/Project";
 import { readDir, readTextFile, remove, writeTextFile } from "@tauri-apps/plugin-fs";
+import { recentProjectsStore } from "./FileRecentProjectsStore";
 import { deserializeProject, serializeProject } from "./ProjectSerializer";
 import { parseProjectSummary } from "./ProjectSummaryParser";
 
-const RECENT_KEY = "pixelart-recent-projects";
-
 export class JsonProjectRepository implements IProjectRepository {
-  async save(project: Project, filePath: string): Promise<void> {
+  constructor(private readonly recentStore: IRecentProjectsStore = recentProjectsStore) {}
+
+  async save(
+    project: Project,
+    filePath: string,
+    softwareDataPath: string | null,
+  ): Promise<void> {
     const json = serializeProject(project);
     await writeTextFile(filePath, json);
-    this.addRecent(filePath);
+    if (softwareDataPath) {
+      await this.recentStore.addRecent(softwareDataPath, filePath);
+    }
   }
 
-  async load(filePath: string): Promise<Project> {
+  async load(filePath: string, softwareDataPath: string | null): Promise<Project> {
     const json = await readTextFile(filePath);
     const project = deserializeProject(json, filePath);
-    this.addRecent(filePath);
+    if (softwareDataPath) {
+      await this.recentStore.addRecent(softwareDataPath, filePath);
+    }
     return project;
   }
 
@@ -44,28 +54,15 @@ export class JsonProjectRepository implements IProjectRepository {
     return summaries;
   }
 
-  async delete(filePath: string): Promise<void> {
+  async delete(filePath: string, softwareDataPath: string | null): Promise<void> {
     await remove(filePath);
-    this.removeRecent(filePath);
-  }
-
-  removeRecent(filePath: string): void {
-    const recent = this.getRecent().filter((p) => p !== filePath);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, 10)));
-  }
-
-  addRecent(filePath: string): void {
-    const recent = this.getRecent().filter((p) => p !== filePath);
-    recent.unshift(filePath);
-    localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, 10)));
-  }
-
-  getRecent(): string[] {
-    try {
-      return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]");
-    } catch {
-      return [];
+    if (softwareDataPath) {
+      await this.recentStore.removeRecent(softwareDataPath, filePath);
     }
+  }
+
+  async getRecent(softwareDataPath: string): Promise<string[]> {
+    return this.recentStore.getRecent(softwareDataPath);
   }
 }
 

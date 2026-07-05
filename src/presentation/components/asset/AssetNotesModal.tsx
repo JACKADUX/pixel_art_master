@@ -46,6 +46,13 @@ export function AssetNotesModal({
       setMode(initialMode);
       setDraft(value);
       savedValueRef.current = value;
+    } else if (
+      open &&
+      value !== savedValueRef.current &&
+      draftRef.current === savedValueRef.current
+    ) {
+      setDraft(value);
+      savedValueRef.current = value;
     }
     wasOpenRef.current = open;
   }, [open, initialMode, value]);

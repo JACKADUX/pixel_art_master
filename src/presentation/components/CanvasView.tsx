@@ -50,7 +50,7 @@ import {
   getOverlayPixelCoordinates,
   resolveMousePositionOverlayTarget,
 } from "@/domain/grid/MousePositionOverlayTarget";
-import { getReferenceStackIndex } from "@/domain/layer/LayerStack";
+import { countReferenceLayers, getReferenceStackIndex } from "@/domain/layer/LayerStack";
 import {
   computeGridRelativeLabelScreenPosition,
   computeSecondaryGridCellScreenBounds,
@@ -75,6 +75,7 @@ import { NavigatorPanel } from "./NavigatorPanel";
 import { ComfyAppFloatingRunner } from "./comfyui/ComfyAppFloatingRunner";
 import { ReferenceCropModal } from "./ReferenceCropModal";
 import { ReferenceLayerOverlay } from "./ReferenceLayerOverlay";
+import { CanvasSizeToolOverlay } from "./CanvasSizeToolOverlay";
 
 interface ZoomAnchor {
   logicalPoint: CanvasPoint;
@@ -142,6 +143,9 @@ export function CanvasView() {
   const stageLayoutRef = useRef<WorkspaceStageLayout | null>(null);
 
   const project = useAppStore((s) => s.project);
+  const referenceLayerCount = project
+    ? countReferenceLayers(project.canvas.layers)
+    : 0;
   const zoom = useAppStore((s) => s.zoom);
   const zoomRef = useRef(zoom);
   const setZoom = useAppStore((s) => s.setZoom);
@@ -1266,6 +1270,7 @@ export function CanvasView() {
       assetCapturePointerDown(toPixel(e));
       return;
     }
+    if (activeTool === "canvasResize") return;
     const button = buttonFromMouseButton(e.button);
     if (!button) return;
     e.preventDefault();
@@ -1313,6 +1318,7 @@ export function CanvasView() {
       return;
     }
     if (isAssetCaptureActive) return;
+    if (activeTool === "canvasResize") return;
     updateHoverFromClient(e.clientX, e.clientY);
     const button = drawingButton;
     const modifiers = {
@@ -1354,7 +1360,7 @@ export function CanvasView() {
   const handleMouseLeave = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setHoverPoint(null);
     if (selectionDrag || isDrawing) return;
-    if (!drawingButton && activeTool !== "select" && activeTool !== "transform") return;
+    if (!drawingButton && activeTool !== "select" && activeTool !== "transform" && activeTool !== "canvasResize") return;
     pointerUp(toPixel(e), drawingButton ?? "primary", {
       shiftKey: e.shiftKey,
       altKey: e.altKey,
@@ -1638,6 +1644,7 @@ export function CanvasView() {
                   key={layer.id}
                   layer={layer}
                   stackIndex={getReferenceStackIndex(project.canvas.layers, layer.id)}
+                  referenceLayerCount={referenceLayerCount}
                   canvasLeft={stageLayout.canvasLeft}
                   canvasTop={stageLayout.canvasTop}
                   zoom={zoom}
@@ -1646,6 +1653,17 @@ export function CanvasView() {
                 />
               );
             })}
+            {activeTool === "canvasResize" && composite && (
+              <CanvasSizeToolOverlay
+                canvasLeft={stageLayout.canvasLeft}
+                canvasTop={stageLayout.canvasTop}
+                displayWidth={displayWidth}
+                displayHeight={displayHeight}
+                zoom={zoom}
+                canvasWidth={composite.width}
+                canvasHeight={composite.height}
+              />
+            )}
           </div>
         )}
         <div className="sr-only">当前工具: {activeTool}</div>

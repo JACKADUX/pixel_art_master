@@ -4,8 +4,9 @@ import {
 } from "@/domain/world/WorldAgentSettings";
 import type { IWorldAgentSettingsRepository } from "../ports/IWorldAgentSettingsRepository";
 
-export function loadWorldAgentSettings(
+export async function loadWorldAgentSettings(
   repository: IWorldAgentSettingsRepository,
-): WorldAgentSettings {
-  return parseWorldAgentSettings(repository.load());
+  softwareDataPath: string,
+): Promise<WorldAgentSettings> {
+  return parseWorldAgentSettings(await repository.load(softwareDataPath));
 }

@@ -1,10 +1,11 @@
 import { createComfyServerConfig, type ComfyServerConfig } from "@/domain/comfyui/ComfyServerConfig";
 import type { IComfyUiSettingsRepository } from "../ports/IComfyUiSettingsRepository";
 
-export function loadComfyUiSettings(
+export async function loadComfyUiSettings(
   repository: IComfyUiSettingsRepository,
-): ComfyServerConfig {
-  const stored = repository.load();
+  softwareDataPath: string,
+): Promise<ComfyServerConfig> {
+  const stored = await repository.load(softwareDataPath);
   if (!stored) {
     return createComfyServerConfig();
   }

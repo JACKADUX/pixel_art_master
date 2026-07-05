@@ -31,8 +31,6 @@ export function TopBar() {
   const openPixelRestorePage = useAppStore((s) => s.openPixelRestorePage);
   const openColorEditPage = useAppStore((s) => s.openColorEditPage);
   const openWorldPage = useAppStore((s) => s.openWorldPage);
-  const openAiChatTestPage = useAppStore((s) => s.openAiChatTestPage);
-  const openAiVisionTestPage = useAppStore((s) => s.openAiVisionTestPage);
   const openComfyUiPage = useAppStore((s) => s.openComfyUiPage);
   const openAssetLibraryModal = useAppStore((s) => s.openAssetLibraryModal);
   const openSettingsModal = useAppStore((s) => s.openSettingsModal);
@@ -75,8 +73,6 @@ export function TopBar() {
         openPixelRestorePage,
         openColorEditPage,
         openWorldPage,
-        openAiChatTestPage,
-        openAiVisionTestPage,
         openComfyUiPage,
         comfyApps: comfyApps.map((app) => ({ id: app.id, name: app.name })),
         openComfyAppWindow: (appId: string) => void openComfyAppWindow(appId, "canvas"),
@@ -110,8 +106,6 @@ export function TopBar() {
       openPixelRestorePage,
       openColorEditPage,
       openWorldPage,
-      openAiChatTestPage,
-      openAiVisionTestPage,
       openComfyUiPage,
       comfyApps,
       openComfyAppWindow,
@@ -129,7 +123,6 @@ export function TopBar() {
 
   return (
     <header className="flex items-center gap-1 border-b border-zinc-700 bg-zinc-900 px-3 py-2">
-      <span className="mr-3 text-sm font-semibold text-zinc-100">PixelArt Master</span>
       <MenuBar menus={menus} />
 
       {project && (

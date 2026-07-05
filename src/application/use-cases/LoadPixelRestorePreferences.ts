@@ -4,10 +4,11 @@ import {
 } from "@/domain/pixelRestore/PixelRestorePreferences";
 import type { IPixelRestorePreferencesRepository } from "../ports/IPixelRestorePreferencesRepository";
 
-export function loadPixelRestorePreferences(
+export async function loadPixelRestorePreferences(
   repository: IPixelRestorePreferencesRepository,
-): PixelRestorePreferences | null {
-  const raw = repository.load();
+  softwareDataPath: string,
+): Promise<PixelRestorePreferences | null> {
+  const raw = await repository.load(softwareDataPath);
   if (raw === null) return null;
   return parsePixelRestorePreferences(raw);
 }

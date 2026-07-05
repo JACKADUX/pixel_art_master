@@ -7,7 +7,7 @@ import { ConfirmDialog } from "../ConfirmDialog";
 
 export function AssetLibraryModal() {
   const open = useAppStore((s) => s.assetLibraryModalOpen);
-  const workspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
   const library = useAppStore((s) => s.assetLibrary);
   const loading = useAppStore((s) => s.assetLibraryLoading);
   const selectedFolderId = useAppStore((s) => s.selectedAssetFolderId);
@@ -17,7 +17,7 @@ export function AssetLibraryModal() {
   const moveAssetTarget = useAppStore((s) => s.moveAssetTarget);
 
   const closeAssetLibraryModal = useAppStore((s) => s.closeAssetLibraryModal);
-  const pickProjectsWorkspace = useAppStore((s) => s.pickProjectsWorkspace);
+  const pickSoftwareDataPath = useAppStore((s) => s.pickSoftwareDataPath);
   const refreshAssetLibrary = useAppStore((s) => s.refreshAssetLibrary);
   const setSelectedAssetFolder = useAppStore((s) => s.setSelectedAssetFolder);
   const setSelectedAsset = useAppStore((s) => s.setSelectedAsset);
@@ -41,10 +41,10 @@ export function AssetLibraryModal() {
   const createAssetTagAction = useAppStore((s) => s.createAssetTagAction);
 
   useEffect(() => {
-    if (open && workspacePath) {
+    if (open && softwareDataPath) {
       void refreshAssetLibrary();
     }
-  }, [open, workspacePath, refreshAssetLibrary]);
+  }, [open, softwareDataPath, refreshAssetLibrary]);
 
   if (!open) return null;
 
@@ -63,17 +63,17 @@ export function AssetLibraryModal() {
           </button>
         </div>
 
-        {!workspacePath ? (
+        {!softwareDataPath ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 p-10 text-center">
             <p className="text-sm text-zinc-400">
-              请先选择项目文件夹，资产库将保存在该目录下的 .pixelart-assets 中。
+              请先选择软件数据路径，资产库将保存在该目录下的 .pixelart-assets 中。
             </p>
             <button
               type="button"
-              onClick={() => void pickProjectsWorkspace()}
+              onClick={() => void pickSoftwareDataPath()}
               className="rounded bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700"
             >
-              选择项目文件夹
+              选择软件数据路径
             </button>
           </div>
         ) : loading || !library ? (
@@ -84,7 +84,7 @@ export function AssetLibraryModal() {
           <div className="flex min-h-0 flex-1 overflow-hidden">
           <AssetLibraryContent
             library={library}
-            workspacePath={workspacePath}
+            workspacePath={softwareDataPath}
             selectedFolderId={selectedFolderId}
             selectedAssetId={selectedAssetId}
             onSelectFolder={setSelectedAssetFolder}

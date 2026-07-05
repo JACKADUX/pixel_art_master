@@ -15,6 +15,7 @@ interface AssetGridProps {
   onSelectAsset: (assetId: string | null) => void;
   onRequestDeleteAsset: (assetId: string) => void;
   onOpenAssetViewer: (assetId: string) => void;
+  onOpenAssetNotesEditor: (assetId: string) => void;
   onOpenAssetContextMenu: (assetId: string, clientX: number, clientY: number) => void;
   onBeginAssetPointerDrag: (e: React.PointerEvent, assetId: string) => void;
   onConsumeSuppressClick: () => boolean;
@@ -34,7 +35,7 @@ function ImageAssetThumbnail({
 
   if (!src) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-zinc-800 text-[10px] text-zinc-600">
+      <div className="absolute inset-0 flex items-center justify-center bg-zinc-800 text-[10px] text-zinc-600">
         ...
       </div>
     );
@@ -45,7 +46,7 @@ function ImageAssetThumbnail({
       src={src}
       alt={asset.title}
       draggable={false}
-      className="h-full w-full object-contain"
+      className="absolute inset-0 h-full w-full object-contain p-1"
       style={{ imageRendering: "pixelated" }}
     />
   );
@@ -54,7 +55,7 @@ function ImageAssetThumbnail({
 function MarkdownAssetThumbnail({ asset }: { asset: AssetRecord }) {
   const initials = asset.title.trim().slice(0, 2) || "笔记";
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-zinc-900 p-1">
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-zinc-900 p-1">
       <span className="text-[9px] font-medium uppercase tracking-wide text-zinc-500">MD</span>
       <span className="max-w-full truncate px-1 text-[10px] text-zinc-400">{initials}</span>
     </div>
@@ -83,6 +84,7 @@ export function AssetGrid({
   onSelectAsset,
   onRequestDeleteAsset,
   onOpenAssetViewer,
+  onOpenAssetNotesEditor,
   onOpenAssetContextMenu,
   onBeginAssetPointerDrag,
   onConsumeSuppressClick,
@@ -103,7 +105,7 @@ export function AssetGrid({
         {assets.length === 0 ? (
           <p className="text-xs text-zinc-500">此文件夹暂无资产</p>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] gap-2">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(72px,1fr))] items-start gap-2">
             {assets.map((asset) => (
               <div
                 key={asset.id}
@@ -135,6 +137,9 @@ export function AssetGrid({
                     e.preventDefault();
                     if (isImageAsset(asset)) {
                       onOpenAssetViewer(asset.id);
+                    } else if (isMarkdownAsset(asset)) {
+                      onSelectAsset(asset.id);
+                      onOpenAssetNotesEditor(asset.id);
                     }
                   }}
                   onContextMenu={(e) => {
@@ -143,7 +148,7 @@ export function AssetGrid({
                   }}
                   className="asset-drag-source flex cursor-grab flex-col text-left active:cursor-grabbing"
                 >
-                  <div className="aspect-square w-full bg-zinc-900 p-1">
+                  <div className="relative aspect-square w-full overflow-hidden bg-zinc-900">
                     <AssetThumbnail workspacePath={workspacePath} asset={asset} />
                   </div>
                   <span className="truncate px-1 py-0.5 text-[10px] text-zinc-400">

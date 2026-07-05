@@ -1,6 +1,6 @@
 import type { PalettePresetLibrary } from "@/domain/palette/PalettePresetLibrary";
 
 export interface IPalettePresetRepository {
-  load(): unknown | null;
-  save(library: PalettePresetLibrary): void;
+  load(softwareDataPath: string): Promise<unknown | null>;
+  save(softwareDataPath: string, library: PalettePresetLibrary): Promise<void>;
 }

@@ -4,6 +4,7 @@ import {
   getDefaultPalettePreset,
   type PalettePresetLibrary,
 } from "@/domain/palette/PalettePresetLibrary";
+import type { CanvasSize } from "@/domain/canvas/CanvasSize";
 import { createEmptyProject, touchProject, type Project } from "@/domain/project/Project";
 
 export type PalettePresetImportMode = "merge" | "replace";
@@ -19,9 +20,10 @@ export function resolveInitialPaletteFromLibrary(
 export function createEmptyProjectWithDefaultPalette(
   library: PalettePresetLibrary,
   name?: string,
+  size?: CanvasSize,
 ): Project {
   return {
-    ...createEmptyProject(name),
+    ...createEmptyProject(name, size),
     palette: resolveInitialPaletteFromLibrary(library),
   };
 }

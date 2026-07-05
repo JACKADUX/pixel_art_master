@@ -3,7 +3,7 @@ import { findAssetById, type AssetLibraryIndex } from "@/domain/asset/AssetLibra
 import { isImageAsset, isMarkdownAsset } from "@/domain/asset/AssetRecord";
 import { useAssetImageUrl } from "@/presentation/hooks/useAssetImageUrl";
 import { useAssetNoteContent } from "@/presentation/hooks/useAssetNoteContent";
-import { AssetNotesModal } from "./AssetNotesModal";
+import { useAppStore } from "../../stores/appStore";
 import { AssetNotesSection, type AssetNotesModalMode } from "./AssetNotesSection";
 
 interface AssetDetailPanelProps {
@@ -39,6 +39,7 @@ export function AssetDetailPanel({
   onCreateTag,
 }: AssetDetailPanelProps) {
   const asset = selectedAssetId ? findAssetById(library, selectedAssetId) : null;
+  const openAssetNotesEditor = useAppStore((s) => s.openAssetNotesEditor);
   const previewSrc = useAssetImageUrl(
     workspacePath,
     asset && isImageAsset(asset) ? asset.imageFile : null,
@@ -53,8 +54,6 @@ export function AssetDetailPanel({
   const [content, setContent] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newTagName, setNewTagName] = useState("");
-  const [notesModalOpen, setNotesModalOpen] = useState(false);
-  const [notesModalMode, setNotesModalMode] = useState<AssetNotesModalMode>("view");
 
   useEffect(() => {
     if (!asset) {
@@ -92,22 +91,6 @@ export function AssetDetailPanel({
     [selectedAssetId, onUpdateAsset],
   );
 
-  const handleNotesModalClose = useCallback(
-    (savedValue: string) => {
-      if (!selectedAssetId || !asset) {
-        setNotesModalOpen(false);
-        return;
-      }
-      if (isImageAsset(asset)) {
-        setNotes(savedValue);
-      } else if (isMarkdownAsset(asset)) {
-        setContent(savedValue);
-      }
-      setNotesModalOpen(false);
-    },
-    [selectedAssetId, asset],
-  );
-
   if (!asset) {
     return (
       <div className="flex min-h-[6rem] items-center justify-center p-4 text-xs text-zinc-500">
@@ -123,12 +106,8 @@ export function AssetDetailPanel({
   };
 
   const openNotesModal = (mode: AssetNotesModalMode) => {
-    setNotesModalMode(mode);
-    setNotesModalOpen(true);
+    openAssetNotesEditor(asset.id, mode);
   };
-
-  const notesModalValue = isImageAsset(asset) ? notes : content;
-  const notesModalSave = isImageAsset(asset) ? handleNotesSave : handleContentSave;
 
   const toggleTag = (tagId: string) => {
     const has = asset.tagIds.includes(tagId);
@@ -287,15 +266,6 @@ export function AssetDetailPanel({
           placeholder="双击编辑 Markdown 内容…"
         />
       )}
-
-      <AssetNotesModal
-        open={notesModalOpen}
-        title={asset.title}
-        value={notesModalValue}
-        initialMode={notesModalMode}
-        onSave={notesModalSave}
-        onClose={handleNotesModalClose}
-      />
 
       <button
         type="button"

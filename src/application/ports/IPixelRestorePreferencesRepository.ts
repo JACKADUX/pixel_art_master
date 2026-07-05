@@ -1,6 +1,6 @@
 import type { PixelRestorePreferences } from "@/domain/pixelRestore/PixelRestorePreferences";
 
 export interface IPixelRestorePreferencesRepository {
-  load(): unknown | null;
-  save(prefs: PixelRestorePreferences): void;
+  load(softwareDataPath: string): Promise<unknown | null>;
+  save(softwareDataPath: string, prefs: PixelRestorePreferences): Promise<void>;
 }

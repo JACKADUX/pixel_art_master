@@ -5,10 +5,11 @@ import {
 } from "@/domain/comfyui/ComfyOutputNode";
 
 /** 读取“可导出图片”节点类型白名单，未配置时回退默认值 */
-export function loadComfyOutputClassTypes(
+export async function loadComfyOutputClassTypes(
   repository: IComfyUiSettingsRepository,
-): string[] {
-  const stored = repository.loadOutputClassTypes();
+  softwareDataPath: string,
+): Promise<string[]> {
+  const stored = await repository.loadOutputClassTypes(softwareDataPath);
   if (!stored) {
     return [...DEFAULT_OUTPUT_CLASS_TYPES];
   }

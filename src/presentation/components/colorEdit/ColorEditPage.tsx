@@ -24,7 +24,7 @@ export function ColorEditPage() {
   const captureFromMonitor = useColorEditStore((s) => s.captureFromMonitor);
   const closeMonitorPicker = useColorEditStore((s) => s.closeMonitorPicker);
 
-  const projectsWorkspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
   const exportRestoredImageToAssetLibrary = useAppStore(
     (s) => s.exportRestoredImageToAssetLibrary,
   );
@@ -120,7 +120,7 @@ export function ColorEditPage() {
           />
 
           <ColorEditToolPanel
-            canExport={projectsWorkspacePath !== null && resultImageData !== null}
+            canExport={softwareDataPath !== null && resultImageData !== null}
             onExport={handleExport}
           />
         </div>

@@ -23,9 +23,16 @@ function drawingLayer(id: string, pixels: number[]): DrawingLayer {
   };
 }
 
-function structureSnapshot(layers: DrawingLayer[], activeLayerId: string): StructureSnapshot {
+function structureSnapshot(
+  layers: DrawingLayer[],
+  activeLayerId: string,
+  canvasWidth = 2,
+  canvasHeight = 2,
+): StructureSnapshot {
   return {
     kind: "structure",
+    canvasWidth,
+    canvasHeight,
     layers,
     activeLayerId,
     activeReferenceLayerId: null,

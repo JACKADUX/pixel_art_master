@@ -13,6 +13,10 @@ import { buildReferenceColorPalette } from "@/domain/layer/ReferenceLayerPalette
 import { clampReferenceScale } from "@/domain/layer/ReferenceLayerOperations";
 
 import type { LayerPosition, ReferenceLayer } from "@/domain/layer/Layer";
+import {
+  computeReferenceLayerCanvasZIndex,
+  computeReferenceLayerChromeZIndex,
+} from "@/domain/layer/LayerStack";
 
 import { gridColorRgbString } from "@/domain/appSettings/AppSettings";
 
@@ -44,6 +48,7 @@ import { ReferenceLayerColorStrip } from "./ReferenceLayerColorStrip";
 interface ReferenceLayerOverlayProps {
   layer: ReferenceLayer;
   stackIndex: number;
+  referenceLayerCount: number;
   canvasLeft: number;
   canvasTop: number;
   zoom: number;
@@ -60,6 +65,7 @@ function colorSlotFromMouseButton(button: number): ColorSlot {
 export function ReferenceLayerOverlay({
   layer,
   stackIndex,
+  referenceLayerCount,
   canvasLeft,
   canvasTop,
   zoom,
@@ -76,6 +82,8 @@ export function ReferenceLayerOverlay({
   const resetReferenceScale = useAppStore((s) => s.resetReferenceScale);
   const toggleReferenceGrid = useAppStore((s) => s.toggleReferenceGrid);
   const toggleReferencePalette = useAppStore((s) => s.toggleReferencePalette);
+  const setActiveReferenceLayer = useAppStore((s) => s.setActiveReferenceLayer);
+  const openCropEditor = useAppStore((s) => s.openCropEditor);
   const paletteHidden = !layer.paletteVisible;
   const canvasDisplayMode = useAppStore((s) => s.canvasDisplayMode);
   const appSettings = useAppStore((s) => s.appSettings);
@@ -152,7 +160,7 @@ export function ReferenceLayerOverlay({
   const selectionToolActive = activeTool === "select";
   const transformToolActive = activeTool === "transform";
   const showTransformBox = isActive && !altHeld && transformToolActive;
-  const imageAcceptsPointer = isActive || altHeld || selectionToolActive;
+  const imageAcceptsPointer = true;
 
   useEffect(() => {
     oklchRendererRef.current = new OklchDisplayGlRenderer();
@@ -296,110 +304,81 @@ export function ReferenceLayerOverlay({
 
     if (e.button !== 0 && e.button !== 2) return;
 
-
-
     if (e.altKey) {
-
       e.preventDefault();
-
       e.stopPropagation();
 
       const canvas = canvasRef.current;
-
       if (!canvas || !layer.crop) return;
 
       const rect = canvas.getBoundingClientRect();
-
       const localX = Math.floor((e.clientX - rect.left) / zoom);
-
       const localY = Math.floor((e.clientY - rect.top) / zoom);
 
       void pickColorAt(
-
         {
-
           x: layer.position.x + localX,
-
           y: layer.position.y + localY,
-
         },
-
         colorSlotFromMouseButton(e.button),
-
       );
-
       return;
-
     }
 
-
-
     if (selectionToolActive && e.button === 0) {
-
       e.preventDefault();
-
       e.stopPropagation();
 
-      const canvas = canvasRef.current;
+      if (!isActive) {
+        setActiveReferenceLayer(layer.id);
+      }
 
+      const canvas = canvasRef.current;
       if (!canvas || !layer.crop) return;
 
       const rect = canvas.getBoundingClientRect();
-
       const localX = Math.floor((e.clientX - rect.left) / zoom);
-
       const localY = Math.floor((e.clientY - rect.top) / zoom);
 
       pointerDown(
-
         {
-
           x: layer.position.x + localX,
-
           y: layer.position.y + localY,
-
         },
-
         "primary",
-
         {
-
           shiftKey: e.shiftKey,
-
           altKey: e.altKey,
-
           spaceKey: spaceKeyHeldRef.current,
-
         },
-
       );
-
       return;
-
     }
 
+    if (e.button === 0) {
+      e.preventDefault();
+      e.stopPropagation();
 
+      if (!isActive) {
+        setActiveReferenceLayer(layer.id);
+      }
 
-    if (!isActive || e.button !== 0) return;
+      dragStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        posX: layer.position.x,
+        posY: layer.position.y,
+      };
+      setIsDragging(true);
+    }
+  };
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-
     e.stopPropagation();
-
-    dragStartRef.current = {
-
-      x: e.clientX,
-
-      y: e.clientY,
-
-      posX: layer.position.x,
-
-      posY: layer.position.y,
-
-    };
-
-    setIsDragging(true);
-
+    if (layer.imageData) {
+      openCropEditor(layer.id);
+    }
   };
 
 
@@ -545,79 +524,110 @@ export function ReferenceLayerOverlay({
 
   const top = canvasTop + layer.position.y * zoom;
 
+  const overlayPosition = { left, top, width: displayWidth };
+
+  const canvasZIndex = computeReferenceLayerCanvasZIndex(stackIndex);
+  const chromeZIndex = computeReferenceLayerChromeZIndex(
+    stackIndex,
+    isActive,
+    referenceLayerCount,
+  );
+
 
 
   return (
 
-    <div
+    <>
 
-      className="absolute"
+      <div
 
-      style={{
+        className="absolute"
 
-        left,
-
-        top,
-
-        width: displayWidth,
-        zIndex: 1 + stackIndex,
-        pointerEvents: "none",
-      }}
-    >
-      <canvas
-        ref={canvasRef}
-        className={`block${
-          isDragging
-            ? " cursor-grabbing"
-            : altHeld
-              ? " cursor-eyedropper"
-              : selectionToolActive
-                ? " cursor-crosshair"
-                : isActive
-                  ? " cursor-move"
-                  : ""
-        }`}
         style={{
-          imageRendering: "pixelated",
-          height: displayHeight,
-          pointerEvents: imageAcceptsPointer ? "auto" : "none",
+
+          ...overlayPosition,
+
+          zIndex: canvasZIndex,
+
+          pointerEvents: "none",
+
         }}
-        onMouseDown={imageAcceptsPointer ? handleMouseDown : undefined}
-        onMouseEnter={handleHoverEnter}
-        onMouseLeave={handleHoverLeave}
-        onContextMenu={(e) => {
-          if (altHeld) {
-            e.preventDefault();
-            return;
-          }
-          e.preventDefault();
-          e.stopPropagation();
-          onContextMenuRequest?.(layer.id, e.clientX, e.clientY);
-        }}
-      />
 
-      {showTransformBox && (
+      >
 
-        <div
-
-          className="pointer-events-none absolute inset-0 border-2 border-blue-500"
-
-          style={{ height: displayHeight }}
-
-          aria-hidden
-
-        />
-
-      )}
-
-      {isActive && !altHeld && isHovered && (
-        <div
-          className="pointer-events-auto absolute left-0 flex items-center gap-0.5 rounded border border-zinc-700/80 bg-zinc-900/90 p-0.5 shadow"
-          style={{ top: -4, transform: "translateY(-100%)" }}
-          onMouseDown={(e) => e.stopPropagation()}
+        <canvas
+          ref={canvasRef}
+          className={`block${
+            isDragging
+              ? " cursor-grabbing"
+              : altHeld
+                ? " cursor-eyedropper"
+                : selectionToolActive
+                  ? " cursor-crosshair"
+                  : isActive
+                    ? " cursor-move"
+                    : " cursor-pointer"
+          }`}
+          style={{
+            imageRendering: "pixelated",
+            height: displayHeight,
+            pointerEvents: imageAcceptsPointer ? "auto" : "none",
+          }}
+          onMouseDown={imageAcceptsPointer ? handleMouseDown : undefined}
+          onDoubleClick={imageAcceptsPointer ? handleDoubleClick : undefined}
           onMouseEnter={handleHoverEnter}
           onMouseLeave={handleHoverLeave}
-        >
+          onContextMenu={(e) => {
+            if (altHeld) {
+              e.preventDefault();
+              return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            onContextMenuRequest?.(layer.id, e.clientX, e.clientY);
+          }}
+        />
+
+        {showTransformBox && (
+
+          <div
+
+            className="pointer-events-none absolute inset-0 border-2 border-blue-500"
+
+            style={{ height: displayHeight }}
+
+            aria-hidden
+
+          />
+
+        )}
+
+      </div>
+
+      <div
+
+        className="absolute"
+
+        style={{
+
+          ...overlayPosition,
+
+          zIndex: chromeZIndex,
+
+          pointerEvents: "none",
+
+        }}
+
+      >
+
+        {isActive && !altHeld && isHovered && (
+          <div
+            className="pointer-events-auto absolute left-0 flex items-center gap-0.5 rounded border border-zinc-700/80 bg-zinc-900/90 p-0.5 shadow"
+            style={{ top: -4, transform: "translateY(-100%)" }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseEnter={handleHoverEnter}
+            onMouseLeave={handleHoverLeave}
+          >
           <button
             type="button"
             title={layer.grid.visible ? "关闭网格" : "启用网格"}
@@ -681,6 +691,12 @@ export function ReferenceLayerOverlay({
           />
         ))}
 
+      <div
+        aria-hidden
+        className="pointer-events-none"
+        style={{ height: displayHeight }}
+      />
+
       {!paletteHidden && (
         <ReferenceLayerColorStrip
 
@@ -695,7 +711,9 @@ export function ReferenceLayerOverlay({
         />
       )}
 
-    </div>
+      </div>
+
+    </>
 
   );
 

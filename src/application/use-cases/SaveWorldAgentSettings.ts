@@ -1,9 +1,10 @@
 import type { WorldAgentSettings } from "@/domain/world/WorldAgentSettings";
 import type { IWorldAgentSettingsRepository } from "../ports/IWorldAgentSettingsRepository";
 
-export function saveWorldAgentSettings(
+export async function saveWorldAgentSettings(
   repository: IWorldAgentSettingsRepository,
+  softwareDataPath: string,
   settings: WorldAgentSettings,
-): void {
-  repository.save(settings);
+): Promise<void> {
+  await repository.save(softwareDataPath, settings);
 }

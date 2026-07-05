@@ -11,13 +11,17 @@ export interface DeleteProjectResult {
 export async function deleteProject(
   repository: IProjectRepository,
   filePath: string,
+  softwareDataPath: string | null,
   currentProject: Project | null,
   lastOpenedStore: ILastOpenedProjectStore,
 ): Promise<DeleteProjectResult> {
-  await repository.delete(filePath);
+  await repository.delete(filePath, softwareDataPath);
 
-  if (lastOpenedStore.getPath() === filePath) {
-    lastOpenedStore.clearPath();
+  if (softwareDataPath) {
+    const lastOpened = await lastOpenedStore.getPath(softwareDataPath);
+    if (lastOpened === filePath) {
+      await lastOpenedStore.clearPath(softwareDataPath);
+    }
   }
 
   const shouldReset = currentProject?.filePath === filePath;

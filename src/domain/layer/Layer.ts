@@ -113,7 +113,7 @@ export function createEmptyReferenceLayer(name?: string): ReferenceLayer {
       visible: false,
     },
     scale: 1,
-    paletteVisible: true,
+    paletteVisible: false,
   };
 }
 

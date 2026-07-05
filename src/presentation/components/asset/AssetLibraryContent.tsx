@@ -9,6 +9,7 @@ import { AssetGrid } from "./AssetGrid";
 import { AssetFolderMoreMenu } from "./AssetFolderMoreMenu";
 import { AssetImportMenu } from "./AssetImportMenu";
 import { AssetImageViewerModal } from "./AssetImageViewerModal";
+import { AssetNotesEditorHost } from "./AssetNotesEditorHost";
 import { useAssetPointerDrag } from "../../hooks/useAssetPointerDrag";
 import { ResizablePanelColumn } from "../ResizablePanelColumn";
 
@@ -65,6 +66,7 @@ export function AssetLibraryContent({
   const assetImageViewerAssetId = useAppStore((s) => s.assetImageViewerAssetId);
   const openAssetImageViewer = useAppStore((s) => s.openAssetImageViewer);
   const closeAssetImageViewer = useAppStore((s) => s.closeAssetImageViewer);
+  const openAssetNotesEditor = useAppStore((s) => s.openAssetNotesEditor);
   const hasProject = useAppStore((s) => s.project !== null);
   const assetFolderTreeWidth = useAppStore((s) => s.assetFolderTreeWidth);
   const setAssetFolderTreeWidth = useAppStore((s) => s.setAssetFolderTreeWidth);
@@ -159,6 +161,7 @@ export function AssetLibraryContent({
           onSelectAsset={onSelectAsset}
           onRequestDeleteAsset={onDeleteAsset}
           onOpenAssetViewer={openAssetImageViewer}
+          onOpenAssetNotesEditor={openAssetNotesEditor}
           onOpenAssetContextMenu={openAssetContextMenu}
           onBeginAssetPointerDrag={beginAssetPointerDrag}
           onConsumeSuppressClick={consumeSuppressClick}
@@ -192,6 +195,11 @@ export function AssetLibraryContent({
       library={library}
       assetId={assetImageViewerAssetId}
       onClose={closeAssetImageViewer}
+    />
+    <AssetNotesEditorHost
+      library={library}
+      workspacePath={workspacePath}
+      onUpdateAsset={onUpdateAsset}
     />
     {contextMenu && contextMenuItems.length > 0 && (
       <ContextMenu

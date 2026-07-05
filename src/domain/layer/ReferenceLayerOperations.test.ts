@@ -81,10 +81,10 @@ describe("getReferenceBounds", () => {
 describe("toggleReferencePaletteVisibility", () => {
   it("flips the palette visibility flag", () => {
     const layer = referenceWithCrop();
-    expect(layer.paletteVisible).toBe(true);
-    const hidden = toggleReferencePaletteVisibility(layer);
-    expect(hidden.paletteVisible).toBe(false);
-    expect(toggleReferencePaletteVisibility(hidden).paletteVisible).toBe(true);
+    expect(layer.paletteVisible).toBe(false);
+    const visible = toggleReferencePaletteVisibility(layer);
+    expect(visible.paletteVisible).toBe(true);
+    expect(toggleReferencePaletteVisibility(visible).paletteVisible).toBe(false);
   });
 });
 

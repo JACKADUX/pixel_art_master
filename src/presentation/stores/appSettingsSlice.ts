@@ -1,16 +1,26 @@
-import { loadAppSettings } from "@/application/use-cases/LoadAppSettings";
 import { saveAppSettings } from "@/application/use-cases/SaveAppSettings";
 import type { IAppSettingsRepository } from "@/application/ports/IAppSettingsRepository";
 import {
+  DEFAULT_APP_SETTINGS,
   clampAutoSaveIntervalMinutes,
+  clampCanvasDimension,
   clampCheckerboardTileSize,
   clampGridLineWidth,
   clampGridSize,
   clampSymmetryAxisLineWidth,
   type AppSettings,
 } from "@/domain/appSettings/AppSettings";
+import {
+  addCustomCanvasSizePreset as addCustomCanvasSizePresetToSettings,
+  removeCustomCanvasSizePreset as removeCustomCanvasSizePresetFromSettings,
+  saveDefaultCanvasSize,
+} from "@/application/use-cases/CanvasSizePreferences";
 import { fromHex, toHex } from "@/domain/canvas/PixelColor";
 import type { Project } from "@/domain/project/Project";
+import {
+  getActiveSoftwareDataPath,
+  isUserDataHydrating,
+} from "@/infrastructure/storage/UserDataPersistenceContext";
 
 export interface AppSettingsSliceState {
   appSettings: AppSettings;
@@ -35,6 +45,9 @@ export interface AppSettingsSliceActions {
   setSymmetryAxisColorHex: (hex: string) => void;
   setSymmetryAxisLineWidth: (width: number) => void;
   setSymmetryAxisOutlineEnabled: (enabled: boolean) => void;
+  setDefaultCanvasSize: (width: number, height: number) => void;
+  addCustomCanvasSizePreset: (width: number, height: number, label?: string) => void;
+  removeCustomCanvasSizePreset: (id: string) => void;
 }
 
 type AppSettingsSet = (
@@ -83,21 +96,19 @@ function withGridSizes(
   };
 }
 
-export function createAppSettingsInitialState(
-  repository: IAppSettingsRepository,
-): AppSettingsSliceState {
+export function createAppSettingsInitialState(): AppSettingsSliceState {
   return {
-    appSettings: loadAppSettings(repository),
+    appSettings: { ...DEFAULT_APP_SETTINGS },
   };
 }
 
 export function createAppSettingsSlice(
   set: AppSettingsSet,
   get: AppSettingsGet,
-  repository: IAppSettingsRepository,
+  _repository: IAppSettingsRepository,
 ): AppSettingsSliceState & AppSettingsSliceActions {
   return {
-    ...createAppSettingsInitialState(repository),
+    ...createAppSettingsInitialState(),
 
     setAppSettings: (settings) => set({ appSettings: settings }),
 
@@ -206,6 +217,31 @@ export function createAppSettingsSlice(
       set((state) => ({
         appSettings: { ...state.appSettings, symmetryAxisOutlineEnabled: enabled },
       })),
+
+    setDefaultCanvasSize: (width, height) =>
+      set((state) => ({
+        appSettings: saveDefaultCanvasSize(state.appSettings, {
+          width: clampCanvasDimension(width),
+          height: clampCanvasDimension(height),
+        }),
+      })),
+
+    addCustomCanvasSizePreset: (width, height, label) =>
+      set((state) => ({
+        appSettings: addCustomCanvasSizePresetToSettings(
+          state.appSettings,
+          {
+            width: clampCanvasDimension(width),
+            height: clampCanvasDimension(height),
+          },
+          label,
+        ),
+      })),
+
+    removeCustomCanvasSizePreset: (id) =>
+      set((state) => ({
+        appSettings: removeCustomCanvasSizePresetFromSettings(state.appSettings, id),
+      })),
   };
 }
 
@@ -216,14 +252,17 @@ export function subscribeAppSettingsPersistence(
   getState: () => AppSettingsSliceState,
   repository: IAppSettingsRepository,
 ): void {
-  if (isHydratingAppSettings) return;
+  if (isHydratingAppSettings || isUserDataHydrating()) return;
+
+  const softwareDataPath = getActiveSoftwareDataPath();
+  if (!softwareDataPath) return;
 
   if (appSettingsSaveTimer) {
     clearTimeout(appSettingsSaveTimer);
   }
 
   appSettingsSaveTimer = setTimeout(() => {
-    saveAppSettings(repository, getState().appSettings);
+    void saveAppSettings(repository, softwareDataPath, getState().appSettings);
     appSettingsSaveTimer = null;
   }, 300);
 }

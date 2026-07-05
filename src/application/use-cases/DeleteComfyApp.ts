@@ -1,16 +1,16 @@
 import type { IComfyAppRepository } from "@/application/ports/IComfyAppRepository";
-import type { IProjectsWorkspaceStore } from "@/application/ports/IProjectsWorkspaceStore";
-import { ensureWorkspaceAccess } from "./EnsureWorkspaceAccess";
+import type { ISoftwareDataPathStore } from "@/application/ports/ISoftwareDataPathStore";
+import { ensureSoftwareDataPathAccess } from "./EnsureSoftwareDataPathAccess";
 
 /** 删除应用整个备份子目录 */
 export async function deleteComfyApp(
-  workspaceStore: IProjectsWorkspaceStore,
+  pathStore: ISoftwareDataPathStore,
   repository: IComfyAppRepository,
   appId: string,
 ): Promise<void> {
-  const workspacePath = await ensureWorkspaceAccess(workspaceStore);
-  if (!workspacePath) {
-    throw new Error("未设置项目文件夹，请先在设置中选择项目文件夹");
+  const softwareDataPath = await ensureSoftwareDataPathAccess(pathStore);
+  if (!softwareDataPath) {
+    throw new Error("未设置软件数据路径，请先在设置中选择软件数据路径");
   }
-  await repository.delete(workspacePath, appId);
+  await repository.delete(softwareDataPath, appId);
 }

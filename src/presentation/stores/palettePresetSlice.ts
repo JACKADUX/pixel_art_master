@@ -22,6 +22,12 @@ import {
   type PalettePresetLibrary,
 } from "@/domain/palette/PalettePresetLibrary";
 import type { Project } from "@/domain/project/Project";
+import type { ISoftwareDataPathStore } from "@/application/ports/ISoftwareDataPathStore";
+import { ensureSoftwareDataPathAccess } from "@/application/use-cases/EnsureSoftwareDataPathAccess";
+import {
+  getActiveSoftwareDataPath,
+  isUserDataHydrating,
+} from "@/infrastructure/storage/UserDataPersistenceContext";
 import { toast } from "@/presentation/stores/toastStore";
 
 export interface PalettePresetDeleteTarget {
@@ -36,8 +42,9 @@ export interface PalettePresetSliceState {
 }
 
 export interface PalettePresetSliceActions {
-  loadPalettePresets: () => void;
-  saveCurrentPaletteAsPreset: (name?: string) => void;
+  loadPalettePresets: () => Promise<void>;
+  hydratePalettePresetLibrary: (library: PalettePresetLibrary) => void;
+  saveCurrentPaletteAsPreset: (name?: string) => Promise<void>;
   importPalettePresetFromHexFile: () => Promise<void>;
   importPalettePresetFromImageFile: () => Promise<void>;
   overwritePalettePreset: (id: string) => void;
@@ -61,6 +68,7 @@ type PalettePresetSet = (
 
 type PalettePresetGet = () => PalettePresetSliceState & {
   project: Project | null;
+  softwareDataPath: string | null;
 };
 
 export function createPalettePresetInitialState(): PalettePresetSliceState {
@@ -75,20 +83,46 @@ export function createPalettePresetSlice(
   set: PalettePresetSet,
   get: PalettePresetGet,
   deps: {
+    pathStore: ISoftwareDataPathStore;
     palettePresetRepository: IPalettePresetRepository;
     imageProcessor: IImageProcessor;
   },
 ): PalettePresetSliceState & PalettePresetSliceActions {
-  const persist = (library: PalettePresetLibrary) => {
+  const resolveSoftwareDataPath = async (): Promise<string | null> => {
+    const path = get().softwareDataPath ?? deps.pathStore.getPath();
+    if (!path) {
+      toast.info("请先选择软件数据路径");
+      return null;
+    }
+    return ensureSoftwareDataPathAccess(deps.pathStore);
+  };
+
+  const persist = async (library: PalettePresetLibrary) => {
     set({ palettePresetLibrary: library });
-    deps.palettePresetRepository.save(library);
+    if (isUserDataHydrating()) return;
+    const softwareDataPath = getActiveSoftwareDataPath() ?? (await resolveSoftwareDataPath());
+    if (!softwareDataPath) return;
+    await deps.palettePresetRepository.save(softwareDataPath, library);
   };
 
   return {
     ...createPalettePresetInitialState(),
 
-    loadPalettePresets: () => {
-      const loaded = deps.palettePresetRepository.load();
+    hydratePalettePresetLibrary: (library) => {
+      set({
+        palettePresetLibrary: {
+          ...createEmptyPalettePresetLibrary(),
+          ...library,
+          defaultPresetId: library.defaultPresetId ?? null,
+        },
+      });
+    },
+
+    loadPalettePresets: async () => {
+      const softwareDataPath = await resolveSoftwareDataPath();
+      if (!softwareDataPath) return;
+
+      const loaded = await deps.palettePresetRepository.load(softwareDataPath);
       if (loaded && typeof loaded === "object" && "presets" in loaded) {
         const library = loaded as PalettePresetLibrary;
         set({
@@ -101,7 +135,7 @@ export function createPalettePresetSlice(
       }
     },
 
-    saveCurrentPaletteAsPreset: (name) => {
+    saveCurrentPaletteAsPreset: async (name) => {
       const project = get().project;
       if (!project) return;
       const colors = project.palette.getColors();
@@ -114,7 +148,7 @@ export function createPalettePresetSlice(
         colors,
         name,
       );
-      persist(library);
+      await persist(library);
       toast.info(`已保存预设「${preset.name}」`);
     },
 
@@ -144,7 +178,7 @@ export function createPalettePresetSlice(
         colors,
         deriveHexPresetName(selected),
       );
-      persist(library);
+      await persist(library);
       toast.info(`已从 hex 文件导入预设「${preset.name}」（${colors.length} 色）`);
     },
 
@@ -176,7 +210,7 @@ export function createPalettePresetSlice(
         colors,
         deriveHexPresetName(selected),
       );
-      persist(library);
+      await persist(library);
       toast.info(`已从图片导入预设「${preset.name}」（${colors.length} 色）`);
     },
 
@@ -191,14 +225,14 @@ export function createPalettePresetSlice(
         toast.info("色板为空，无法覆盖预设");
         return;
       }
-      persist(updatePresetColorsInLibrary(library, id, colors));
+      void persist(updatePresetColorsInLibrary(library, id, colors));
       toast.info(`已用当前色板覆盖「${preset.name}」`);
     },
 
     renamePalettePresetAction: (id, name) => {
       const trimmed = name.trim();
       if (!trimmed) return;
-      persist(renamePalettePresetInLibrary(get().palettePresetLibrary, id, trimmed));
+      void persist(renamePalettePresetInLibrary(get().palettePresetLibrary, id, trimmed));
     },
 
     requestDeletePalettePreset: (id) => {
@@ -212,7 +246,7 @@ export function createPalettePresetSlice(
     confirmDeletePalettePreset: () => {
       const target = get().deletePalettePresetTarget;
       if (!target) return;
-      persist(removePalettePreset(get().palettePresetLibrary, target.id));
+      void persist(removePalettePreset(get().palettePresetLibrary, target.id));
       set({ deletePalettePresetTarget: null });
       toast.info(`已删除预设「${target.name}」`);
     },
@@ -244,7 +278,7 @@ export function createPalettePresetSlice(
         toast.info(`「${preset.name}」已是默认色板`);
         return;
       }
-      persist(setDefaultPalettePreset(library, id));
+      void persist(setDefaultPalettePreset(library, id));
       toast.info(`已将「${preset.name}」设为默认色板`);
     },
 

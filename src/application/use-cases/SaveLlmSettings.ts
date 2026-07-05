@@ -1,9 +1,10 @@
 import type { LlmSettingsStore } from "@/domain/llm/LlmSettings";
 import type { ILlmSettingsRepository } from "../ports/ILlmSettingsRepository";
 
-export function saveLlmSettings(
+export async function saveLlmSettings(
   repository: ILlmSettingsRepository,
+  softwareDataPath: string,
   settings: LlmSettingsStore,
-): void {
-  repository.save(settings);
+): Promise<void> {
+  await repository.save(softwareDataPath, settings);
 }

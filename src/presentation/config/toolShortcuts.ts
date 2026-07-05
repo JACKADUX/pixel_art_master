@@ -8,6 +8,7 @@ export const TOOL_SHORTCUTS: Record<ToolType, string> = {
   select: "M",
   transform: "V",
   repeatTile: "T",
+  canvasResize: "R",
 };
 
 export const SELECTION_MODE_SHORTCUTS: Partial<Record<SelectionMode, string>> = {
@@ -22,6 +23,7 @@ const SHORTCUT_CODE_TO_TOOL: Record<string, ToolType> = {
   KeyU: "shape",
   KeyV: "transform",
   KeyT: "repeatTile",
+  KeyR: "canvasResize",
 };
 
 const SHORTCUT_CODE_TO_SELECTION_MODE: Record<string, SelectionMode> = {

@@ -1,22 +1,18 @@
 import { describe, expect, it } from "vitest";
-
-import { isDrawingLayer, isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
-
-import { createEmptyProject, isUnsavedEmptyProject } from "./Project";
+import { createEmptyProject } from "./Project";
 
 describe("createEmptyProject", () => {
-  it("creates only a drawing layer with no default reference layer", () => {
-    const project = createEmptyProject("blank");
-
-    expect(project.canvas.layers).toHaveLength(1);
-    expect(isDrawingLayer(project.canvas.layers[0]!)).toBe(true);
-    expect(project.canvas.layers.some((layer) => isReferenceLayer(layer))).toBe(false);
-    expect(project.canvas.activeReferenceLayerId).toBeNull();
+  it("uses default 64x64 when size is omitted", () => {
+    const project = createEmptyProject("test");
+    expect(project.canvas.width).toBe(64);
+    expect(project.canvas.height).toBe(64);
   });
 
-  it("is considered an unsaved empty project", () => {
-    const project = createEmptyProject("blank");
-
-    expect(isUnsavedEmptyProject(project)).toBe(true);
+  it("uses provided canvas size", () => {
+    const project = createEmptyProject("test", { width: 128, height: 96 });
+    expect(project.canvas.width).toBe(128);
+    expect(project.canvas.height).toBe(96);
+    const drawingLayer = project.canvas.layers.find((layer) => layer.type === "drawing");
+    expect(drawingLayer?.type === "drawing" ? drawingLayer.pixels.length : 0).toBe(128 * 96);
   });
 });

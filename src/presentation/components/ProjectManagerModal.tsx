@@ -8,14 +8,14 @@ import { ProjectCard } from "./ProjectCard";
 export function ProjectManagerModal() {
   const open = useAppStore((s) => s.projectManagerOpen);
   const project = useAppStore((s) => s.project);
-  const workspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
   const summaries = useAppStore((s) => s.projectSummaries);
   const loading = useAppStore((s) => s.projectListLoading);
   const deleteTarget = useAppStore((s) => s.deleteConfirmTarget);
   const projectManagerError = useAppStore((s) => s.projectManagerError);
 
   const closeProjectManager = useAppStore((s) => s.closeProjectManager);
-  const pickProjectsWorkspace = useAppStore((s) => s.pickProjectsWorkspace);
+  const pickSoftwareDataPath = useAppStore((s) => s.pickSoftwareDataPath);
   const refreshProjectList = useAppStore((s) => s.refreshProjectList);
   const openProjectByPath = useAppStore((s) => s.openProjectByPath);
   const createBlankProject = useAppStore((s) => s.createBlankProject);
@@ -28,10 +28,10 @@ export function ProjectManagerModal() {
   const wasStartPageRef = useRef(isStartPage);
 
   useEffect(() => {
-    if (open && workspacePath) {
+    if (open && softwareDataPath) {
       void refreshProjectList();
     }
-  }, [open, workspacePath, refreshProjectList]);
+  }, [open, softwareDataPath, refreshProjectList]);
 
   useEffect(() => {
     if (wasStartPageRef.current && !isStartPage && open) {
@@ -59,28 +59,28 @@ export function ProjectManagerModal() {
             </button>
           </div>
 
-          {!workspacePath ? (
+          {!softwareDataPath ? (
             <div className="flex flex-col items-center justify-center gap-4 p-10 text-center">
               <p className="text-sm text-zinc-400">
-                首次使用请选择项目文件夹，所有项目将默认保存到该目录。
+                首次使用请选择软件数据路径，所有项目将默认保存到该目录。
               </p>
               <button
                 type="button"
-                onClick={() => void pickProjectsWorkspace()}
+                onClick={() => void pickSoftwareDataPath()}
                 className="rounded bg-blue-600 px-4 py-2 text-xs font-medium text-white hover:bg-blue-700"
               >
-                选择项目文件夹
+                选择软件数据路径
               </button>
             </div>
           ) : (
             <>
               <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2">
-                <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-500" title={workspacePath}>
-                  {workspacePath}
+                <span className="min-w-0 flex-1 truncate text-[10px] text-zinc-500" title={softwareDataPath}>
+                  {softwareDataPath}
                 </span>
                 <button
                   type="button"
-                  onClick={() => void pickProjectsWorkspace()}
+                  onClick={() => void pickSoftwareDataPath()}
                   className="shrink-0 rounded px-2 py-1 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
                 >
                   更改目录

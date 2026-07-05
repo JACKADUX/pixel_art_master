@@ -6,8 +6,9 @@ export async function saveProject(
   repository: IProjectRepository,
   project: Project,
   filePath: string,
+  softwareDataPath: string | null,
 ): Promise<Project> {
   const updated = touchProject({ ...project, filePath });
-  await repository.save(updated, filePath);
+  await repository.save(updated, filePath, softwareDataPath);
   return updated;
 }

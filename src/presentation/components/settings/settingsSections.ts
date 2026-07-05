@@ -17,7 +17,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
   {
     id: "general",
     label: "通用",
-    description: "项目目录、自动保存与界面选项",
+    description: "软件数据路径、自动保存与界面选项",
     component: GeneralSettingsSection,
   },
   {

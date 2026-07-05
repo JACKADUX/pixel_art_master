@@ -25,7 +25,7 @@ export function PatternBrushPickerPopover({
   const [renameDraft, setRenameDraft] = useState("");
   const [renameBrushId, setRenameBrushId] = useState<string | null>(null);
 
-  const workspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
   const library = useAppStore((s) => s.patternBrushLibrary);
   const loading = useAppStore((s) => s.patternBrushLibraryLoading);
   const activePatternBrushId = useAppStore((s) => s.activePatternBrushId);
@@ -139,8 +139,8 @@ export function PatternBrushPickerPopover({
             <span className="text-[10px] text-zinc-500">Ctrl+B 从选区创建</span>
           </div>
 
-          {!workspacePath ? (
-            <p className="p-3 text-xs text-zinc-500">请先选择项目文件夹</p>
+          {!softwareDataPath ? (
+            <p className="p-3 text-xs text-zinc-500">请先选择软件数据路径</p>
           ) : loading || !library ? (
             <p className="p-3 text-xs text-zinc-500">加载中…</p>
           ) : (
@@ -167,7 +167,7 @@ export function PatternBrushPickerPopover({
               )}
               <PatternBrushGrid
                 library={library}
-                workspacePath={workspacePath}
+                workspacePath={softwareDataPath}
                 activePatternBrushId={activePatternBrushId}
                 onSelectBrush={(id) => void selectPatternBrush(id)}
                 onRequestDeleteBrush={requestDeletePatternBrush}

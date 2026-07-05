@@ -1,6 +1,6 @@
 import type { IPatternBrushRepository } from "@/application/ports/IPatternBrushRepository";
-import type { IProjectsWorkspaceStore } from "@/application/ports/IProjectsWorkspaceStore";
-import { ensureWorkspaceAccess } from "@/application/use-cases/EnsureWorkspaceAccess";
+import type { ISoftwareDataPathStore } from "@/application/ports/ISoftwareDataPathStore";
+import { ensureSoftwareDataPathAccess } from "@/application/use-cases/EnsureSoftwareDataPathAccess";
 import { createPatternBrushFromGrid } from "@/application/use-cases/CreatePatternBrushFromGrid";
 import {
   extractPatternBrushPixelsFromSelection,
@@ -54,7 +54,7 @@ type PatternBrushSet = (
 ) => void;
 
 type PatternBrushGet = () => PatternBrushSliceState & {
-  projectsWorkspacePath: string | null;
+  softwareDataPath: string | null;
   foregroundColor: PixelColor;
   selection: import("@/domain/selection/SelectionState").SelectionState | null;
   selectionDrag: import("@/presentation/controllers/canvasInteraction").SelectionDragState | null;
@@ -84,19 +84,19 @@ export function createPatternBrushSlice(
   set: PatternBrushSet,
   get: PatternBrushGet,
   deps: {
-    workspaceStore: IProjectsWorkspaceStore;
+    pathStore: ISoftwareDataPathStore;
     patternBrushRepository: IPatternBrushRepository;
   },
 ): PatternBrushSliceState & PatternBrushSliceActions {
   const resolveWorkspace = async (): Promise<string | null> => {
-    const path = get().projectsWorkspacePath ?? deps.workspaceStore.getPath();
+    const path = get().softwareDataPath ?? deps.pathStore.getPath();
     if (!path) {
-      toast.info("请先选择项目文件夹");
+      toast.info("请先选择软件数据路径");
       return null;
     }
-    const accessible = await ensureWorkspaceAccess(deps.workspaceStore);
+    const accessible = await ensureSoftwareDataPathAccess(deps.pathStore);
     if (!accessible) {
-      toast.error("无法访问项目目录，请重新授权");
+      toast.error("无法访问软件数据路径，请重新授权");
       return null;
     }
     return accessible;

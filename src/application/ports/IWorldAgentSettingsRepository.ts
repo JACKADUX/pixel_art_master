@@ -1,6 +1,6 @@
 import type { WorldAgentSettings } from "@/domain/world/WorldAgentSettings";
 
 export interface IWorldAgentSettingsRepository {
-  load(): unknown | null;
-  save(settings: WorldAgentSettings): void;
+  load(softwareDataPath: string): Promise<unknown | null>;
+  save(softwareDataPath: string, settings: WorldAgentSettings): Promise<void>;
 }

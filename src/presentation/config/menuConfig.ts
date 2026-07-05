@@ -6,12 +6,10 @@ import {
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
   ArrowsPointingOutIcon,
-  ChatBubbleLeftRightIcon,
   CommandLineIcon,
   DocumentDuplicateIcon,
   Cog6ToothIcon,
   DocumentPlusIcon,
-  EyeIcon,
   FolderOpenIcon,
   GlobeAltIcon,
   MapPinIcon,
@@ -69,8 +67,6 @@ export interface MenuActions {
   openPixelRestorePage: () => void;
   openColorEditPage: () => void;
   openWorldPage: () => void;
-  openAiChatTestPage: () => void;
-  openAiVisionTestPage: () => void;
   openComfyUiPage: () => void;
   /** 已保存的 ComfyUI 应用列表（用于工具菜单二级子菜单） */
   comfyApps: { id: string; name: string }[];
@@ -233,18 +229,6 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           label: "世界创建器…",
           icon: GlobeAltIcon,
           onClick: actions.openWorldPage,
-        },
-        {
-          type: "action",
-          label: "AI 对话测试…",
-          icon: ChatBubbleLeftRightIcon,
-          onClick: actions.openAiChatTestPage,
-        },
-        {
-          type: "action",
-          label: "AI 识图测试…",
-          icon: EyeIcon,
-          onClick: actions.openAiVisionTestPage,
         },
         {
           type: "action",

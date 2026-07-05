@@ -1,6 +1,10 @@
 import type { AppSettings } from "@/domain/appSettings/AppSettings";
 import type { IAppSettingsRepository } from "../ports/IAppSettingsRepository";
 
-export function saveAppSettings(repository: IAppSettingsRepository, settings: AppSettings): void {
-  repository.save(settings);
+export async function saveAppSettings(
+  repository: IAppSettingsRepository,
+  softwareDataPath: string,
+  settings: AppSettings,
+): Promise<void> {
+  await repository.save(softwareDataPath, settings);
 }

@@ -17,7 +17,7 @@ import {
 } from "@/domain/world/World";
 import type { WorldSummary } from "@/domain/world/WorldSummary";
 import { worldRepository } from "@/infrastructure/storage/JsonWorldRepository";
-import { projectsWorkspaceStore } from "@/infrastructure/storage/LocalProjectsWorkspaceStore";
+import { softwareDataPathStore } from "@/infrastructure/storage/LocalSoftwareDataPathStore";
 import { toast } from "@/presentation/stores/toastStore";
 
 interface WorldStore {
@@ -80,7 +80,7 @@ export const useWorldStore = create<WorldStore>((set, get) => {
 
   return {
     ...sessionDefaults,
-    workspacePath: projectsWorkspaceStore.getPath(),
+    workspacePath: softwareDataPathStore.getPath(),
 
     openPage: () => {
       set({ open: true });
@@ -93,18 +93,18 @@ export const useWorldStore = create<WorldStore>((set, get) => {
       set({
         ...sessionDefaults,
         open: get().open,
-        workspacePath: projectsWorkspaceStore.getPath(),
+        workspacePath: softwareDataPathStore.getPath(),
       }),
 
     refreshWorldList: async () => {
-      const workspacePath = projectsWorkspaceStore.getPath();
+      const workspacePath = softwareDataPathStore.getPath();
       if (!workspacePath) {
         set({ worlds: [], workspacePath: null });
         return;
       }
       set({ loading: true });
       try {
-        const worlds = await listWorldsInWorkspace(worldRepository, projectsWorkspaceStore);
+        const worlds = await listWorldsInWorkspace(worldRepository, softwareDataPathStore);
         set({ worlds, workspacePath, loading: false, error: null });
       } catch {
         set({ loading: false, error: "读取世界列表失败" });
@@ -112,16 +112,16 @@ export const useWorldStore = create<WorldStore>((set, get) => {
     },
 
     createWorld: async () => {
-      const workspacePath = projectsWorkspaceStore.getPath();
+      const workspacePath = softwareDataPathStore.getPath();
       if (!workspacePath) {
-        toast.info("请先在项目管理中选择项目文件夹");
+        toast.info("请先在项目管理中选择软件数据路径");
         return;
       }
       const world = createEmptyWorld();
       try {
-        const filePath = await resolveWorldSavePath(projectsWorkspaceStore, world.name);
+        const filePath = await resolveWorldSavePath(softwareDataPathStore, world.name);
         if (!filePath) {
-          toast.info("请先在项目管理中选择项目文件夹");
+          toast.info("请先在项目管理中选择软件数据路径");
           return;
         }
         const saved = await saveWorld(worldRepository, world, filePath);

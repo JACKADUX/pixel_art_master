@@ -1,7 +1,7 @@
 import type { IClipboardService } from "@/application/ports/IClipboardService";
 import type { IAssetLibraryRepository } from "@/application/ports/IAssetLibraryRepository";
 import type { IImageProcessor } from "@/application/ports/IImageProcessor";
-import type { IProjectsWorkspaceStore } from "@/application/ports/IProjectsWorkspaceStore";
+import type { ISoftwareDataPathStore } from "@/application/ports/ISoftwareDataPathStore";
 import {
   createAssetCategory,
   createAssetFolder,
@@ -14,7 +14,7 @@ import {
   updateAssetRecord,
 } from "@/application/use-cases/AssetRecordUseCases";
 import { createMarkdownAsset } from "@/application/use-cases/CreateMarkdownAsset";
-import { ensureWorkspaceAccess } from "@/application/use-cases/EnsureWorkspaceAccess";
+import { ensureSoftwareDataPathAccess } from "@/application/use-cases/EnsureSoftwareDataPathAccess";
 import { importAssetFromCanvasRegion } from "@/application/use-cases/ImportAssetFromCanvasRegion";
 import { importAssetFromClipboard } from "@/application/use-cases/ImportAssetFromClipboard";
 import { importAssetFromFileDialog } from "@/application/use-cases/ImportAssetFromFile";
@@ -87,6 +87,7 @@ export interface AssetLibrarySliceState {
   deleteAssetTarget: AssetDeleteTarget | null;
   moveAssetTarget: AssetMoveTarget | null;
   assetImageViewerAssetId: string | null;
+  assetNotesEditor: { assetId: string; mode: "view" | "edit" } | null;
 }
 
 export interface AssetLibrarySliceActions {
@@ -140,6 +141,8 @@ export interface AssetLibrarySliceActions {
   confirmDeleteAssetFolder: (disposition: AssetFolderDeletionDisposition) => Promise<void>;
   openAssetImageViewer: (assetId: string) => void;
   closeAssetImageViewer: () => void;
+  openAssetNotesEditor: (assetId: string, mode?: "view" | "edit") => void;
+  closeAssetNotesEditor: () => void;
 }
 
 type AssetLibrarySet = (
@@ -149,7 +152,7 @@ type AssetLibrarySet = (
 ) => void;
 
 type AssetLibraryGet = () => AssetLibrarySliceState & {
-  projectsWorkspacePath: string | null;
+  softwareDataPath: string | null;
   getCompositeGrid: () => import("@/domain/canvas/PixelGrid").PixelGrid | null;
   getActiveLayerGrid: () => import("@/domain/canvas/PixelGrid").PixelGrid | null;
   deleteAssetRecordAction: (assetId: string) => Promise<void>;
@@ -174,6 +177,7 @@ export function createAssetLibraryInitialState(): AssetLibrarySliceState {
     deleteAssetTarget: null,
     moveAssetTarget: null,
     assetImageViewerAssetId: null,
+    assetNotesEditor: null,
   };
 }
 
@@ -181,21 +185,21 @@ export function createAssetLibrarySlice(
   set: AssetLibrarySet,
   get: AssetLibraryGet,
   deps: {
-    workspaceStore: IProjectsWorkspaceStore;
+    pathStore: ISoftwareDataPathStore;
     assetRepository: IAssetLibraryRepository;
     clipboard: IClipboardService;
     imageProcessor: IImageProcessor;
   },
 ): AssetLibrarySliceState & AssetLibrarySliceActions {
   const resolveWorkspace = async (): Promise<string | null> => {
-    const path = get().projectsWorkspacePath ?? deps.workspaceStore.getPath();
+    const path = get().softwareDataPath ?? deps.pathStore.getPath();
     if (!path) {
-      toast.info("请先选择项目文件夹");
+      toast.info("请先选择软件数据路径");
       return null;
     }
-    const accessible = await ensureWorkspaceAccess(deps.workspaceStore);
+    const accessible = await ensureSoftwareDataPathAccess(deps.pathStore);
     if (!accessible) {
-      toast.error("无法访问项目目录，请重新授权");
+      toast.error("无法访问软件数据路径，请重新授权");
       return null;
     }
     return accessible;
@@ -731,5 +735,10 @@ export function createAssetLibrarySlice(
     openAssetImageViewer: (assetId) => set({ assetImageViewerAssetId: assetId }),
 
     closeAssetImageViewer: () => set({ assetImageViewerAssetId: null }),
+
+    openAssetNotesEditor: (assetId, mode = "edit") =>
+      set({ assetNotesEditor: { assetId, mode } }),
+
+    closeAssetNotesEditor: () => set({ assetNotesEditor: null }),
   };
 }

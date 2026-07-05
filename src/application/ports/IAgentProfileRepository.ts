@@ -1,6 +1,6 @@
 import type { AgentProfile } from "@/domain/aiTextField/AgentProfile";
 
 export interface IAgentProfileRepository {
-  load(): unknown | null;
-  save(profiles: AgentProfile[]): void;
+  load(softwareDataPath: string): Promise<unknown | null>;
+  save(softwareDataPath: string, profiles: AgentProfile[]): Promise<void>;
 }

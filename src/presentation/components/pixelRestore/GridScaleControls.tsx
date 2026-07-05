@@ -254,7 +254,7 @@ export function GridScaleControls({
         </div>
         {!canExport && (
           <p className="mt-2 text-center text-[10px] text-zinc-600">
-            请先选择项目文件夹并生成结果
+            请先选择软件数据路径并生成结果
           </p>
         )}
       </div>

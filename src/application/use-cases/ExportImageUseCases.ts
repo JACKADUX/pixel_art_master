@@ -25,6 +25,7 @@ export interface ExportImageInput {
   scope: ImageExportScope;
   scalePreset: ImageExportScalePreset;
   customLongestEdge: number;
+  softwareDataPath: string;
   preferencesRepository: IImageExportPreferencesRepository;
 }
 
@@ -50,7 +51,7 @@ export async function exportImage(input: ExportImageInput): Promise<{ filePath: 
     scalePreset: input.scalePreset,
     customLongestEdge: input.customLongestEdge,
   };
-  input.preferencesRepository.save(preferences);
+  await input.preferencesRepository.save(input.softwareDataPath, preferences);
 
   return { filePath };
 }

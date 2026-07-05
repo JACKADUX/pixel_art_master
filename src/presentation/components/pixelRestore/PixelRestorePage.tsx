@@ -31,7 +31,7 @@ export function PixelRestorePage() {
   const adjustGridRegion = usePixelRestoreStore((s) => s.adjustGridRegion);
   const applyGridRestoreResult = usePixelRestoreStore((s) => s.applyGridRestoreResult);
 
-  const projectsWorkspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
   const exportRestoredImageToAssetLibrary = useAppStore(
     (s) => s.exportRestoredImageToAssetLibrary,
   );
@@ -170,7 +170,7 @@ export function PixelRestorePage() {
           />
 
           <RestoreToolPanel
-            canExport={projectsWorkspacePath !== null && resultImageData !== null}
+            canExport={softwareDataPath !== null && resultImageData !== null}
             canSendToColorEdit={resultImageData !== null}
             onExport={handleExport}
             onSendToColorEdit={handleSendToColorEdit}

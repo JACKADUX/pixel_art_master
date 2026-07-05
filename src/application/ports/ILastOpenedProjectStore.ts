@@ -1,5 +1,5 @@
 export interface ILastOpenedProjectStore {
-  getPath(): string | null;
-  setPath(path: string): void;
-  clearPath(): void;
+  getPath(softwareDataPath: string): Promise<string | null>;
+  setPath(softwareDataPath: string, path: string): Promise<void>;
+  clearPath(softwareDataPath: string): Promise<void>;
 }

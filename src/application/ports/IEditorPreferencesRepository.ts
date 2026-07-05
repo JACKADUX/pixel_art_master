@@ -1,6 +1,6 @@
 import type { EditorPreferences } from "@/domain/preferences/EditorPreferences";
 
 export interface IEditorPreferencesRepository {
-  load(): unknown | null;
-  save(prefs: EditorPreferences): void;
+  load(softwareDataPath: string): Promise<unknown | null>;
+  save(softwareDataPath: string, prefs: EditorPreferences): Promise<void>;
 }

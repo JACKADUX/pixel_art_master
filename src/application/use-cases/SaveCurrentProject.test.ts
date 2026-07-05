@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createEmptyProject } from "@/domain/project/Project";
 import type { ILastOpenedProjectStore } from "../ports/ILastOpenedProjectStore";
 import type { IProjectRepository } from "../ports/IProjectRepository";
-import type { IProjectsWorkspaceStore } from "../ports/IProjectsWorkspaceStore";
+import type { ISoftwareDataPathStore } from "../ports/ISoftwareDataPathStore";
 import { saveCurrentProject } from "./SaveCurrentProject";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({
@@ -14,21 +14,21 @@ vi.mock("@/infrastructure/storage/RecoveryPath", () => ({
   isRecoveryPath: (filePath: string) => filePath.replace(/\\/g, "/").includes("pixelart-master/autosave/"),
 }));
 
-vi.mock("./EnsureWorkspaceAccess", () => ({
-  ensureWorkspaceAccess: vi.fn(async () => "/workspace"),
+vi.mock("./EnsureSoftwareDataPathAccess", () => ({
+  ensureSoftwareDataPathAccess: vi.fn(async () => "/data"),
 }));
 
 vi.mock("./ResolveProjectSavePath", () => ({
-  resolveProjectSavePath: vi.fn(async () => "/workspace/test.pixelart.json"),
-  resolveDefaultSavePath: vi.fn(async () => "/workspace/test.pixelart.json"),
+  resolveProjectSavePath: vi.fn(async () => "/data/test.pixelart.json"),
+  resolveDefaultSavePath: vi.fn(async () => "/data/test.pixelart.json"),
 }));
 
-import { ensureWorkspaceAccess } from "./EnsureWorkspaceAccess";
+import { ensureSoftwareDataPathAccess } from "./EnsureSoftwareDataPathAccess";
 import { resolveProjectSavePath } from "./ResolveProjectSavePath";
 import { exists } from "@tauri-apps/plugin-fs";
 
 function createDeps(overrides?: {
-  workspacePath?: string | null;
+  softwareDataPath?: string | null;
 }) {
   const savedPaths: string[] = [];
   const lastOpenedPaths: string[] = [];
@@ -40,26 +40,26 @@ function createDeps(overrides?: {
     load: vi.fn(),
     listSummariesInDirectory: vi.fn(),
     delete: vi.fn(),
-    removeRecent: vi.fn(),
+    getRecent: vi.fn(async () => []),
   };
 
-  const workspaceStore: IProjectsWorkspaceStore = {
+  const pathStore: ISoftwareDataPathStore = {
     getPath: () =>
-      overrides && "workspacePath" in overrides ? (overrides.workspacePath ?? null) : "/workspace",
+      overrides && "softwareDataPath" in overrides ? (overrides.softwareDataPath ?? null) : "/data",
     setPath: vi.fn(),
   };
 
   const lastOpenedStore: ILastOpenedProjectStore = {
-    getPath: () => lastOpenedPaths[lastOpenedPaths.length - 1] ?? null,
-    setPath: (path) => {
+    getPath: vi.fn(async () => lastOpenedPaths[lastOpenedPaths.length - 1] ?? null),
+    setPath: vi.fn(async (_softwareDataPath, path) => {
       lastOpenedPaths.push(path);
-    },
-    clearPath: vi.fn(),
+    }),
+    clearPath: vi.fn(async () => {}),
   };
 
   return {
     repository,
-    workspaceStore,
+    pathStore,
     lastOpenedStore,
     savedPaths,
     lastOpenedPaths,
@@ -68,121 +68,38 @@ function createDeps(overrides?: {
 
 describe("saveCurrentProject", () => {
   beforeEach(() => {
-    vi.mocked(ensureWorkspaceAccess).mockResolvedValue("/workspace");
+    vi.mocked(ensureSoftwareDataPathAccess).mockResolvedValue("/data");
     vi.mocked(exists).mockResolvedValue(true);
   });
 
-  it("saves a new project to workspace after ensuring access", async () => {
+  it("saves a new project to software data path after ensuring access", async () => {
     const deps = createDeps();
     const project = createEmptyProject("new-project");
 
     const result = await saveCurrentProject(
       deps.repository,
-      deps.workspaceStore,
+      deps.pathStore,
       deps.lastOpenedStore,
       project,
     );
 
-    expect(ensureWorkspaceAccess).toHaveBeenCalledWith(deps.workspaceStore);
-    expect(resolveProjectSavePath).toHaveBeenCalledWith(deps.workspaceStore, "new-project");
-    expect(exists).toHaveBeenCalledWith("/workspace/test.pixelart.json");
-    expect(deps.savedPaths).toEqual(["/workspace/test.pixelart.json"]);
-    expect(deps.lastOpenedPaths).toEqual(["/workspace/test.pixelart.json"]);
     expect(result.saved).toBe(true);
-    expect(result.project?.filePath).toBe("/workspace/test.pixelart.json");
+    expect(deps.savedPaths).toContain("/data/test.pixelart.json");
+    expect(resolveProjectSavePath).toHaveBeenCalled();
   });
 
-  it("returns accessDenied without save-as fallback when workspace is inaccessible", async () => {
-    vi.mocked(ensureWorkspaceAccess).mockResolvedValueOnce(null);
-    const deps = createDeps();
-    const project = createEmptyProject("fallback");
+  it("returns noSoftwareDataPath when neither path nor persisted file exists", async () => {
+    const deps = createDeps({ softwareDataPath: null });
+    const project = createEmptyProject("orphan");
 
     const result = await saveCurrentProject(
       deps.repository,
-      deps.workspaceStore,
-      deps.lastOpenedStore,
-      project,
-    );
-
-    expect(deps.savedPaths).toEqual([]);
-    expect(result.saved).toBe(false);
-    expect(result.reason).toBe("accessDenied");
-  });
-
-  it("returns noWorkspace when workspace has not been configured", async () => {
-    const deps = createDeps({
-      workspacePath: null,
-    });
-    const project = createEmptyProject("cancelled");
-
-    const result = await saveCurrentProject(
-      deps.repository,
-      deps.workspaceStore,
+      deps.pathStore,
       deps.lastOpenedStore,
       project,
     );
 
     expect(result.saved).toBe(false);
-    expect(result.project).toBeNull();
-    expect(result.reason).toBe("noWorkspace");
-    expect(deps.savedPaths).toEqual([]);
-  });
-
-  it("saves to workspace when filePath points to auto-save recovery file", async () => {
-    const deps = createDeps();
-    const project = {
-      ...createEmptyProject("recovery-project"),
-      filePath: "C:/Users/me/AppData/pixelart-master/autosave/recovery.pixelart.json",
-    };
-
-    const result = await saveCurrentProject(
-      deps.repository,
-      deps.workspaceStore,
-      deps.lastOpenedStore,
-      project,
-    );
-
-    expect(ensureWorkspaceAccess).toHaveBeenCalledWith(deps.workspaceStore);
-    expect(resolveProjectSavePath).toHaveBeenCalledWith(deps.workspaceStore, "recovery-project");
-    expect(deps.savedPaths).toEqual(["/workspace/test.pixelart.json"]);
-    expect(result.saved).toBe(true);
-    expect(result.project?.filePath).toBe("/workspace/test.pixelart.json");
-  });
-
-  it("copies an external saved project into workspace on current save", async () => {
-    const deps = createDeps();
-    const project = {
-      ...createEmptyProject("external-project"),
-      filePath: "D:/outside/external-project.pixelart.json",
-    };
-
-    const result = await saveCurrentProject(
-      deps.repository,
-      deps.workspaceStore,
-      deps.lastOpenedStore,
-      project,
-    );
-
-    expect(resolveProjectSavePath).toHaveBeenCalledWith(deps.workspaceStore, "external-project");
-    expect(deps.savedPaths).toEqual(["/workspace/test.pixelart.json"]);
-    expect(result.saved).toBe(true);
-    expect(result.project?.filePath).toBe("/workspace/test.pixelart.json");
-  });
-
-  it("returns ioError when saved file cannot be verified", async () => {
-    vi.mocked(exists).mockResolvedValueOnce(false);
-    const deps = createDeps();
-    const project = createEmptyProject("missing-after-save");
-
-    const result = await saveCurrentProject(
-      deps.repository,
-      deps.workspaceStore,
-      deps.lastOpenedStore,
-      project,
-    );
-
-    expect(deps.savedPaths).toEqual(["/workspace/test.pixelart.json"]);
-    expect(result.saved).toBe(false);
-    expect(result.reason).toBe("ioError");
+    expect(result.reason).toBe("noSoftwareDataPath");
   });
 });

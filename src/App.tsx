@@ -12,8 +12,6 @@ import { ExportImageModal } from "./presentation/components/ExportImageModal";
 import { PixelRestorePage } from "./presentation/components/pixelRestore/PixelRestorePage";
 import { ColorEditPage } from "./presentation/components/colorEdit/ColorEditPage";
 import { WorldCreatorPage } from "./presentation/components/world/WorldCreatorPage";
-import { AiChatTestPage } from "./presentation/components/ai/AiChatTestPage";
-import { AiVisionTestPage } from "./presentation/components/ai/AiVisionTestPage";
 import { ComfyUiPage } from "./presentation/components/comfyui/ComfyUiPage";
 import { SettingsModal } from "./presentation/components/settings/SettingsModal";
 import { AiTextFieldHost } from "./presentation/components/aiTextField/AiTextFieldHost";
@@ -56,8 +54,6 @@ function App() {
       <PixelRestorePage />
       <ColorEditPage />
       <WorldCreatorPage />
-      <AiChatTestPage />
-      <AiVisionTestPage />
       <ComfyUiPage />
       <AiTextFieldHost />
       <ToastContainer />

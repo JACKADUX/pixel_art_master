@@ -63,6 +63,16 @@ function RepeatTileIcon({ className }: { className?: string }) {
   );
 }
 
+function CanvasResizeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" className={className} aria-hidden="true">
+      <rect x="2.5" y="2.5" width="8" height="8" strokeWidth="1.25" />
+      <path d="M11 8h3M13 6v4" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M8 11v3M6 13h4" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const TOOL_ICONS = {
   brush: PaintBrushIcon,
   fill: SwatchIcon,
@@ -71,6 +81,7 @@ const TOOL_ICONS = {
   select: CursorArrowRaysIcon,
   transform: ViewfinderCircleIcon,
   repeatTile: RepeatTileIcon,
+  canvasResize: CanvasResizeIcon,
 } satisfies Record<ToolType, ComponentType<{ className?: string }>>;
 
 function CircleIcon({ className }: { className?: string }) {

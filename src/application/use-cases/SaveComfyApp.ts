@@ -1,21 +1,21 @@
 import type { IComfyAppRepository } from "@/application/ports/IComfyAppRepository";
-import type { IProjectsWorkspaceStore } from "@/application/ports/IProjectsWorkspaceStore";
+import type { ISoftwareDataPathStore } from "@/application/ports/ISoftwareDataPathStore";
 import { touchComfyApp, type ComfyApp } from "@/domain/comfyApp/ComfyApp";
 import type { ComfyApiWorkflow } from "@/domain/comfyui/ComfyWorkflow";
-import { ensureWorkspaceAccess } from "./EnsureWorkspaceAccess";
+import { ensureSoftwareDataPathAccess } from "./EnsureSoftwareDataPathAccess";
 
-/** 保存（或更新）应用，并把工作流备份到项目路径的 comfyui_workflow 子目录下 */
+/** 保存（或更新）应用，并把工作流备份到软件数据路径的 comfyui_workflow 子目录下 */
 export async function saveComfyApp(
-  workspaceStore: IProjectsWorkspaceStore,
+  pathStore: ISoftwareDataPathStore,
   repository: IComfyAppRepository,
   app: ComfyApp,
   workflow: ComfyApiWorkflow,
 ): Promise<ComfyApp> {
-  const workspacePath = await ensureWorkspaceAccess(workspaceStore);
-  if (!workspacePath) {
-    throw new Error("未设置项目文件夹，请先在设置中选择项目文件夹");
+  const softwareDataPath = await ensureSoftwareDataPathAccess(pathStore);
+  if (!softwareDataPath) {
+    throw new Error("未设置软件数据路径，请先在设置中选择软件数据路径");
   }
   const updated = touchComfyApp(app);
-  await repository.save(workspacePath, updated, workflow);
+  await repository.save(softwareDataPath, updated, workflow);
   return updated;
 }

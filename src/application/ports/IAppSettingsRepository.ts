@@ -1,6 +1,6 @@
 import type { AppSettings } from "@/domain/appSettings/AppSettings";
 
 export interface IAppSettingsRepository {
-  load(): unknown | null;
-  save(settings: AppSettings): void;
+  load(softwareDataPath: string): Promise<unknown | null>;
+  save(softwareDataPath: string, settings: AppSettings): Promise<void>;
 }

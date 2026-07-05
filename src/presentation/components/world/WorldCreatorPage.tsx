@@ -206,7 +206,7 @@ export function WorldCreatorPage() {
           <div className="col-span-2 flex items-center justify-center px-6 text-center text-sm text-zinc-600">
             {workspacePath
               ? "从右上角下拉框选择或新建一个世界开始创作"
-              : "尚未指定项目文件夹，请先在项目管理中选择项目文件夹，再新建世界"}
+              : "尚未指定软件数据路径，请先在项目管理中选择软件数据路径，再新建世界"}
           </div>
         )}
       </div>

@@ -14,7 +14,7 @@ export function AssetLibraryDrawer() {
   const { regionProps, isActive: regionActive } = useWorkspaceRegion("assetLibrary");
   const expanded = useAppStore((s) => s.assetLibraryDrawerExpanded);
   const drawerHeight = useAppStore((s) => s.assetLibraryDrawerHeight);
-  const workspacePath = useAppStore((s) => s.projectsWorkspacePath);
+  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
   const library = useAppStore((s) => s.assetLibrary);
   const loading = useAppStore((s) => s.assetLibraryLoading);
   const selectedFolderId = useAppStore((s) => s.selectedAssetFolderId);
@@ -51,10 +51,10 @@ export function AssetLibraryDrawer() {
   const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
   useEffect(() => {
-    if (expanded && workspacePath) {
+    if (expanded && softwareDataPath) {
       void refreshAssetLibrary();
     }
-  }, [expanded, workspacePath, refreshAssetLibrary]);
+  }, [expanded, softwareDataPath, refreshAssetLibrary]);
 
   const handleResizePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -116,12 +116,12 @@ export function AssetLibraryDrawer() {
         >
           全屏
         </button>
-        {!workspacePath && (
-          <span className="text-[10px] text-zinc-500">未设置项目目录</span>
+        {!softwareDataPath && (
+          <span className="text-[10px] text-zinc-500">未设置软件数据路径</span>
         )}
       </div>
 
-      {expanded && workspacePath && (
+      {expanded && softwareDataPath && (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {loading || !library ? (
             <div className="flex h-full items-center justify-center text-xs text-zinc-500">
@@ -130,7 +130,7 @@ export function AssetLibraryDrawer() {
           ) : (
             <AssetLibraryContent
               library={library}
-              workspacePath={workspacePath}
+              workspacePath={softwareDataPath}
               selectedFolderId={selectedFolderId}
               selectedAssetId={selectedAssetId}
               onSelectFolder={setSelectedAssetFolder}

@@ -43,7 +43,7 @@ export function SaveComfyAppModal({
         </label>
 
         <p className="text-[11px] text-zinc-500">
-          将提取 {draftCount} 个组件，工作流会备份到项目文件夹下的 comfyui_workflow 中。
+          将提取 {draftCount} 个组件，工作流会备份到软件数据路径下的 comfyui_workflow 中。
         </p>
 
         <div className="flex justify-end gap-2 border-t border-zinc-800 pt-3">

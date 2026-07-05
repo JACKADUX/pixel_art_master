@@ -37,7 +37,7 @@ export function ProjectCard({ summary, onOpen, onDelete, onRename }: ProjectCard
 
     async function loadThumbnail() {
       try {
-        const project = await loadProject(projectRepository, summary.filePath);
+        const project = await loadProject(projectRepository, summary.filePath, null);
         if (cancelled) return;
 
         const composite = getCompositeGrid(project);

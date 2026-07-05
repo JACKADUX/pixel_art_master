@@ -15,6 +15,7 @@ import {
   clampMagicWandTolerance,
   clampFillTolerance,
   clampPatternScale,
+  clampCanvasResizeStep,
   DEFAULT_TOOL_SETTINGS,
   type BrushShape,
   type SelectionMode,
@@ -105,7 +106,16 @@ const MIN_ASSET_FOLDER_TREE_WIDTH = 120;
 const MAX_ASSET_FOLDER_TREE_WIDTH = 400;
 export const DEFAULT_ASSET_FOLDER_TREE_WIDTH = 160;
 
-const TOOL_TYPES: ToolType[] = ["brush", "fill", "eraser", "shape", "select", "transform", "repeatTile"];
+const TOOL_TYPES: ToolType[] = [
+  "brush",
+  "fill",
+  "eraser",
+  "shape",
+  "select",
+  "transform",
+  "repeatTile",
+  "canvasResize",
+];
 const BRUSH_SHAPES: BrushShape[] = ["square", "circle", "pattern"];
 const ERASER_SHAPES: BrushShape[] = ["square", "circle"];
 const SHAPE_MODES: ShapeMode[] = ["rectangle", "line", "ellipse"];
@@ -299,6 +309,15 @@ function parseToolSettings(value: unknown): ToolSettings {
         ? value.magicWandContiguous
         : defaults.magicWandContiguous,
     transformMode,
+    canvasResizeStep: clampCanvasResizeStep(
+      typeof value.canvasResizeStep === "number"
+        ? value.canvasResizeStep
+        : defaults.canvasResizeStep,
+    ),
+    canvasResizeFixedStep:
+      typeof value.canvasResizeFixedStep === "boolean"
+        ? value.canvasResizeFixedStep
+        : defaults.canvasResizeFixedStep,
   };
 }
 

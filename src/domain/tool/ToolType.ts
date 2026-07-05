@@ -1,6 +1,17 @@
-export type ToolType = "brush" | "fill" | "eraser" | "shape" | "select" | "transform" | "repeatTile";
+export type ToolType =
+  | "brush"
+  | "fill"
+  | "eraser"
+  | "shape"
+  | "select"
+  | "transform"
+  | "repeatTile"
+  | "canvasResize";
 
-export type DrawingToolType = Exclude<ToolType, "select" | "transform" | "repeatTile">;
+export type DrawingToolType = Exclude<
+  ToolType,
+  "select" | "transform" | "repeatTile" | "canvasResize"
+>;
 
 export type ShapeMode = "rectangle" | "line" | "ellipse";
 
@@ -33,6 +44,17 @@ export function clampFillTolerance(tolerance: number): number {
   return Math.max(0, Math.min(255, Math.round(tolerance)));
 }
 
+export const MIN_CANVAS_RESIZE_STEP = 1;
+export const MAX_CANVAS_RESIZE_STEP = 512;
+export const DEFAULT_CANVAS_RESIZE_STEP = 32;
+
+export function clampCanvasResizeStep(step: number): number {
+  return Math.max(
+    MIN_CANVAS_RESIZE_STEP,
+    Math.min(MAX_CANVAS_RESIZE_STEP, Math.round(step)),
+  );
+}
+
 export interface ToolSettings {
   brushSize: number;
   brushShape: BrushShape;
@@ -47,6 +69,8 @@ export interface ToolSettings {
   magicWandTolerance: number;
   magicWandContiguous: boolean;
   transformMode: TransformMode;
+  canvasResizeStep: number;
+  canvasResizeFixedStep: boolean;
 }
 
 export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
@@ -63,4 +87,6 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
   magicWandTolerance: 0,
   magicWandContiguous: true,
   transformMode: "move",
+  canvasResizeStep: DEFAULT_CANVAS_RESIZE_STEP,
+  canvasResizeFixedStep: false,
 };

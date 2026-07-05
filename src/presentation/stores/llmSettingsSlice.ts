@@ -1,4 +1,4 @@
-import { loadLlmSettings } from "@/application/use-cases/LoadLlmSettings";
+import { parseLlmSettingsStore, type LlmSettingsStore } from "@/domain/llm/LlmSettings";
 import { saveLlmSettings } from "@/application/use-cases/SaveLlmSettings";
 import type { ILlmSettingsRepository } from "@/application/ports/ILlmSettingsRepository";
 import {
@@ -7,9 +7,12 @@ import {
   setActiveProvider,
   updateActiveProviderConfig,
   type LlmSettings,
-  type LlmSettingsStore,
 } from "@/domain/llm/LlmSettings";
 import type { LlmProviderId } from "@/domain/llm/LlmProvider";
+import {
+  getActiveSoftwareDataPath,
+  isUserDataHydrating,
+} from "@/infrastructure/storage/UserDataPersistenceContext";
 
 export interface LlmSettingsSliceState {
   llmSettingsStore: LlmSettingsStore;
@@ -33,21 +36,19 @@ type LlmSettingsSet = (
 
 type LlmSettingsGet = () => LlmSettingsSliceState;
 
-export function createLlmSettingsInitialState(
-  repository: ILlmSettingsRepository,
-): LlmSettingsSliceState {
+export function createLlmSettingsInitialState(): LlmSettingsSliceState {
   return {
-    llmSettingsStore: loadLlmSettings(repository),
+    llmSettingsStore: parseLlmSettingsStore(null),
   };
 }
 
 export function createLlmSettingsSlice(
   set: LlmSettingsSet,
   get: LlmSettingsGet,
-  repository: ILlmSettingsRepository,
+  _repository: ILlmSettingsRepository,
 ): LlmSettingsSliceState & LlmSettingsSliceActions {
   return {
-    ...createLlmSettingsInitialState(repository),
+    ...createLlmSettingsInitialState(),
 
     setLlmSettingsStore: (store) => set({ llmSettingsStore: store }),
 
@@ -88,17 +89,21 @@ export function subscribeLlmSettingsPersistence(
   getState: () => LlmSettingsSliceState,
   repository: ILlmSettingsRepository,
 ): void {
+  if (isUserDataHydrating()) return;
+
+  const softwareDataPath = getActiveSoftwareDataPath();
+  if (!softwareDataPath) return;
+
   if (llmSettingsSaveTimer) {
     clearTimeout(llmSettingsSaveTimer);
   }
 
   llmSettingsSaveTimer = setTimeout(() => {
-    saveLlmSettings(repository, getState().llmSettingsStore);
+    void saveLlmSettings(repository, softwareDataPath, getState().llmSettingsStore);
     llmSettingsSaveTimer = null;
   }, 300);
 }
 
-/** 从 store 状态选取当前活跃 LLM 配置 */
-export function selectActiveLlmSettings(state: LlmSettingsSliceState): LlmSettings {
-  return resolveActiveLlmSettings(state.llmSettingsStore);
+export function setLlmSettingsHydrating(_value: boolean): void {
+  // Kept for API compatibility with appStore init.
 }

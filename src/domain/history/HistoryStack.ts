@@ -13,9 +13,11 @@ export interface PixelSnapshot {
   selection: SelectionState | null;
 }
 
-/** 整个图层结构的快照，用于增删、排序等改变图层列表的操作。 */
+/** 整个图层结构的快照，用于增删、排序、画布尺寸等改变图层列表或画布维度的操作。 */
 export interface StructureSnapshot {
   kind: "structure";
+  canvasWidth: number;
+  canvasHeight: number;
   layers: Layer[];
   activeLayerId: string;
   activeReferenceLayerId: string | null;
@@ -33,6 +35,8 @@ export function cloneEditorSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
   if (isStructureSnapshot(snapshot)) {
     return {
       kind: "structure",
+      canvasWidth: snapshot.canvasWidth,
+      canvasHeight: snapshot.canvasHeight,
       layers: cloneLayers(snapshot.layers),
       activeLayerId: snapshot.activeLayerId,
       activeReferenceLayerId: snapshot.activeReferenceLayerId,

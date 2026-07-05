@@ -1,16 +1,16 @@
 import type { IComfyAppRepository } from "@/application/ports/IComfyAppRepository";
-import type { IProjectsWorkspaceStore } from "@/application/ports/IProjectsWorkspaceStore";
+import type { ISoftwareDataPathStore } from "@/application/ports/ISoftwareDataPathStore";
 import type { ComfyApp } from "@/domain/comfyApp/ComfyApp";
 
-/** 列出已保存的应用；未设置项目路径或目录不存在时返回空列表（不弹授权对话框） */
+/** 列出已保存的应用；未设置软件数据路径或目录不存在时返回空列表（不弹授权对话框） */
 export async function listComfyApps(
-  workspaceStore: IProjectsWorkspaceStore,
+  pathStore: ISoftwareDataPathStore,
   repository: IComfyAppRepository,
 ): Promise<ComfyApp[]> {
-  const workspacePath = workspaceStore.getPath();
-  if (!workspacePath) return [];
+  const softwareDataPath = pathStore.getPath();
+  if (!softwareDataPath) return [];
   try {
-    return await repository.list(workspacePath);
+    return await repository.list(softwareDataPath);
   } catch {
     return [];
   }

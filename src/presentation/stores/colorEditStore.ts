@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
 import { applyOklabMergeEdit } from "@/application/use-cases/ColorEditUseCases";
-import { loadColorEditPreferences } from "@/application/use-cases/LoadColorEditPreferences";
 import { saveColorEditPreferences } from "@/application/use-cases/SaveColorEditPreferences";
 import {
   captureMonitorToImagePath,
@@ -12,6 +11,7 @@ import {
 import {
   DEFAULT_COLOR_EDIT_PREFERENCES,
   extractColorEditPreferences,
+  type ColorEditPreferences,
 } from "@/domain/colorEdit/ColorEditPreferences";
 import { clampOklabMergeThreshold } from "@/domain/colorEdit/OklabMergeDistance";
 import { filterDisabledColorsInPalette } from "@/domain/colorEdit/ColorDisableOperations";
@@ -25,7 +25,11 @@ import { computeColorPaletteStats } from "@/domain/colorEdit/ColorPaletteStats";
 import type { PixelColor } from "@/domain/canvas/PixelColor";
 import { clipboardService } from "@/infrastructure/clipboard/createClipboardService";
 import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
-import { colorEditPreferencesRepository } from "@/infrastructure/storage/LocalColorEditPreferencesRepository";
+import { colorEditPreferencesRepository } from "@/infrastructure/storage/FileColorEditPreferencesRepository";
+import {
+  getActiveSoftwareDataPath,
+  isUserDataHydrating,
+} from "@/infrastructure/storage/UserDataPersistenceContext";
 import { captureService } from "@/infrastructure/tauri/TauriCaptureService";
 import { cancelActiveColorEditJob } from "@/infrastructure/colorEdit/cancelColorEditJob";
 
@@ -51,6 +55,7 @@ interface ColorEditStore {
   openPage: () => void;
   closePage: () => void;
   reset: () => void;
+  hydratePreferences: (prefs: ColorEditPreferences | null) => void;
   importFromPath: (path: string) => Promise<void>;
   importFromFile: (file: File) => Promise<void>;
   importFromImageData: (imageData: ImageData) => void;
@@ -68,9 +73,6 @@ interface ColorEditStore {
   cancelProcessing: () => void;
   reprocess: () => void;
 }
-
-const loadedPreferences =
-  loadColorEditPreferences(colorEditPreferencesRepository) ?? DEFAULT_COLOR_EDIT_PREFERENCES;
 
 const sessionDefaults = {
   open: false,
@@ -92,11 +94,11 @@ const sessionDefaults = {
 
 const initialState = {
   ...sessionDefaults,
-  oklabMergeThreshold: loadedPreferences.oklabMergeThreshold,
-  oklabReduceAlgorithm: loadedPreferences.oklabReduceAlgorithm,
+  oklabMergeThreshold: DEFAULT_COLOR_EDIT_PREFERENCES.oklabMergeThreshold,
+  oklabReduceAlgorithm: DEFAULT_COLOR_EDIT_PREFERENCES.oklabReduceAlgorithm,
 };
 
-let isHydratingPreferences = true;
+let isHydratingPreferences = false;
 let preferencesSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let reprocessGeneration = 0;
 let reprocessDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -104,8 +106,6 @@ let reprocessInFlight = false;
 let reprocessQueued = false;
 let lastHandledGeneration = 0;
 let activeReprocessJobId = 0;
-
-isHydratingPreferences = false;
 
 interface ReprocessInput {
   sourceImageData: ImageData;
@@ -253,6 +253,16 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
   openPage: () => set({ open: true }),
 
   closePage: () => set({ open: false, monitorPickerOpen: false }),
+
+  hydratePreferences: (prefs) => {
+    isHydratingPreferences = true;
+    const applied = prefs ?? DEFAULT_COLOR_EDIT_PREFERENCES;
+    set({
+      oklabMergeThreshold: applied.oklabMergeThreshold,
+      oklabReduceAlgorithm: applied.oklabReduceAlgorithm,
+    });
+    isHydratingPreferences = false;
+  },
 
   reset: () => {
     reprocessGeneration += 1;
@@ -469,7 +479,7 @@ export const useColorEditStore = create<ColorEditStore>((set, get) => ({
 }));
 
 useColorEditStore.subscribe((state, prev) => {
-  if (isHydratingPreferences) return;
+  if (isHydratingPreferences || isUserDataHydrating()) return;
 
   if (
     state.oklabMergeThreshold === prev.oklabMergeThreshold &&
@@ -483,8 +493,14 @@ useColorEditStore.subscribe((state, prev) => {
   }
 
   preferencesSaveTimer = setTimeout(() => {
-    saveColorEditPreferences(
+    const softwareDataPath = getActiveSoftwareDataPath();
+    if (!softwareDataPath) {
+      preferencesSaveTimer = null;
+      return;
+    }
+    void saveColorEditPreferences(
       colorEditPreferencesRepository,
+      softwareDataPath,
       extractColorEditPreferences(state),
     );
     preferencesSaveTimer = null;

@@ -42,8 +42,11 @@ export function captureStructureSnapshot(
   project: Project,
   selection: SelectionState | null,
 ): EditorSnapshot {
+  const canvasSize = getCanvasSize(project);
   return {
     kind: "structure",
+    canvasWidth: canvasSize.width,
+    canvasHeight: canvasSize.height,
     layers: cloneLayers(project.canvas.layers),
     activeLayerId: project.canvas.activeLayerId,
     activeReferenceLayerId: project.canvas.activeReferenceLayerId,
@@ -121,6 +124,8 @@ export function applyStructureSnapshot(
     ...project,
     canvas: {
       ...project.canvas,
+      width: snapshot.canvasWidth,
+      height: snapshot.canvasHeight,
       layers: cloneLayers(snapshot.layers),
       activeLayerId: snapshot.activeLayerId,
       activeReferenceLayerId: snapshot.activeReferenceLayerId,
