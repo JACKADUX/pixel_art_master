@@ -10,6 +10,7 @@ import { deletePatternBrush } from "@/application/use-cases/DeletePatternBrush";
 import { renamePatternBrush } from "@/application/use-cases/RenamePatternBrush";
 import type { PixelColor } from "@/domain/canvas/PixelColor";
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import { getActiveCanvas } from "@/domain/project/Project";
 import {
   getPatternBrush,
   type PatternBrushLibrary,
@@ -203,8 +204,8 @@ export function createPatternBrushSlice(
         selectionDrag,
         lassoPoints,
         toolSettings,
-        canvasWidth: project.canvas.width,
-        canvasHeight: project.canvas.height,
+        canvasWidth: getActiveCanvas(project).width,
+        canvasHeight: getActiveCanvas(project).height,
       });
       if (!selectionState) {
         toast.info("请先创建选区");

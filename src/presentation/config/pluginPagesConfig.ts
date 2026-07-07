@@ -1,11 +1,11 @@
-export type ToolPageId = "pixelRestore" | "colorEdit" | "world" | "colorVariation";
+export type PluginPageId = "pixelRestore" | "colorEdit" | "world" | "colorVariation";
 
-export interface ToolPageDefinition {
-  id: ToolPageId;
+export interface PluginPageDefinition {
+  id: PluginPageId;
   label: string;
 }
 
-export const TOOL_PAGES: ToolPageDefinition[] = [
+export const PLUGIN_PAGES: PluginPageDefinition[] = [
   { id: "pixelRestore", label: "像素还原" },
   { id: "colorEdit", label: "颜色编辑" },
   { id: "world", label: "世界创建器" },

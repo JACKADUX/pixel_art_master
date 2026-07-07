@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Bars3Icon } from "@heroicons/react/24/outline";
 
 import { canRemoveLayer } from "@/domain/layer/LayerOperations";
-import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 
 import { useAppStore } from "../stores/appStore";
 
@@ -100,7 +99,7 @@ export function ReferenceLayersPanel() {
   useEffect(() => {
     if (!project) return;
 
-    const referenceLayers = project.canvas.layers.filter((layer) => layer.type === "reference");
+    const referenceLayers = project.referenceLayers;
     const referenceCount = referenceLayers.length;
     const reversedLayers = [...referenceLayers].reverse();
 
@@ -159,8 +158,8 @@ export function ReferenceLayersPanel() {
 
   if (!project) return null;
 
-  const { layers, activeReferenceLayerId } = project.canvas;
-  const referenceLayers = layers.filter((layer) => isReferenceLayer(layer));
+  const referenceLayers = project.referenceLayers;
+  const activeReferenceLayerId = project.activeReferenceLayerId;
   const displayLayers = [...referenceLayers].reverse();
 
   return (
@@ -184,7 +183,7 @@ export function ReferenceLayersPanel() {
             )}
             {displayLayers.map((layer, displayIndex) => {
               const isActive = layer.id === activeReferenceLayerId;
-              const removable = canRemoveLayer(layers, layer.id);
+              const removable = canRemoveLayer(referenceLayers, layer.id);
               const isBeingDragged = draggingDisplayIndex === displayIndex;
 
               return (
@@ -337,7 +336,7 @@ export function ReferenceLayersPanel() {
             + 参考层
           </button>
           {activeReferenceLayerId &&
-            canRemoveLayer(layers, activeReferenceLayerId) && (
+            canRemoveLayer(referenceLayers, activeReferenceLayerId) && (
               <button
                 type="button"
                 onClick={() => removeLayer(activeReferenceLayerId)}

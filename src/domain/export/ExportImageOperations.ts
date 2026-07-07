@@ -6,6 +6,7 @@ import {
   getCompositeGrid,
   type Project,
 } from "@/domain/project/Project";
+import { compositeBoardPixelGrid } from "@/domain/pixelCanvas/BoardExport";
 import { getEffectiveSelectionMask } from "@/domain/selection/FloatingSelectionLifecycle";
 import { isMaskEmpty } from "@/domain/selection/SelectionMask";
 import { extractMaskedRegionAsGrid } from "@/domain/selection/SelectionMaskOperations";
@@ -40,6 +41,25 @@ export function buildExportFilePath(
   return joinPath(directory, `${safeName}.${ext}`);
 }
 
+export function dirnameFromFilePath(filePath: string): string {
+  const separator = filePath.includes("\\") ? "\\" : "/";
+  const parts = filePath.split(/[/\\]/);
+  if (parts.length <= 1) return ".";
+  parts.pop();
+  return parts.join(separator);
+}
+
+export function buildDefaultExportSavePath(
+  directory: string | null,
+  fileName: string,
+  format: ImageExportFormat,
+): string {
+  const safeName = sanitizeExportFileName(fileName);
+  const ext = getImageExportExtension(format);
+  if (!directory) return `${safeName}.${ext}`;
+  return buildExportFilePath(directory, fileName, format);
+}
+
 export function resolveExportPixelGrid(
   project: Project,
   scope: ImageExportScope,
@@ -47,7 +67,10 @@ export function resolveExportPixelGrid(
 ): PixelGrid | null {
   switch (scope) {
     case "project":
+    case "activeCanvas":
       return getCompositeGrid(project);
+    case "allBoard":
+      return compositeBoardPixelGrid(project);
     case "layer":
       return getActiveLayerGrid(project);
     case "selection": {

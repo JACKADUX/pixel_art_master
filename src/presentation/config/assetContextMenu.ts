@@ -1,13 +1,13 @@
 import type { AssetRecord } from "@/domain/asset/AssetRecord";
 import { isImageAsset } from "@/domain/asset/AssetRecord";
 import type { MenuItem } from "../components/MenuDropdown";
-import { TOOL_PAGES, type ToolPageId } from "./toolPagesConfig";
+import { PLUGIN_PAGES, type PluginPageId } from "./pluginPagesConfig";
 
 export interface AssetContextMenuActions {
   onImportDrawingLayer: (assetId: string) => void;
   onImportReferenceLayer: (assetId: string) => void;
   onImportColors: (assetId: string) => void;
-  onSendToToolPage: (assetId: string, toolPageId: ToolPageId) => void;
+  onSendToPlugin: (assetId: string, pluginId: PluginPageId) => void;
   onRevealInFolder: (assetId: string) => void;
 }
 
@@ -48,11 +48,11 @@ export function buildAssetContextMenuItems(
     { type: "separator" },
     {
       type: "submenu",
-      label: "发送到工具",
-      items: TOOL_PAGES.map((tool) => ({
+      label: "发送到插件",
+      items: PLUGIN_PAGES.map((plugin) => ({
         type: "action" as const,
-        label: tool.label,
-        onClick: () => actions.onSendToToolPage(asset.id, tool.id),
+        label: plugin.label,
+        onClick: () => actions.onSendToPlugin(asset.id, plugin.id),
       })),
     },
     { type: "separator" },

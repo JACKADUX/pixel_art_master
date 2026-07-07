@@ -150,9 +150,11 @@ export function ReferenceCropModal() {
   const stageLayoutRef = useRef<WorkspaceStageLayout | null>(null);
   const selectRef = useRef<{ start: ImagePoint; current: ImagePoint } | null>(null);
 
-  const layer = project?.canvas.layers.find(
-    (l) => l.id === cropEditorLayerId && l.type === "reference",
-  );
+  const layer = project
+    ? project.referenceLayers.find(
+      (l) => l.id === cropEditorLayerId && l.type === "reference",
+    )
+    : undefined;
   const refLayer = layer?.type === "reference" ? layer : null;
 
   const defaultCrop = useMemo((): CropRect | null => {

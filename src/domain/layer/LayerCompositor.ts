@@ -1,8 +1,29 @@
 import type { CanvasSize } from "../canvas/CanvasSize";
 import { PixelGrid } from "../canvas/PixelGrid";
-import type { Layer } from "./Layer";
+import type { Layer, LayerPosition } from "./Layer";
 import { getLayerGrid } from "./LayerOperations";
 import { isDrawingLayer } from "./LayerTypeGuards";
+
+export function compositeDrawingLayersWithActiveOverride(
+  layers: Layer[],
+  size: CanvasSize,
+  activeLayerId: string,
+  activeGrid: PixelGrid,
+  activePosition: LayerPosition,
+  activeOpacity: number,
+): PixelGrid {
+  const result = PixelGrid.createEmpty(size.width, size.height);
+
+  for (const layer of layers) {
+    if (!layer.visible || !isDrawingLayer(layer)) continue;
+    const grid = layer.id === activeLayerId ? activeGrid : getLayerGrid(layer);
+    const position = layer.id === activeLayerId ? activePosition : layer.position;
+    const opacity = layer.id === activeLayerId ? activeOpacity : layer.opacity;
+    grid.compositeOverOnto(result, position.x, position.y, opacity);
+  }
+
+  return result;
+}
 
 export function compositeDrawingLayers(
   layers: Layer[],

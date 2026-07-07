@@ -10,6 +10,7 @@ import {
 } from "@/domain/canvas/CanvasSizeAspectLock";
 import { allCanvasSizePresets } from "@/domain/canvas/CanvasSizePresetOperations";
 import { formatCanvasSizeLabel } from "@/domain/canvas/CanvasSizePreset";
+import { getActiveCanvas } from "@/domain/project/Project";
 import { toast } from "@/presentation/stores/toastStore";
 import { useAppStore } from "../stores/appStore";
 
@@ -36,14 +37,17 @@ export function CanvasSizeModal() {
 
   useEffect(() => {
     if (!open || !project) return;
-    setWidthInput(String(project.canvas.width));
-    setHeightInput(String(project.canvas.height));
-    setAspectRatio(computeAspectRatio(project.canvas.width, project.canvas.height));
+    const canvas = getActiveCanvas(project);
+    setWidthInput(String(canvas.width));
+    setHeightInput(String(canvas.height));
+    setAspectRatio(computeAspectRatio(canvas.width, canvas.height));
     setAspectLocked(false);
     setError(null);
   }, [open, project]);
 
   if (!open || !project) return null;
+
+  const activeCanvas = getActiveCanvas(project);
 
   const parseInputs = (): { width: number; height: number } | null => {
     const width = parseCanvasDimension(widthInput);
@@ -140,7 +144,7 @@ export function CanvasSizeModal() {
       <div className="w-[28rem] rounded-lg border border-zinc-600 bg-zinc-900 p-5 shadow-xl">
         <h3 className="mb-1 text-sm font-semibold text-zinc-100">画布尺寸</h3>
         <p className="mb-3 text-xs text-zinc-500">
-          当前: {project.canvas.width}×{project.canvas.height} 像素
+          当前: {activeCanvas.width}×{activeCanvas.height} 像素
         </p>
 
         <div className="mb-3">

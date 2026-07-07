@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { rgba } from "@/domain/canvas/PixelColor";
 import {
+  buildDefaultExportSavePath,
   buildExportFilePath,
   computeExportDimensions,
+  dirnameFromFilePath,
   sanitizeExportFileName,
   scalePixelGridToLongestEdge,
 } from "./ExportImageOperations";
@@ -25,6 +27,23 @@ describe("ExportImageOperations", () => {
       expect(buildExportFilePath("/tmp", "my project", "png")).toBe("/tmp/my project.png");
       expect(buildExportFilePath("C:\\out", "test", "webp")).toBe("C:\\out\\test.webp");
       expect(buildExportFilePath("C:\\out", "test", "jpg")).toBe("C:\\out\\test.jpg");
+    });
+  });
+
+  describe("dirnameFromFilePath", () => {
+    it("returns parent directory preserving separator style", () => {
+      expect(dirnameFromFilePath("/tmp/my project.png")).toBe("/tmp");
+      expect(dirnameFromFilePath("C:\\out\\test.webp")).toBe("C:\\out");
+    });
+  });
+
+  describe("buildDefaultExportSavePath", () => {
+    it("builds a full path when directory is provided", () => {
+      expect(buildDefaultExportSavePath("/tmp", "sprite", "png")).toBe("/tmp/sprite.png");
+    });
+
+    it("returns filename only when directory is missing", () => {
+      expect(buildDefaultExportSavePath(null, "sprite", "webp")).toBe("sprite.webp");
     });
   });
 

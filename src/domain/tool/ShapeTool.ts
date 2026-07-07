@@ -1,5 +1,6 @@
 import { forEachFilledEllipsePixel, forEachOutlineEllipsePixel } from "../geometry/EllipseFill";
 import { forEachContinuousLinePixel } from "./LineRasterization";
+import { resolveShapeDragCorners } from "./ShapeDragGeometry";
 import type { ITool, Point, ToolContext } from "./ITool";
 
 function setPixel(ctx: ToolContext, x: number, y: number): void {
@@ -56,14 +57,26 @@ export class ShapeTool implements ITool {
   onPointerMove(ctx: ToolContext, _from: Point, to: Point): void {
     if (!this.startPoint || !this.snapshot) return;
     ctx.grid.restoreFrom(this.snapshot);
-    this.drawShape(ctx, this.startPoint, to);
+    const { from, to: end } = resolveShapeDragCorners(
+      this.startPoint,
+      to,
+      ctx.settings.shapeMode,
+      ctx.modifiers,
+    );
+    this.drawShape(ctx, from, end);
   }
 
   onPointerUp(ctx: ToolContext, from: Point, to: Point): void {
     if (this.snapshot) {
       ctx.grid.restoreFrom(this.snapshot);
     }
-    this.drawShape(ctx, from, to);
+    const { from: start, to: end } = resolveShapeDragCorners(
+      from,
+      to,
+      ctx.settings.shapeMode,
+      ctx.modifiers,
+    );
+    this.drawShape(ctx, start, end);
     this.startPoint = null;
     this.snapshot = null;
   }

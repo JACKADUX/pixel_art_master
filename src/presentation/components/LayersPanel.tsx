@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bars3Icon } from "@heroicons/react/24/outline";
 
+import { canMergeDrawingLayerDown } from "@/domain/layer/DrawingLayerMerge";
 import { canRemoveLayer } from "@/domain/layer/LayerOperations";
-import { countReferenceLayers } from "@/domain/layer/LayerStack";
 import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
+import { getActiveCanvas } from "@/domain/project/Project";
 
+import { buildDrawingLayerContextMenuItems } from "../config/drawingLayerContextMenu";
 import { useAppStore } from "../stores/appStore";
 
+import { CanvasSelector } from "./CanvasSelector";
+import { ContextMenu } from "./ContextMenu";
 import { EyeIcon, EyeOffIcon, LockClosedIcon, LockOpenIcon, TrashIcon } from "./LayerPanelIcons";
 
 function opacityToPercent(opacity: number): number {
@@ -37,12 +41,21 @@ export function LayersPanel() {
   const addDrawingLayer = useAppStore((s) => s.addDrawingLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
+  const drawingLayerClipboard = useAppStore((s) => s.drawingLayerClipboard);
+  const copyDrawingLayer = useAppStore((s) => s.copyDrawingLayer);
+  const pasteDrawingLayer = useAppStore((s) => s.pasteDrawingLayer);
+  const mergeDrawingLayerDown = useAppStore((s) => s.mergeDrawingLayerDown);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [draggingDisplayIndex, setDraggingDisplayIndex] = useState<number | null>(null);
   const [dropDisplayIndex, setDropDisplayIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    layerId: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const listRef = useRef<HTMLUListElement>(null);
   const draggingRef = useRef<number | null>(null);
@@ -100,8 +113,8 @@ export function LayersPanel() {
   useEffect(() => {
     if (!isDragging || !project) return;
 
-    const referenceCount = countReferenceLayers(project.canvas.layers);
-    const drawingLayers = project.canvas.layers.filter((layer) => isDrawingLayer(layer));
+    const referenceCount = project.referenceLayers.length;
+    const drawingLayers = getActiveCanvas(project).layers.filter((layer) => isDrawingLayer(layer));
     const drawingCount = drawingLayers.length;
     const reversedLayers = [...drawingLayers].reverse();
 
@@ -135,14 +148,40 @@ export function LayersPanel() {
     };
   }, [isDragging, project, commitReorder, stopDragging]);
 
+  const contextMenuItems = useMemo(() => {
+    if (!contextMenu || !project) return [];
+    const targetLayers = getActiveCanvas(project).layers;
+    const { layerId } = contextMenu;
+    return buildDrawingLayerContextMenuItems(
+      {
+        canPaste: drawingLayerClipboard !== null,
+        canMergeDown: canMergeDrawingLayerDown(targetLayers, layerId),
+      },
+      {
+        copyLayer: () => copyDrawingLayer(layerId),
+        pasteLayer: () => pasteDrawingLayer(),
+        mergeLayerDown: () => mergeDrawingLayerDown(layerId),
+      },
+    );
+  }, [
+    contextMenu,
+    project,
+    drawingLayerClipboard,
+    copyDrawingLayer,
+    pasteDrawingLayer,
+    mergeDrawingLayerDown,
+  ]);
+
   if (!project) return null;
 
-  const { layers, activeLayerId } = project.canvas;
+  const activeCanvas = getActiveCanvas(project);
+  const { layers, activeLayerId } = activeCanvas;
   const drawingLayers = layers.filter((layer) => isDrawingLayer(layer));
   const displayLayers = [...drawingLayers].reverse();
 
   return (
     <div className="flex h-full min-w-0 w-full flex-col">
+      <CanvasSelector />
       <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-2">
         <h3 className="mb-2 px-1 text-sm font-medium text-zinc-300">
           绘制层 ({drawingLayers.length})
@@ -174,6 +213,11 @@ export function LayersPanel() {
                       ? "border-blue-500 bg-blue-500/10"
                       : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
                   } ${layer.locked ? "opacity-80" : ""}`}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setActiveLayer(layer.id);
+                    setContextMenu({ layerId: layer.id, x: e.clientX, y: e.clientY });
+                  }}
                 >
                   <button
                     type="button"
@@ -297,6 +341,14 @@ export function LayersPanel() {
           )}
         </div>
       </div>
+
+      {contextMenu && contextMenuItems.length > 0 && (
+        <ContextMenu
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          items={contextMenuItems}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

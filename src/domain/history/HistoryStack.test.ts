@@ -12,9 +12,11 @@ function pixelSnapshot(
   width = 2,
   height = 2,
   position: PixelSnapshot["position"] = { x: 0, y: 0 },
+  canvasId = "canvas-1",
 ): PixelSnapshot {
   return {
     kind: "pixels",
+    canvasId,
     layerId,
     width,
     height,
@@ -44,13 +46,16 @@ function structureSnapshot(
   activeLayerId: string,
   canvasWidth = 2,
   canvasHeight = 2,
+  canvasId = "canvas-1",
 ): StructureSnapshot {
   return {
     kind: "structure",
+    canvasId,
     canvasWidth,
     canvasHeight,
     layers,
     activeLayerId,
+    referenceLayers: [],
     activeReferenceLayerId: null,
     selection: null,
   };

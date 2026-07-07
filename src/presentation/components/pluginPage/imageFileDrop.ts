@@ -1,6 +1,21 @@
 import { isSupportedImageFile, pickSupportedImagePath } from "@/domain/image/SupportedImageFormat";
 import { isAssetDrag } from "../asset/assetDrag";
 
+export interface DropPointerPosition {
+  clientX: number;
+  clientY: number;
+  ctrlKey?: boolean;
+}
+
+/** 将 Tauri 拖放事件的物理坐标转换为与 DOM 一致的 client 坐标 */
+export function tauriDragPositionToClient(position: { x: number; y: number }): DropPointerPosition {
+  const dpr = window.devicePixelRatio || 1;
+  return {
+    clientX: position.x / dpr,
+    clientY: position.y / dpr,
+  };
+}
+
 function listDragTypes(types: DataTransfer["types"]): string[] {
   return Array.from(types as unknown as ArrayLike<string>);
 }

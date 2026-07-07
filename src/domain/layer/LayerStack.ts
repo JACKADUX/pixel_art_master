@@ -32,7 +32,7 @@ export function computeReferenceLayerCanvasZIndex(stackIndex: number): number {
 
 /**
  * 参考层控件（工具栏、色板、缩放手柄）层级。
- * 高于所有参考图 canvas，但始终低于悬浮工具窗（31）与弹窗（50+）。
+ * 高于所有参考图 canvas，但始终低于悬浮插件窗（31）与弹窗（50+）。
  */
 export function computeReferenceLayerChromeZIndex(
   stackIndex: number,

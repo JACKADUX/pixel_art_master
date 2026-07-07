@@ -1,15 +1,22 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { hasSupportedImagePath } from "../components/toolPage/imageFileDrop";
+import { hasSupportedImagePath } from "../components/pluginPage/imageFileDrop";
 import { pickSupportedImagePath } from "@/domain/image/SupportedImageFormat";
-import { isImageFileDrag, pickDroppedImageFile } from "../components/toolPage/imageFileDrop";
+import {
+  isImageFileDrag,
+  pickDroppedImageFile,
+  tauriDragPositionToClient,
+  type DropPointerPosition,
+} from "../components/pluginPage/imageFileDrop";
+
+export type { DropPointerPosition };
 
 interface UseImageFileDropOptions {
   enabled?: boolean;
   disabled?: boolean;
-  onImportPath: (path: string) => void | Promise<void>;
-  onImportFile: (file: File) => void | Promise<void>;
+  onImportPath: (path: string, position?: DropPointerPosition) => void | Promise<void>;
+  onImportFile: (file: File, position?: DropPointerPosition) => void | Promise<void>;
 }
 
 export function useImageFileDrop({
@@ -21,8 +28,25 @@ export function useImageFileDrop({
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const dragDepthRef = useRef(0);
   const disabledRef = useRef(disabled);
+  const ctrlKeyRef = useRef(false);
+  const onImportPathRef = useRef(onImportPath);
+  const onImportFileRef = useRef(onImportFile);
 
   disabledRef.current = disabled;
+  onImportPathRef.current = onImportPath;
+  onImportFileRef.current = onImportFile;
+
+  useEffect(() => {
+    const syncCtrl = (event: KeyboardEvent) => {
+      ctrlKeyRef.current = event.ctrlKey;
+    };
+    window.addEventListener("keydown", syncCtrl);
+    window.addEventListener("keyup", syncCtrl);
+    return () => {
+      window.removeEventListener("keydown", syncCtrl);
+      window.removeEventListener("keyup", syncCtrl);
+    };
+  }, []);
 
   useEffect(() => {
     if (!enabled) {
@@ -34,6 +58,7 @@ export function useImageFileDrop({
     if (!enabled || !isTauri()) return;
 
     let unlisten: (() => void) | undefined;
+    let cancelled = false;
 
     void getCurrentWebview()
       .onDragDropEvent((event) => {
@@ -61,19 +86,25 @@ export function useImageFileDrop({
           setIsDraggingOver(false);
           const path = pickSupportedImagePath(payload.paths);
           if (path) {
-            void onImportPath(path);
+            const position = tauriDragPositionToClient(payload.position);
+            void onImportPathRef.current(path, { ...position, ctrlKey: ctrlKeyRef.current });
           }
         }
       })
       .then((fn) => {
+        if (cancelled) {
+          fn();
+          return;
+        }
         unlisten = fn;
       });
 
     return () => {
+      cancelled = true;
       unlisten?.();
       setIsDraggingOver(false);
     };
-  }, [enabled, onImportPath]);
+  }, [enabled]);
 
   const handleDragEnter = useCallback(
     (event: React.DragEvent) => {
@@ -116,10 +147,14 @@ export function useImageFileDrop({
 
       const file = pickDroppedImageFile(event.dataTransfer);
       if (file) {
-        void onImportFile(file);
+        void onImportFileRef.current(file, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          ctrlKey: event.ctrlKey,
+        });
       }
     },
-    [enabled, disabled, onImportFile],
+    [enabled, disabled],
   );
 
   return {

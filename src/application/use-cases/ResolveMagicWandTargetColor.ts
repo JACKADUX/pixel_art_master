@@ -1,13 +1,14 @@
 import type { PixelColor } from "@/domain/canvas/PixelColor";
 import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 import {
-  findTopReferenceLayerAtCanvasPoint,
+  findTopReferenceLayerAtBoardPoint,
   isReferenceLayerPixelCacheValid,
   referenceLayerCropKey,
   sampleReferenceLayerPixel,
   toReferenceLayerLocalPoint,
 } from "@/domain/layer/ReferenceLayerPalette";
-import type { Project } from "@/domain/project/Project";
+import { canvasPointToBoardPoint } from "@/domain/layer/ReferenceLayerOperations";
+import { getActiveCanvas, type Project } from "@/domain/project/Project";
 import type { Point } from "@/domain/tool/ITool";
 import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 
@@ -17,9 +18,11 @@ export function resolveMagicWandTargetColor(
   point: Point,
   getPixelCache: (layerId: string, cropKey: string) => ReferenceLayerPixelData | null,
 ): PixelColor {
-  const referenceLayer = findTopReferenceLayerAtCanvasPoint(project.canvas.layers, point);
+  const activeCanvas = getActiveCanvas(project);
+  const boardPoint = canvasPointToBoardPoint(point, activeCanvas.boardPosition);
+  const referenceLayer = findTopReferenceLayerAtBoardPoint(project.referenceLayers, boardPoint);
   if (referenceLayer?.crop && referenceLayer.imageData) {
-    const localPoint = toReferenceLayerLocalPoint(referenceLayer, point);
+    const localPoint = toReferenceLayerLocalPoint(referenceLayer, boardPoint);
     const cache = getPixelCache(referenceLayer.id, referenceLayerCropKey(referenceLayer.crop));
     if (localPoint && cache && isReferenceLayerPixelCacheValid(cache, referenceLayer)) {
       const referenceColor = sampleReferenceLayerPixel(

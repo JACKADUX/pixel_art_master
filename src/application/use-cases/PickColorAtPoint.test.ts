@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { rgba } from "@/domain/canvas/PixelColor";
 import { createEmptyReferenceLayer } from "@/domain/layer/Layer";
-import { createEmptyProject, withLayers } from "@/domain/project/Project";
+import { createEmptyProject, withReferenceLayers } from "@/domain/project/Project";
+import { getActiveCanvas } from "@/domain/project/ProjectTestUtils";
 import {
   resolveColorAtCanvasPoint,
   resolveColorAtCanvasPointAsync,
@@ -10,7 +11,7 @@ import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceL
 
 function createReferenceProject(reference: ReturnType<typeof createEmptyReferenceLayer>) {
   const baseProject = createEmptyProject("test");
-  return withLayers(baseProject, [...baseProject.canvas.layers, reference]);
+  return withReferenceLayers(baseProject, [reference]);
 }
 
 function setDrawingPixel(
@@ -19,9 +20,10 @@ function setDrawingPixel(
   y: number,
   color: number,
 ) {
-  const drawing = project.canvas.layers.find((layer) => layer.type === "drawing");
+  const canvas = getActiveCanvas(project);
+  const drawing = canvas.layers.find((layer) => layer.type === "drawing");
   if (!drawing || drawing.type !== "drawing") return;
-  drawing.pixels[y * project.canvas.width + x] = color;
+  drawing.pixels[y * canvas.width + x] = color;
 }
 
 describe("resolveColorAtCanvasPoint", () => {

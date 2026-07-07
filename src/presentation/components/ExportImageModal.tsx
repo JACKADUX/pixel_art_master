@@ -15,7 +15,6 @@ import { isSelectionEmpty } from "@/domain/selection/SelectionState";
 import { ArrowUpTrayIcon } from "@heroicons/react/24/outline";
 import { useBackdropDismiss } from "@/presentation/hooks/useBackdropDismiss";
 import { useAppStore } from "../stores/appStore";
-import { SettingsPathField } from "./settings/SettingsField";
 
 const inputClassName =
   "h-8 w-full rounded border border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-100 outline-none transition focus:border-blue-500 focus-visible:ring-1 focus-visible:ring-blue-500/60";
@@ -32,7 +31,8 @@ const SCALE_OPTIONS: { value: ImageExportScalePreset; label: string }[] = [
 ];
 
 const SCOPE_OPTIONS: { value: ImageExportScope; label: string }[] = [
-  { value: "project", label: "当前项目" },
+  { value: "project", label: "当前画板" },
+  { value: "allBoard", label: "整个工作区" },
   { value: "layer", label: "当前图层" },
   { value: "selection", label: "当前选区" },
 ];
@@ -42,13 +42,9 @@ export function ExportImageModal() {
   const project = useAppStore((s) => s.project);
   const selection = useAppStore((s) => s.selection);
   const preferences = useAppStore((s) => s.imageExportPreferences);
-  const softwareDataPath = useAppStore((s) => s.softwareDataPath);
   const closeExportImageModal = useAppStore((s) => s.closeExportImageModal);
-  const pickExportDirectory = useAppStore((s) => s.pickExportDirectory);
   const executeExportImage = useAppStore((s) => s.executeExportImage);
 
-  const [directory, setDirectory] = useState<string | null>(null);
-  const [fileName, setFileName] = useState("");
   const [format, setFormat] = useState<ImageExportFormat>("png");
   const [scope, setScope] = useState<ImageExportScope>("project");
   const [scalePreset, setScalePreset] = useState<ImageExportScalePreset>("original");
@@ -62,10 +58,6 @@ export function ExportImageModal() {
 
   useEffect(() => {
     if (!open || !project) return;
-    setDirectory(
-      preferences.lastExportDirectory ?? softwareDataPath ?? null,
-    );
-    setFileName(project.name);
     setFormat(preferences.format);
     setScope(
       preferences.scope === "selection" && !hasSelection
@@ -76,7 +68,7 @@ export function ExportImageModal() {
     setCustomLongestEdge(preferences.customLongestEdge);
     setError(null);
     setExporting(false);
-  }, [open, project, preferences, softwareDataPath, hasSelection]);
+  }, [open, project, preferences, hasSelection]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,23 +90,7 @@ export function ExportImageModal() {
 
   if (!open || !project) return null;
 
-  const handlePickDirectory = async () => {
-    const picked = await pickExportDirectory();
-    if (picked) {
-      setDirectory(picked);
-      setError(null);
-    }
-  };
-
   const handleExport = async () => {
-    if (!directory) {
-      setError("请选择导出目录");
-      return;
-    }
-    if (!fileName.trim()) {
-      setError("请输入导出名称");
-      return;
-    }
     if (scope === "selection" && !hasSelection) {
       setError("当前没有选区，无法导出选区");
       return;
@@ -124,13 +100,12 @@ export function ExportImageModal() {
     setError(null);
     try {
       const result = await executeExportImage({
-        directory,
-        fileName,
         format,
         scope,
         scalePreset,
         customLongestEdge,
       });
+      if (result === "cancelled") return;
       if (result) {
         closeExportImageModal();
       } else {
@@ -149,33 +124,10 @@ export function ExportImageModal() {
       <div className="w-[28rem] max-w-[92vw] rounded-lg border border-zinc-600 bg-zinc-900 p-5 shadow-xl">
         <h3 className="mb-1 text-sm font-semibold text-zinc-100">导出为图片</h3>
         <p className="mb-4 text-xs text-zinc-500">
-          将像素画导出为 PNG、WebP 或 JPG 文件，支持按最长边放大。
+          将像素画导出为 PNG、WebP 或 JPG 文件，支持按最长边放大。点击导出后将打开系统文件保存对话框。
         </p>
 
         <div className="mb-4 flex flex-col gap-3">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-400">导出目录</span>
-            <SettingsPathField
-              path={directory}
-              emptyLabel="请选择导出目录"
-              buttonLabel="浏览…"
-              onPick={() => void handlePickDirectory()}
-            />
-          </label>
-
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-zinc-400">导出名称</span>
-            <input
-              type="text"
-              value={fileName}
-              onChange={(e) => {
-                setFileName(e.target.value);
-                setError(null);
-              }}
-              className={inputClassName}
-            />
-          </label>
-
           <label className="flex flex-col gap-1">
             <span className="text-xs text-zinc-400">导出格式</span>
             <select

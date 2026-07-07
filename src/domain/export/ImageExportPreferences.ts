@@ -1,4 +1,4 @@
-export type ImageExportScope = "project" | "layer" | "selection";
+export type ImageExportScope = "project" | "activeCanvas" | "allBoard" | "layer" | "selection";
 export type ImageExportFormat = "png" | "webp" | "jpg";
 export type ImageExportScalePreset = "original" | "256" | "512" | "1024" | "custom";
 
@@ -23,7 +23,7 @@ export const DEFAULT_IMAGE_EXPORT_PREFERENCES: ImageExportPreferences = {
   customLongestEdge: 256,
 };
 
-const SCOPES: ImageExportScope[] = ["project", "layer", "selection"];
+const SCOPES: ImageExportScope[] = ["project", "activeCanvas", "allBoard", "layer", "selection"];
 const FORMATS: ImageExportFormat[] = ["png", "webp", "jpg"];
 const SCALE_PRESETS: ImageExportScalePreset[] = [
   "original",

@@ -1,5 +1,5 @@
 import { projectHasLayerContent } from "@/domain/layer/LayerOperations";
-import type { Project } from "@/domain/project/Project";
+import { getActiveCanvas, type Project } from "@/domain/project/Project";
 import type { IProjectRepository } from "../ports/IProjectRepository";
 import { getPersistedProjectPath } from "./ProjectPersistence";
 import { saveProject } from "./SaveProject";
@@ -10,7 +10,7 @@ export interface SaveBeforeReplaceResult {
 }
 
 export function projectHasContent(project: Project): boolean {
-  const hasLayers = projectHasLayerContent(project.canvas.layers);
+  const hasLayers = projectHasLayerContent(getActiveCanvas(project).layers);
   const hasNotes = project.notes.length > 0;
   return hasLayers || hasNotes;
 }

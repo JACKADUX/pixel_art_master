@@ -5,17 +5,26 @@ import {
 } from "@/domain/canvas/LayerProjectedSurface";
 import { isDrawingLayer, isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 import {
+  createDrawingLayerClipboard,
+  toPastedLayer,
+  type DrawingLayerClipboard,
+} from "@/domain/layer/DrawingLayerClipboard";
+import { mergeDrawingLayerDown } from "@/domain/layer/DrawingLayerMerge";
+import {
   addReferenceLayerToProject,
   addDrawingLayerToProject,
+  getActiveCanvas,
   getActiveLayer,
   getCanvasSize,
   getLayerById,
+  resolveProjectCanvas,
   touchProject,
   withActiveLayerId,
   withActiveReferenceLayerId,
   withLayers,
   type Project,
 } from "@/domain/project/Project";
+import { updatePixelCanvasOnBoard } from "@/domain/pixelCanvas/PixelCanvasOperations";
 import {
   canRemoveLayer,
   getLayerGrid,
@@ -52,7 +61,32 @@ import {
   resetReferenceScaleInProject,
   scaleReferenceLayerInProject,
 } from "./ScaleReferenceLayer";
-import type { CropRect, LayerPosition } from "@/domain/layer/Layer";
+import type { CropRect, Layer, LayerPosition } from "@/domain/layer/Layer";
+
+function getActiveCanvasLayers(project: Project) {
+  return getActiveCanvas(project).layers;
+}
+
+function updateActiveCanvasLayers(
+  project: Project,
+  layers: ReturnType<typeof getActiveCanvasLayers>,
+  patch?: Partial<{
+    activeLayerId: string;
+  }>,
+): Project {
+  const canvas = getActiveCanvas(project);
+  return touchProject({
+    ...project,
+    board: updatePixelCanvasOnBoard(project.board, canvas.id, {
+      layers,
+      ...patch,
+    }),
+  });
+}
+
+function getProjectLayerStack(project: Project): Layer[] {
+  return [...project.referenceLayers, ...getActiveCanvasLayers(project)];
+}
 
 export function setActiveLayer(project: Project, layerId: string): Project {
   const layer = getLayerById(project, layerId);
@@ -70,8 +104,14 @@ export function toggleLayerVisibilityInProject(
   project: Project,
   layerId: string,
 ): Project {
-  const layers = toggleLayerVisibility(project.canvas.layers, layerId);
-  return touchProject(withLayers(project, layers));
+  if (project.referenceLayers.some((layer) => layer.id === layerId)) {
+    return touchProject({
+      ...project,
+      referenceLayers: toggleLayerVisibility(project.referenceLayers, layerId) as typeof project.referenceLayers,
+    });
+  }
+  const layers = toggleLayerVisibility(getActiveCanvasLayers(project), layerId);
+  return updateActiveCanvasLayers(project, layers);
 }
 
 export function setDrawingLayerOpacityInProject(
@@ -79,16 +119,16 @@ export function setDrawingLayerOpacityInProject(
   layerId: string,
   opacity: number,
 ): Project {
-  const layers = setDrawingLayerOpacity(project.canvas.layers, layerId, opacity);
-  return touchProject(withLayers(project, layers));
+  const layers = setDrawingLayerOpacity(getActiveCanvasLayers(project), layerId, opacity);
+  return updateActiveCanvasLayers(project, layers);
 }
 
 export function toggleDrawingLayerLockInProject(
   project: Project,
   layerId: string,
 ): Project {
-  const layers = toggleDrawingLayerLock(project.canvas.layers, layerId);
-  return touchProject(withLayers(project, layers));
+  const layers = toggleDrawingLayerLock(getActiveCanvasLayers(project), layerId);
+  return updateActiveCanvasLayers(project, layers);
 }
 
 export function isActiveDrawingLayerEditable(project: Project): boolean {
@@ -101,8 +141,14 @@ export function renameLayerInProject(
   layerId: string,
   name: string,
 ): Project {
-  const layers = renameLayer(project.canvas.layers, layerId, name.trim());
-  return touchProject(withLayers(project, layers));
+  if (project.referenceLayers.some((layer) => layer.id === layerId)) {
+    return touchProject({
+      ...project,
+      referenceLayers: renameLayer(project.referenceLayers, layerId, name.trim()) as typeof project.referenceLayers,
+    });
+  }
+  const layers = renameLayer(getActiveCanvasLayers(project), layerId, name.trim());
+  return updateActiveCanvasLayers(project, layers);
 }
 
 export function addDrawingLayer(project: Project, name?: string): Project {
@@ -117,31 +163,32 @@ export function removeLayerFromProject(
   project: Project,
   layerId: string,
 ): Project | null {
-  if (!canRemoveLayer(project.canvas.layers, layerId)) return null;
-
-  const layers = removeLayer(project.canvas.layers, layerId);
-  const target = getLayerById(project, layerId);
-  let activeLayerId = project.canvas.activeLayerId;
-  let activeReferenceLayerId = project.canvas.activeReferenceLayerId;
-
-  if (target?.type === "drawing") {
-    activeLayerId = resolveActiveLayerAfterRemoval(
-      project.canvas.layers,
+  const referenceTarget = project.referenceLayers.find((layer) => layer.id === layerId);
+  if (referenceTarget) {
+    const referenceLayers = removeLayer(project.referenceLayers, layerId) as typeof project.referenceLayers;
+    const activeReferenceLayerId = resolveActiveReferenceLayerAfterRemoval(
+      project.referenceLayers,
       layerId,
-      project.canvas.activeLayerId,
+      project.activeReferenceLayerId,
     );
-  } else if (target?.type === "reference") {
-    activeReferenceLayerId = resolveActiveReferenceLayerAfterRemoval(
-      project.canvas.layers,
-      layerId,
-      project.canvas.activeReferenceLayerId,
-    );
+    return touchProject({
+      ...project,
+      referenceLayers,
+      activeReferenceLayerId,
+    });
   }
 
-  return touchProject({
-    ...withLayers(project, layers),
-    canvas: { ...project.canvas, layers, activeLayerId, activeReferenceLayerId },
-  });
+  const canvas = getActiveCanvas(project);
+  if (!canRemoveLayer(canvas.layers, layerId)) return null;
+
+  const layers = removeLayer(canvas.layers, layerId);
+  const activeLayerId = resolveActiveLayerAfterRemoval(
+    canvas.layers,
+    layerId,
+    canvas.activeLayerId,
+  );
+
+  return updateActiveCanvasLayers(project, layers, { activeLayerId });
 }
 
 export function reorderLayerInProject(
@@ -149,8 +196,14 @@ export function reorderLayerInProject(
   fromIndex: number,
   toIndex: number,
 ): Project {
-  const layers = reorderLayer(project.canvas.layers, fromIndex, toIndex);
-  return touchProject(withLayers(project, layers));
+  const stack = getProjectLayerStack(project);
+  const reordered = reorderLayer(stack, fromIndex, toIndex);
+  const referenceLayers = reordered.filter(isReferenceLayer);
+  const drawingLayers = reordered.filter(isDrawingLayer);
+  return updateActiveCanvasLayers(
+    touchProject({ ...project, referenceLayers }),
+    drawingLayers,
+  );
 }
 
 export function syncActiveLayerPixels(
@@ -163,11 +216,11 @@ export function syncActiveLayerPixels(
   }
 
   const updatedLayer = syncLayerPixels(activeLayer, grid);
-  const layers = project.canvas.layers.map((l) =>
+  const layers = getActiveCanvasLayers(project).map((l) =>
     l.id === activeLayer.id ? updatedLayer : l,
   );
 
-  return touchProject(withLayers(project, layers));
+  return updateActiveCanvasLayers(project, layers);
 }
 
 export function getActiveLayerGridFromProject(project: Project): PixelGrid {
@@ -180,20 +233,23 @@ export function getActiveLayerGridFromProject(project: Project): PixelGrid {
 
 export function getActiveLayerProjectedSurfaceFromProject(
   project: Project,
+  canvasId?: string,
 ): LayerProjectedSurface {
-  const activeLayer = getActiveLayer(project);
+  const activeLayer = getActiveLayer(project, canvasId);
   if (!isDrawingLayer(activeLayer)) {
     throw new Error("Active layer is not a drawing layer");
   }
   const grid = getLayerGrid(activeLayer);
-  return wrapLayerOnCanvas(grid, activeLayer.position, getCanvasSize(project));
+  const targetCanvasId = canvasId ?? getActiveCanvas(project).id;
+  return wrapLayerOnCanvas(grid, activeLayer.position, getCanvasSize(project, targetCanvasId));
 }
 
 export function ensureActiveLayerContainsCanvasPointsInProject(
   project: Project,
   points: readonly Point[],
+  canvasId?: string,
 ): Project {
-  const activeLayer = getActiveLayer(project);
+  const activeLayer = getActiveLayer(project, canvasId);
   if (
     !isDrawingLayer(activeLayer) ||
     points.length === 0 ||
@@ -205,28 +261,32 @@ export function ensureActiveLayerContainsCanvasPointsInProject(
   const expanded = expandDrawingLayerToIncludeCanvasPoints(activeLayer, points);
   if (expanded === activeLayer) return project;
 
-  const layers = project.canvas.layers.map((layer) =>
+  const layers = getActiveCanvasLayers(project).map((layer) =>
     layer.id === activeLayer.id ? expanded : layer,
   );
-  return touchProject(withLayers(project, layers));
+  return touchProject(withLayers(project, layers, canvasId));
 }
 
-export function ensureActiveLayerCoversCanvasInProject(project: Project): Project {
-  const activeLayer = getActiveLayer(project);
+export function ensureActiveLayerCoversCanvasInProject(
+  project: Project,
+  canvasId?: string,
+): Project {
+  const activeLayer = getActiveLayer(project, canvasId);
   if (!isDrawingLayer(activeLayer) || !isDrawingLayerEditable(activeLayer)) {
     return project;
   }
 
+  const targetCanvasId = canvasId ?? getActiveCanvas(project).id;
   const expanded = expandDrawingLayerToCoverCanvas(
     activeLayer,
-    getCanvasSize(project),
+    getCanvasSize(project, targetCanvasId),
   );
   if (expanded === activeLayer) return project;
 
-  const layers = project.canvas.layers.map((layer) =>
+  const layers = getActiveCanvasLayers(project).map((layer) =>
     layer.id === activeLayer.id ? expanded : layer,
   );
-  return touchProject(withLayers(project, layers));
+  return touchProject(withLayers(project, layers, canvasId));
 }
 
 export function ensureActiveLayerContainsFloatingSelectionInProject(
@@ -323,4 +383,63 @@ export function resetReferenceScale(
   layerId: string,
 ): Project | null {
   return resetReferenceScaleInProject(project, layerId);
+}
+
+export function copyDrawingLayerInProject(
+  project: Project,
+  layerId: string,
+  sourceCanvasId?: string,
+): DrawingLayerClipboard | null {
+  const canvasId = sourceCanvasId ?? getActiveCanvas(project).id;
+  const layer = getLayerById(project, layerId, canvasId);
+  if (!layer || !isDrawingLayer(layer)) return null;
+  return createDrawingLayerClipboard(layer, canvasId);
+}
+
+export function pasteDrawingLayerInProject(
+  project: Project,
+  clipboard: DrawingLayerClipboard,
+  canvasId?: string,
+): Project {
+  const targetId = canvasId ?? getActiveCanvas(project).id;
+  const canvas = resolveProjectCanvas(project, targetId) ?? getActiveCanvas(project);
+  const newLayer = toPastedLayer(clipboard);
+  const layers = [...canvas.layers, newLayer];
+
+  if (targetId === getActiveCanvas(project).id) {
+    return updateActiveCanvasLayers(project, layers, { activeLayerId: newLayer.id });
+  }
+
+  return touchProject({
+    ...withLayers(project, layers, targetId),
+    board: updatePixelCanvasOnBoard(project.board, targetId, {
+      layers,
+      activeLayerId: newLayer.id,
+    }),
+  });
+}
+
+export function mergeDrawingLayerDownInProject(
+  project: Project,
+  layerId: string,
+  canvasId?: string,
+): Project | null {
+  const targetId = canvasId ?? getActiveCanvas(project).id;
+  const canvas = resolveProjectCanvas(project, targetId) ?? getActiveCanvas(project);
+  const result = mergeDrawingLayerDown(canvas.layers, layerId);
+  if (!result) return null;
+
+  if (targetId === getActiveCanvas(project).id) {
+    return updateActiveCanvasLayers(project, result.layers, {
+      activeLayerId: result.activeLayerId,
+    });
+  }
+
+  return touchProject({
+    ...withLayers(project, result.layers, targetId),
+    board: updatePixelCanvasOnBoard(project.board, targetId, {
+      layers: result.layers,
+      activeLayerId: result.activeLayerId,
+    }),
+  });
 }

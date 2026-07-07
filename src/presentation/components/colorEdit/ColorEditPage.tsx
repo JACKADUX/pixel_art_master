@@ -4,8 +4,8 @@ import { MonitorPicker } from "../MonitorPicker";
 import { useAppStore } from "../../stores/appStore";
 import { useColorEditStore } from "../../stores/colorEditStore";
 import { useImageFileDrop } from "../../hooks/useImageFileDrop";
-import { ImageDropOverlay } from "../toolPage/ImageDropOverlay";
-import { ToolPagePreviewSplit } from "../toolPage/ToolPagePreviewSplit";
+import { ImageDropOverlay } from "../pluginPage/ImageDropOverlay";
+import { PluginPagePreviewSplit } from "../pluginPage/PluginPagePreviewSplit";
 import { ColorEditResultPreview } from "./ColorEditResultPreview";
 import { ColorEditSourcePreview } from "./ColorEditSourcePreview";
 import { ColorEditToolPanel } from "./ColorEditToolPanel";
@@ -89,7 +89,7 @@ export function ColorEditPage() {
           >
             ← 返回编辑器
           </button>
-          <h1 className="text-sm font-medium text-zinc-200">颜色编辑工具</h1>
+          <h1 className="text-sm font-medium text-zinc-200">颜色编辑插件</h1>
           <div className="ml-auto flex items-center gap-2">
             <span className="text-[10px] text-zinc-600">
               拖放图片 · Ctrl+V 粘贴 · 滚轮缩放 · 中键平移
@@ -114,7 +114,7 @@ export function ColorEditPage() {
         </header>
 
         <div className="grid min-h-0 flex-1 grid-cols-[1fr_16rem] overflow-hidden">
-          <ToolPagePreviewSplit
+          <PluginPagePreviewSplit
             source={<ColorEditSourcePreview />}
             result={<ColorEditResultPreview imageData={resultImageData} />}
           />

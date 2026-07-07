@@ -2,13 +2,15 @@ import type { PixelColor } from "@/domain/canvas/PixelColor";
 import type { ReferenceLayer } from "@/domain/layer/Layer";
 import type { Point } from "@/domain/tool/ITool";
 import {
-  findTopReferenceLayerAtCanvasPoint,
+  findTopReferenceLayerAtBoardPoint,
   isReferenceLayerPixelCacheValid,
   referenceLayerCropKey,
   sampleReferenceLayerPixel,
   toReferenceLayerLocalPoint,
 } from "@/domain/layer/ReferenceLayerPalette";
+import { canvasPointToBoardPoint } from "@/domain/layer/ReferenceLayerOperations";
 import type { Project } from "@/domain/project/Project";
+import { getActiveCanvas } from "@/domain/project/Project";
 import { getCompositeGrid } from "@/domain/project/Project";
 import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 
@@ -38,10 +40,12 @@ export function resolveColorAtCanvasPoint(
   point: Point,
   getPixelCache: ReferenceLayerPixelCacheReader,
 ): PixelColor {
-  const referenceLayer = findTopReferenceLayerAtCanvasPoint(project.canvas.layers, point);
+  const activeCanvas = getActiveCanvas(project);
+  const boardPoint = canvasPointToBoardPoint(point, activeCanvas.boardPosition);
+  const referenceLayer = findTopReferenceLayerAtBoardPoint(project.referenceLayers, boardPoint);
   if (referenceLayer?.crop && referenceLayer.imageData) {
     const cache = getPixelCache(referenceLayer.id, referenceLayerCropKey(referenceLayer.crop));
-    const referenceColor = sampleReferenceLayerColor(referenceLayer, point, cache);
+    const referenceColor = sampleReferenceLayerColor(referenceLayer, boardPoint, cache);
     if (referenceColor !== null) {
       return referenceColor;
     }
@@ -57,12 +61,14 @@ export async function resolveColorAtCanvasPointAsync(
   getPixelCache: ReferenceLayerPixelCacheReader,
   ensurePixelCache: (layer: ReferenceLayer) => Promise<ReferenceLayerPixelData | null>,
 ): Promise<PixelColor> {
-  const referenceLayer = findTopReferenceLayerAtCanvasPoint(project.canvas.layers, point);
+  const activeCanvas = getActiveCanvas(project);
+  const boardPoint = canvasPointToBoardPoint(point, activeCanvas.boardPosition);
+  const referenceLayer = findTopReferenceLayerAtBoardPoint(project.referenceLayers, boardPoint);
   if (referenceLayer?.crop && referenceLayer.imageData) {
     const cropKey = referenceLayerCropKey(referenceLayer.crop);
     const cachedColor = sampleReferenceLayerColor(
       referenceLayer,
-      point,
+      boardPoint,
       getPixelCache(referenceLayer.id, cropKey),
     );
     if (cachedColor !== null) {
@@ -70,7 +76,7 @@ export async function resolveColorAtCanvasPointAsync(
     }
 
     const loadedCache = await ensurePixelCache(referenceLayer);
-    const loadedColor = sampleReferenceLayerColor(referenceLayer, point, loadedCache);
+    const loadedColor = sampleReferenceLayerColor(referenceLayer, boardPoint, loadedCache);
     if (loadedColor !== null) {
       return loadedColor;
     }

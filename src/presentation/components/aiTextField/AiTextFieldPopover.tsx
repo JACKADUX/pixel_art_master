@@ -15,6 +15,7 @@ import {
   formatAgentProfileParamsSummary,
   getBuiltInAgentProfile,
 } from "@/domain/aiTextField/AgentProfile";
+import { PortalSelect } from "./PortalSelect";
 
 type ResizeDirection = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
@@ -261,7 +262,7 @@ export function AiTextFieldPopover() {
     top: panelY,
     width: panelWidth,
     height: panelHeight,
-    zIndex: 100,
+    zIndex: 250,
   };
 
   const handleHeaderMouseDown = (e: React.MouseEvent) => {
@@ -460,24 +461,23 @@ export function AiTextFieldPopover() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col">
         {activeTab === "config" ? (
           <div className="flex min-h-0 flex-1 flex-col p-4">
             <div className="flex min-h-0 flex-1 flex-col space-y-3 rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-              <div className="flex shrink-0 items-center justify-between gap-2">
+                <div className="relative z-10 flex shrink-0 items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <label className="text-[11px] font-medium text-zinc-400">选择 Agent 档案</label>
-                  <select
+                  <PortalSelect
                     value={selectedProfileId}
-                    onChange={(e) => setSelectedProfileId(e.target.value)}
-                    className="h-7 rounded border border-zinc-700 bg-zinc-800 px-2 text-[11px] text-zinc-100 outline-none focus:border-blue-500"
-                  >
-                    {profiles.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={profiles.map((profile) => ({
+                      value: profile.id,
+                      label: profile.name,
+                    }))}
+                    onChange={setSelectedProfileId}
+                    className="h-7 min-w-[8rem]"
+                    zIndex={270}
+                  />
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {!showParams && (

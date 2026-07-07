@@ -44,27 +44,30 @@ export function isPointInsideReferenceLayer(
   );
 }
 
-export function findTopReferenceLayerAtCanvasPoint(
+export function findTopReferenceLayerAtBoardPoint(
   layers: Layer[],
-  point: { x: number; y: number },
+  boardPoint: { x: number; y: number },
 ): ReferenceLayer | undefined {
   for (let i = layers.length - 1; i >= 0; i -= 1) {
     const layer = layers[i];
     if (layer.type !== "reference") continue;
-    if (!isPointInsideReferenceLayer(layer, point)) continue;
+    if (!isPointInsideReferenceLayer(layer, boardPoint)) continue;
     return layer;
   }
   return undefined;
 }
 
+/** @deprecated 使用 findTopReferenceLayerAtBoardPoint；传入点须为工作区绝对坐标 */
+export const findTopReferenceLayerAtCanvasPoint = findTopReferenceLayerAtBoardPoint;
+
 export function toReferenceLayerLocalPoint(
   layer: ReferenceLayer,
-  canvasPoint: { x: number; y: number },
+  boardPoint: { x: number; y: number },
 ): { x: number; y: number } | null {
   if (!layer.crop) return null;
   const scale = clampReferenceScale(layer.scale);
-  const displayX = canvasPoint.x - layer.position.x;
-  const displayY = canvasPoint.y - layer.position.y;
+  const displayX = boardPoint.x - layer.position.x;
+  const displayY = boardPoint.y - layer.position.y;
   if (
     displayX < 0 ||
     displayY < 0 ||

@@ -17,7 +17,9 @@ import { useAppStore } from "../stores/appStore";
 import { BrushSizeInput } from "./BrushSizeInput";
 import { PatternBrushScaleSlider } from "./PatternBrushScaleSlider";
 import { PatternBrushPickerPopover } from "./patternBrush/PatternBrushPickerPopover";
+import { CanvasBoardSizePresetMenu } from "./CanvasBoardSizePresetMenu";
 import { formatPixelDimensions } from "@/domain/viewport/OverlayLabelLayout";
+import { getActiveCanvas } from "@/domain/project/Project";
 import { getPatternBrush } from "@/domain/patternBrush/PatternBrushLibrary";
 
 const TOOL_LABELS: Record<ToolType, string> = {
@@ -28,7 +30,7 @@ const TOOL_LABELS: Record<ToolType, string> = {
   select: "选区",
   transform: "变换",
   repeatTile: "重复Tile",
-  canvasResize: "画布尺寸",
+  canvasResize: "画板",
 };
 
 const SHAPES: { mode: ShapeMode; label: string }[] = [
@@ -226,6 +228,7 @@ export function ToolPropertiesBar() {
   const tileSession = useAppStore((s) => s.tileSession);
   const beginTileRegionCreate = useAppStore((s) => s.beginTileRegionCreate);
   const closeTileSession = useAppStore((s) => s.closeTileSession);
+  const autoLayoutBoardCanvases = useAppStore((s) => s.autoLayoutBoardCanvases);
 
   if (!project) return null;
 
@@ -270,6 +273,7 @@ export function ToolPropertiesBar() {
             />
             填充
           </label>
+          <span className="text-zinc-500">Alt 拖拽从中心绘制</span>
         </>
       )}
 
@@ -370,7 +374,7 @@ export function ToolPropertiesBar() {
       {activeTool === "canvasResize" && (
         <>
           <span className="tabular-nums text-zinc-300">
-            {formatPixelDimensions(project.canvas.width, project.canvas.height)}
+            {formatPixelDimensions(getActiveCanvas(project).width, getActiveCanvas(project).height)}
           </span>
           <label className="flex items-center gap-2 text-zinc-400">
             步长
@@ -398,7 +402,19 @@ export function ToolPropertiesBar() {
             />
             保持固定
           </label>
-          <span className="text-zinc-500">左键扩展 / 右键缩小 / 拖拽调整 · Shift 临时步长对齐</span>
+          {project.board.canvases.length > 1 && (
+            <button
+              type="button"
+              onClick={autoLayoutBoardCanvases}
+              className="rounded bg-blue-600 px-3 py-1 text-white transition hover:bg-blue-500"
+            >
+              自动排布
+            </button>
+          )}
+          <CanvasBoardSizePresetMenu />
+          <span className="text-zinc-500">
+            拖拽画板移动 · 拖拽边缘调整尺寸 · 点击标签切换画板
+          </span>
         </>
       )}
 

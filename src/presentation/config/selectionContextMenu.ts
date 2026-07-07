@@ -70,7 +70,7 @@ export function buildSelectionContextMenuItems(
     { type: "separator" },
     {
       type: "action",
-      label: "发送选区颜色到分析工具",
+      label: "发送选区颜色到分析插件",
       disabled: !hasSelection,
       onClick: actions.sendSelectionColorsToAnalysis,
     },

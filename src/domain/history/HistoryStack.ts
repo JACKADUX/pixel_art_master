@@ -1,13 +1,16 @@
-import type { Layer, LayerPosition } from "../layer/Layer";
+import type { Layer, LayerPosition, ReferenceLayer } from "../layer/Layer";
 import { cloneLayers } from "../layer/Layer";
 import type { SelectionState } from "../selection/SelectionState";
 import { cloneSelectionState } from "../selection/SelectionState";
+import type { PixelCanvas } from "../pixelCanvas/PixelCanvas";
+import { clonePixelCanvases } from "../pixelCanvas/PixelCanvasClone";
 
-export type SnapshotKind = "pixels" | "structure";
+export type SnapshotKind = "pixels" | "structure" | "board";
 
 /** 单个绘制层像素的快照，用于绘制、选区等只改变像素的操作。 */
 export interface PixelSnapshot {
   kind: "pixels";
+  canvasId: string;
   layerId: string;
   width: number;
   height: number;
@@ -16,38 +19,70 @@ export interface PixelSnapshot {
   selection: SelectionState | null;
 }
 
-/** 整个图层结构的快照，用于增删、排序、画布尺寸等改变图层列表或画布维度的操作。 */
+/** 画板内图层结构的快照，用于增删、排序、画板尺寸等操作。 */
 export interface StructureSnapshot {
   kind: "structure";
+  canvasId: string;
   canvasWidth: number;
   canvasHeight: number;
   layers: Layer[];
   activeLayerId: string;
+  referenceLayers: ReferenceLayer[];
   activeReferenceLayerId: string | null;
   selection: SelectionState | null;
 }
 
-export type EditorSnapshot = PixelSnapshot | StructureSnapshot;
+/** 工作区画板结构的快照，用于新增/删除/移动画板。 */
+export interface BoardStructureSnapshot {
+  kind: "board";
+  canvases: PixelCanvas[];
+  activeCanvasId: string;
+  totalCanvasCount: number;
+  selection: SelectionState | null;
+}
+
+export type EditorSnapshot = PixelSnapshot | StructureSnapshot | BoardStructureSnapshot;
 export type HistoryEntry = EditorSnapshot;
 
 function isStructureSnapshot(snapshot: EditorSnapshot): snapshot is StructureSnapshot {
   return snapshot.kind === "structure";
 }
 
+function isBoardStructureSnapshot(snapshot: EditorSnapshot): snapshot is BoardStructureSnapshot {
+  return snapshot.kind === "board";
+}
+
 export function cloneEditorSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
+  if (isBoardStructureSnapshot(snapshot)) {
+    return {
+      kind: "board",
+      canvases: clonePixelCanvases(snapshot.canvases),
+      activeCanvasId: snapshot.activeCanvasId,
+      totalCanvasCount: snapshot.totalCanvasCount,
+      selection: snapshot.selection ? cloneSelectionState(snapshot.selection) : null,
+    };
+  }
   if (isStructureSnapshot(snapshot)) {
     return {
       kind: "structure",
+      canvasId: snapshot.canvasId,
       canvasWidth: snapshot.canvasWidth,
       canvasHeight: snapshot.canvasHeight,
       layers: cloneLayers(snapshot.layers),
       activeLayerId: snapshot.activeLayerId,
+      referenceLayers: snapshot.referenceLayers.map((layer) => ({
+        ...layer,
+        position: { ...layer.position },
+        crop: layer.crop ? { ...layer.crop } : null,
+        grid: { ...layer.grid },
+      })),
       activeReferenceLayerId: snapshot.activeReferenceLayerId,
       selection: snapshot.selection ? cloneSelectionState(snapshot.selection) : null,
     };
   }
   return {
     kind: "pixels",
+    canvasId: snapshot.canvasId,
     layerId: snapshot.layerId,
     width: snapshot.width,
     height: snapshot.height,
@@ -106,26 +141,22 @@ export class HistoryStack {
     return this.redoStack.length > 0;
   }
 
-  /** 下一个待撤销条目，调用方据此采集匹配条目所指向图层的当前状态。 */
   get nextUndoEntry(): HistoryEntry | null {
     return this.undoStack.length > 0
       ? this.undoStack[this.undoStack.length - 1]
       : null;
   }
 
-  /** 下一个待重做条目，调用方据此采集匹配条目所指向图层的当前状态。 */
   get nextRedoEntry(): HistoryEntry | null {
     return this.redoStack.length > 0
       ? this.redoStack[this.redoStack.length - 1]
       : null;
   }
 
-  /** 下一个待撤销条目的类型，调用方据此采集匹配类型的当前状态。 */
   get nextUndoKind(): SnapshotKind | null {
     return this.nextUndoEntry?.kind ?? null;
   }
 
-  /** 下一个待重做条目的类型，调用方据此采集匹配类型的当前状态。 */
   get nextRedoKind(): SnapshotKind | null {
     return this.nextRedoEntry?.kind ?? null;
   }

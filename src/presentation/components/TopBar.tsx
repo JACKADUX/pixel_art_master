@@ -18,6 +18,7 @@ export function TopBar() {
   const alwaysOnTop = useAppStore((s) => s.alwaysOnTop);
   const toggleCanvasDisplayMode = useAppStore((s) => s.toggleCanvasDisplayMode);
   const canvasDisplayMode = useAppStore((s) => s.canvasDisplayMode);
+  const requestFitActiveCanvasInViewport = useAppStore((s) => s.requestFitActiveCanvasInViewport);
   const undo = useAppStore((s) => s.undo);
   const redo = useAppStore((s) => s.redo);
   const canUndo = useAppStore((s) => s.canUndo);
@@ -35,6 +36,8 @@ export function TopBar() {
   const openComfyUiPage = useAppStore((s) => s.openComfyUiPage);
   const openAssetLibraryModal = useAppStore((s) => s.openAssetLibraryModal);
   const openSettingsModal = useAppStore((s) => s.openSettingsModal);
+  const openAboutModal = useAppStore((s) => s.openAboutModal);
+  const openShortcutReferenceModal = useAppStore((s) => s.openShortcutReferenceModal);
   const project = useAppStore((s) => s.project);
 
   const comfyApps = useComfyAppStore((s) => s.apps);
@@ -61,6 +64,7 @@ export function TopBar() {
         alwaysOnTop,
         toggleCanvasDisplayMode,
         canvasDisplayMode,
+        fitActiveCanvasInViewport: requestFitActiveCanvasInViewport,
         undo,
         redo,
         canUndo,
@@ -80,6 +84,8 @@ export function TopBar() {
         openComfyAppWindow: (appId: string) => void openComfyAppWindow(appId, "canvas"),
         openAssetLibrary: openAssetLibraryModal,
         openSettingsModal,
+        openAboutModal,
+        openShortcutReferenceModal,
       }),
     [
       newProject,
@@ -95,6 +101,7 @@ export function TopBar() {
       alwaysOnTop,
       toggleCanvasDisplayMode,
       canvasDisplayMode,
+      requestFitActiveCanvasInViewport,
       undo,
       redo,
       canUndo,
@@ -114,6 +121,8 @@ export function TopBar() {
       openComfyAppWindow,
       openAssetLibraryModal,
       openSettingsModal,
+      openAboutModal,
+      openShortcutReferenceModal,
     ],
   );
 

@@ -17,6 +17,7 @@ import { wrapLayerOnCanvas } from "../canvas/LayerProjectedSurface";
 import { rgba } from "../canvas/PixelColor";
 import { resizeProjectCanvas } from "../project/Project";
 import { createEmptyProject } from "../project/Project";
+import { getActiveCanvas } from "../project/ProjectTestUtils";
 
 describe("DrawingLayerOperations", () => {
   it("maps canvas coordinates to layer-local coordinates", () => {
@@ -134,7 +135,7 @@ describe("expandDrawingLayerForCanvasGrow", () => {
   it("allows drawing in newly expanded canvas area via projected surface", () => {
     const project = createEmptyProject("test", { width: 64, height: 64 });
     const resized = resizeProjectCanvas(project, 96, 64);
-    const layer = resized.canvas.layers.find((entry) => entry.type === "drawing");
+    const layer = getActiveCanvas(resized).layers.find((entry) => entry.type === "drawing");
     expect(layer?.type).toBe("drawing");
     if (layer?.type !== "drawing") return;
 

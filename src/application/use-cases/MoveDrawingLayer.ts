@@ -1,5 +1,5 @@
 import type { Project } from "@/domain/project/Project";
-import { getLayerById, touchProject, withLayers } from "@/domain/project/Project";
+import { getActiveCanvas, getLayerById, touchProject, withLayers } from "@/domain/project/Project";
 import { canMoveDrawingLayer, moveDrawingLayerPosition } from "@/domain/layer/DrawingLayerOperations";
 import type { DrawingLayer, LayerPosition } from "@/domain/layer/Layer";
 import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
@@ -17,7 +17,7 @@ export function moveDrawingLayerInProject(
     position: { ...position },
   };
 
-  const layers = project.canvas.layers.map((entry) =>
+  const layers = getActiveCanvas(project).layers.map((entry) =>
     entry.id === layerId ? updatedLayer : entry,
   );
 

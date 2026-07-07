@@ -5,13 +5,25 @@ import {
   applyBrushStraightLine,
   type DrawToolOptions,
 } from "@/application/use-cases/DrawStroke";
+import { shapeDragBoundingPoints } from "@/domain/tool/ShapeDragGeometry";
+import type { PointerModifiers } from "@/domain/tool/ITool";
+import { clampEditorZoom } from "@/domain/viewport/EditorZoom";
 
 import {
   pushHistory,
   pushStructureHistory,
+  pushBoardStructureHistory,
   undoHistory,
   redoHistory,
 } from "@/application/use-cases/HistoryUseCases";
+
+import { autoLayoutBoardCanvases as autoLayoutBoardCanvasesUseCase } from "@/application/use-cases/AutoLayoutBoardCanvases";
+
+import {
+  beginDrawingStroke,
+  commitDrawingStroke,
+  type DrawingStrokeSession,
+} from "@/application/use-cases/DrawingStrokeSessionUseCases";
 
 import {
   beginMoveSelection,
@@ -72,9 +84,10 @@ import { buildColorEntriesInScanOrder } from "@/domain/selection/SelectionColorE
 import { usePixelRestoreStore } from "@/presentation/stores/pixelRestoreStore";
 import { useColorEditStore } from "@/presentation/stores/colorEditStore";
 import { useColorVariationAnalysisStore } from "@/presentation/stores/colorVariationAnalysisStore";
+import { useAiTextFieldSessionStore } from "@/presentation/stores/aiTextFieldSessionStore";
 import { useComfyUiStore } from "@/presentation/stores/comfyUiStore";
 import { useWorldStore } from "@/presentation/stores/worldStore";
-import type { ToolPageId } from "@/presentation/config/toolPagesConfig";
+import type { PluginPageId } from "@/presentation/config/pluginPagesConfig";
 
 import type { CapturableMonitor } from "@/application/ports/ICaptureService";
 
@@ -95,6 +108,7 @@ import {
   importAssetGridToNewDrawingLayer,
   importAssetImageDataToNewReferenceLayer,
 } from "@/application/use-cases/ImportAssetToProject";
+import { dropImageAsDrawingLayerOntoCanvas, dropImageAsReferenceLayerOntoCanvas, createCanvasWithDroppedDrawingLayer } from "@/application/use-cases/DropImageOntoCanvas";
 import { imageDataToPixelGrid } from "@/application/use-cases/ClipboardUseCases";
 import { importReferenceLayerFromClipboard } from "@/application/use-cases/ImportReferenceLayerFromClipboard";
 
@@ -145,12 +159,21 @@ import {
 
   resetReferenceScale as resetReferenceScaleInProject,
 
+  copyDrawingLayerInProject,
+
+  pasteDrawingLayerInProject,
+
+  mergeDrawingLayerDownInProject,
+
 } from "@/application/use-cases/LayerUseCases";
 
 import { resolveColorAtCanvasPointAsync } from "@/application/use-cases/PickColorAtPoint";
 import { loadAppSettings } from "@/application/use-cases/LoadAppSettings";
 import { loadEditorPreferences } from "@/application/use-cases/LoadEditorPreferences";
 import { loadColorVariationAnalysisPreferences } from "@/application/use-cases/LoadColorVariationAnalysisPreferences";
+import { loadAgentProfiles } from "@/application/use-cases/LoadAgentProfiles";
+import { loadFieldPromptConfigs } from "@/application/use-cases/LoadFieldPromptConfigs";
+import { loadLlmSettings } from "@/application/use-cases/LoadLlmSettings";
 import { exportImage } from "@/application/use-cases/ExportImageUseCases";
 import { loadProject } from "@/application/use-cases/LoadProject";
 import { createBlankProjectWithPreferences } from "@/application/use-cases/CanvasSizePreferences";
@@ -212,6 +235,11 @@ import { snapSymmetryOrigin } from "@/domain/symmetry/SymmetryMirror";
 import { findAssetById, ROOT_FOLDER_ID } from "@/domain/asset/AssetLibrary";
 import { getAssetRelativeFilePath, isImageAsset } from "@/domain/asset/AssetRecord";
 import { isReferenceLayer, isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
+import {
+  CompositeCache,
+  compositeActiveLayerOverBase,
+} from "@/domain/layer/CompositeCache";
+import type { DrawingLayerClipboard } from "@/domain/layer/DrawingLayerClipboard";
 import { LayerProjectedSurface } from "@/domain/canvas/LayerProjectedSurface";
 import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 import { MaskedPixelGrid } from "@/domain/canvas/MaskedPixelGrid";
@@ -225,6 +253,8 @@ import {
 
   getActiveLayer,
 
+  getActiveCanvas,
+
   getCanvasSize,
 
   isUnsavedEmptyProject,
@@ -235,9 +265,21 @@ import {
 
   withOrthographicView,
 
+  withActiveCanvasId,
+
+  withBoard,
+
   type Project,
 
 } from "@/domain/project/Project";
+import {
+  addPixelCanvasToBoard,
+  removePixelCanvasFromBoard,
+  movePixelCanvasOnBoard,
+  renamePixelCanvas,
+  duplicatePixelCanvasOnBoard,
+} from "@/domain/pixelCanvas/PixelCanvasOperations";
+import type { BoardPosition } from "@/domain/pixelCanvas/PixelCanvas";
 import {
   clampCameraAngle,
 } from "@/domain/viewport/OrthographicView";
@@ -297,8 +339,10 @@ import {
 import { imageProcessor } from "@/infrastructure/image/CanvasImageProcessor";
 
 import { projectRepository } from "@/infrastructure/storage/JsonProjectRepository";
+import { buildDefaultExportSavePath } from "@/domain/export/ExportImageOperations";
 import {
   DEFAULT_IMAGE_EXPORT_PREFERENCES,
+  getImageExportExtension,
   parseImageExportPreferences,
   type ImageExportFormat,
   type ImageExportPreferences,
@@ -333,6 +377,11 @@ import {
   type SettingsSliceState,
 } from "@/presentation/stores/settingsSlice";
 import {
+  createHelpSlice,
+  type HelpSliceActions,
+  type HelpSliceState,
+} from "@/presentation/stores/helpSlice";
+import {
   createAppSettingsSlice,
   subscribeAppSettingsPersistence,
   setAppSettingsHydrating,
@@ -352,6 +401,8 @@ import {
 } from "@/presentation/stores/palettePresetSlice";
 import { editorPreferencesRepository } from "@/infrastructure/storage/FileEditorPreferencesRepository";
 import { colorVariationAnalysisPreferencesRepository } from "@/infrastructure/storage/FileColorVariationAnalysisPreferencesRepository";
+import { agentProfileRepository } from "@/infrastructure/storage/FileAgentProfileRepository";
+import { fieldPromptConfigRepository } from "@/infrastructure/storage/FileFieldPromptConfigRepository";
 import { appSettingsRepository } from "@/infrastructure/storage/FileAppSettingsRepository";
 import { llmSettingsRepository } from "@/infrastructure/storage/FileLlmSettingsRepository";
 import { palettePresetRepository } from "@/infrastructure/storage/FilePalettePresetRepository";
@@ -368,6 +419,8 @@ import { windowService } from "@/infrastructure/tauri/TauriWindowService";
 import { navigateToPreviewPoint as navigateToPreviewPointUseCase } from "@/application/use-cases/NavigateToPoint";
 
 import { zoomNavigatorPreviewAtPoint as zoomNavigatorPreviewAtPointUseCase } from "@/application/use-cases/ZoomNavigatorPreviewAtPoint";
+
+import { syncNavigatorPreviewToViewport } from "@/application/use-cases/SyncNavigatorPreviewToViewport";
 
 import {
   applyPreviewPanDelta,
@@ -438,6 +491,22 @@ function getContainerDimensions(container: HTMLDivElement | null) {
   };
 }
 
+function applyNavigatorViewportSync(
+  navigator: NavigatorState,
+  snapshot: ViewportSnapshot,
+): NavigatorState | null {
+  const sync = syncNavigatorPreviewToViewport(snapshot, {
+    previewWidth: navigator.size.width,
+    previewHeight: navigator.size.height,
+  });
+  if (!sync) return null;
+  return {
+    ...navigator,
+    previewScale: sync.previewScale,
+    previewPan: { x: sync.previewPan.panX, y: sync.previewPan.panY },
+  };
+}
+
 export interface NavigatorState {
   visible: boolean;
   position: { x: number; y: number };
@@ -445,6 +514,7 @@ export interface NavigatorState {
   previewScale: number;
   previewPan: { x: number; y: number };
   edgeAnchor: PanelEdgeAnchor;
+  followViewport: boolean;
 }
 
 export interface FloatingColorPickerState {
@@ -456,7 +526,7 @@ export interface FloatingColorPickerState {
   edgeAnchor: PanelEdgeAnchor;
 }
 
-interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, PatternBrushSliceState, PatternBrushSliceActions, SettingsSliceState, SettingsSliceActions, AppSettingsSliceState, AppSettingsSliceActions, LlmSettingsSliceState, LlmSettingsSliceActions, PalettePresetSliceState, PalettePresetSliceActions, WorkspaceRegionSliceState, WorkspaceRegionSliceActions {
+interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, PatternBrushSliceState, PatternBrushSliceActions, SettingsSliceState, SettingsSliceActions, HelpSliceState, HelpSliceActions, AppSettingsSliceState, AppSettingsSliceActions, LlmSettingsSliceState, LlmSettingsSliceActions, PalettePresetSliceState, PalettePresetSliceActions, WorkspaceRegionSliceState, WorkspaceRegionSliceActions {
 
   project: Project | null;
 
@@ -470,6 +540,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   zoom: number;
 
+  fitActiveCanvasNonce: number;
+
   alwaysOnTop: boolean;
 
   isDrawing: boolean;
@@ -482,6 +554,10 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   drawingColor: PixelColor | null;
 
+  drawingStrokeSession: DrawingStrokeSession | null;
+
+  canvasRenderNonce: number;
+
   brushLineAnchor: Point | null;
 
   manualScaleOverride: number | null;
@@ -489,6 +565,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   detectedScale: number;
 
   layersPanelTab: "drawing" | "reference";
+
+  drawingLayerClipboard: DrawingLayerClipboard | null;
 
   paletteViewMode: "grid" | "oklchMap";
 
@@ -567,6 +645,12 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   tilePreviewRect: SelectionRect | null;
 
+  selectionByCanvas: Record<string, SelectionState | null>;
+
+  symmetryByCanvas: Record<string, SymmetryConfig>;
+
+  tileSessionByCanvas: Record<string, TileSessionState>;
+
 
 
   init: () => Promise<void>;
@@ -610,6 +694,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   setColorSlot: (slot: ColorSlot, color: PixelColor) => void;
 
   setZoom: (zoom: number) => void;
+
+  requestFitActiveCanvasInViewport: () => void;
 
   toggleGrid: () => void;
 
@@ -679,9 +765,17 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   panNavigatorPreview: (deltaX: number, deltaY: number) => void;
 
+  syncNavigatorToViewport: () => void;
+
+  setNavigatorFollowViewport: (follow: boolean) => void;
+
   setViewportContainer: (el: HTMLDivElement | null) => void;
 
-  syncViewportSnapshot: (canvasEl?: HTMLCanvasElement | null) => void;
+  syncViewportSnapshot: (options?: {
+    canvasEl?: HTMLCanvasElement | null;
+    boardContent?: { left: number; top: number; width: number; height: number };
+    pixelGridRect?: { x: number; y: number; width: number; height: number };
+  }) => void;
 
   navigateToPreviewPoint: (previewX: number, previewY: number) => void;
 
@@ -793,6 +887,20 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   /** 把任意图像数据导入为新的绘制图层 */
   importImageDataToDrawingLayer: (imageData: ImageData, name: string) => void;
 
+  /** 将拖放的图片导入到指定画板坐标；默认创建绘制图层，按住 Ctrl 时创建参考图层 */
+  importDroppedImageAtCanvasPoint: (
+    source: { file: File } | { path: string },
+    canvasId: string,
+    canvasPoint: Point,
+    asReference?: boolean,
+  ) => Promise<void>;
+
+  /** 在空白工作区创建与图片同尺寸的画板并导入绘制层（图层位置归零） */
+  importDroppedImageAtBoardPoint: (
+    source: { file: File } | { path: string },
+    boardPoint: Point,
+  ) => Promise<void>;
+
   /** 把任意图像数据导入为新的参考图层 */
   importImageDataToReferenceLayer: (imageData: ImageData, name: string) => void;
 
@@ -817,7 +925,31 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   removeLayer: (layerId: string) => void;
 
+  copyDrawingLayer: (layerId?: string) => void;
+
+  pasteDrawingLayer: () => void;
+
+  mergeDrawingLayerDown: (layerId?: string) => void;
+
   reorderLayer: (fromIndex: number, toIndex: number) => void;
+
+  setActiveCanvas: (canvasId: string) => void;
+
+  addCanvas: (name?: string) => void;
+
+  removeCanvas: (canvasId: string) => void;
+
+  moveCanvasOnBoard: (canvasId: string, boardPosition: BoardPosition) => void;
+
+  beginCanvasBoardMove: () => void;
+
+  previewCanvasOnBoard: (canvasId: string, boardPosition: BoardPosition) => void;
+
+  renameCanvas: (canvasId: string, name: string) => void;
+
+  duplicateCanvas: (canvasId: string) => void;
+
+  autoLayoutBoardCanvases: () => void;
 
   moveReferenceLayer: (layerId: string, position: LayerPosition) => void;
 
@@ -852,7 +984,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   saveImageToAssetLibrary: (imageData: ImageData, title: string) => Promise<void>;
 
-  sendAssetToToolPage: (assetId: string, toolPageId: ToolPageId) => Promise<void>;
+  sendAssetToPlugin: (assetId: string, pluginId: PluginPageId) => Promise<void>;
 
   revealAssetInFolder: (assetId: string) => Promise<void>;
 
@@ -880,22 +1012,22 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   closeExportImageModal: () => void;
 
-  pickExportDirectory: () => Promise<string | null>;
-
   executeExportImage: (input: {
-    directory: string;
-    fileName: string;
     format: ImageExportFormat;
     scope: ImageExportScope;
     scalePreset: ImageExportScalePreset;
     customLongestEdge: number;
-  }) => Promise<{ filePath: string } | null>;
+  }) => Promise<{ filePath: string } | "cancelled" | null>;
 
   getCompositeGrid: () => PixelGrid | null;
 
   getActiveLayerGrid: () => PixelGrid | null;
 
   syncActiveLayer: (grid: WritableCanvasSurface) => void;
+
+  requestCanvasRender: () => void;
+
+  getCompositeGridForRender: () => PixelGrid | null;
 
   getRecentProjects: () => string[];
 
@@ -984,12 +1116,22 @@ function resolveLayerLocalGrid(surface: WritableCanvasSurface): PixelGrid {
   return surface;
 }
 
+function toPointerModifiers(modifiers: {
+  shiftKey: boolean;
+  altKey: boolean;
+}): PointerModifiers {
+  return { shiftKey: modifiers.shiftKey, altKey: modifiers.altKey };
+}
+
 function prepareActiveLayerProjectForDrawing(
   project: Project,
   activeTool: ToolType,
   toolSettings: ToolSettings,
-  ...canvasPoints: Point[]
+  firstPoint: Point,
+  secondPoint?: Point,
+  modifiers?: PointerModifiers,
 ): Project {
+  const canvasPoints = secondPoint ? [firstPoint, secondPoint] : [firstPoint];
   if (activeTool === "fill") {
     return ensureActiveLayerCoversCanvasInProject(project);
   }
@@ -1013,11 +1155,13 @@ function prepareActiveLayerProjectForDrawing(
       { x: maxX, y: maxY },
     ];
   } else if (activeTool === "shape" && canvasPoints.length >= 2) {
-    const [a, b] = canvasPoints;
-    expandPoints = [
-      { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) },
-      { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) },
-    ];
+    const [origin, pointer] = canvasPoints;
+    expandPoints = shapeDragBoundingPoints(
+      origin,
+      pointer,
+      toolSettings.shapeMode,
+      modifiers ?? { altKey: false },
+    );
   }
 
   return ensureActiveLayerContainsCanvasPointsInProject(project, expandPoints);
@@ -1056,19 +1200,140 @@ function resolveTileDrawParams(
 function mergeDrawOptions(
   base: DrawToolOptions | undefined,
   tileRegion: SelectionRect | undefined,
+  pointerModifiers?: PointerModifiers,
 ): DrawToolOptions | undefined {
-  if (!tileRegion) return base;
-  return { ...base, tileRegion };
+  if (!tileRegion && !pointerModifiers) return base;
+  return {
+    ...base,
+    ...(tileRegion ? { tileRegion } : {}),
+    ...(pointerModifiers ? { pointerModifiers } : {}),
+  };
 }
 
-type ActiveToolPage =
+function initializeCanvasSessionMaps(project: Project): {
+  selectionByCanvas: Record<string, SelectionState | null>;
+  symmetryByCanvas: Record<string, SymmetryConfig>;
+  tileSessionByCanvas: Record<string, TileSessionState>;
+} {
+  const selectionByCanvas: Record<string, SelectionState | null> = {};
+  const symmetryByCanvas: Record<string, SymmetryConfig> = {};
+  const tileSessionByCanvas: Record<string, TileSessionState> = {};
+
+  for (const canvas of project.board.canvases) {
+    selectionByCanvas[canvas.id] = null;
+    const origin = createCenteredOrigin(canvas.width, canvas.height);
+    symmetryByCanvas[canvas.id] = {
+      ...createDefaultSymmetryConfig(),
+      originX: origin.originX,
+      originY: origin.originY,
+    };
+    tileSessionByCanvas[canvas.id] = createIdleTileSession();
+  }
+
+  return { selectionByCanvas, symmetryByCanvas, tileSessionByCanvas };
+}
+
+function loadActiveCanvasSession(
+  project: Project,
+  maps: {
+    selectionByCanvas: Record<string, SelectionState | null>;
+    symmetryByCanvas: Record<string, SymmetryConfig>;
+    tileSessionByCanvas: Record<string, TileSessionState>;
+  },
+): {
+  selection: SelectionState | null;
+  symmetry: SymmetryConfig;
+  tileSession: TileSessionState;
+} {
+  const canvas = getActiveCanvas(project);
+  const origin = createCenteredOrigin(canvas.width, canvas.height);
+  const defaultSymmetry = {
+    ...createDefaultSymmetryConfig(),
+    originX: origin.originX,
+    originY: origin.originY,
+  };
+  return {
+    selection: maps.selectionByCanvas[canvas.id] ?? null,
+    symmetry: maps.symmetryByCanvas[canvas.id] ?? defaultSymmetry,
+    tileSession: maps.tileSessionByCanvas[canvas.id] ?? createIdleTileSession(),
+  };
+}
+
+function saveActiveCanvasSession(
+  project: Project,
+  selection: SelectionState | null,
+  symmetry: SymmetryConfig,
+  tileSession: TileSessionState,
+  maps: {
+    selectionByCanvas: Record<string, SelectionState | null>;
+    symmetryByCanvas: Record<string, SymmetryConfig>;
+    tileSessionByCanvas: Record<string, TileSessionState>;
+  },
+): {
+  selectionByCanvas: Record<string, SelectionState | null>;
+  symmetryByCanvas: Record<string, SymmetryConfig>;
+  tileSessionByCanvas: Record<string, TileSessionState>;
+} {
+  const canvasId = getActiveCanvas(project).id;
+  return {
+    selectionByCanvas: { ...maps.selectionByCanvas, [canvasId]: selection },
+    symmetryByCanvas: { ...maps.symmetryByCanvas, [canvasId]: symmetry },
+    tileSessionByCanvas: { ...maps.tileSessionByCanvas, [canvasId]: tileSession },
+  };
+}
+
+function reconcileCanvasSessionMaps(
+  project: Project,
+  existing: {
+    selectionByCanvas: Record<string, SelectionState | null>;
+    symmetryByCanvas: Record<string, SymmetryConfig>;
+    tileSessionByCanvas: Record<string, TileSessionState>;
+  },
+  focusSelection: SelectionState | null,
+  focusCanvasId: string,
+): {
+  selectionByCanvas: Record<string, SelectionState | null>;
+  symmetryByCanvas: Record<string, SymmetryConfig>;
+  tileSessionByCanvas: Record<string, TileSessionState>;
+} {
+  const selectionByCanvas: Record<string, SelectionState | null> = {};
+  const symmetryByCanvas: Record<string, SymmetryConfig> = {};
+  const tileSessionByCanvas: Record<string, TileSessionState> = {};
+
+  for (const canvas of project.board.canvases) {
+    selectionByCanvas[canvas.id] =
+      canvas.id === focusCanvasId
+        ? focusSelection
+        : (existing.selectionByCanvas[canvas.id] ?? null);
+    const origin = createCenteredOrigin(canvas.width, canvas.height);
+    symmetryByCanvas[canvas.id] = existing.symmetryByCanvas[canvas.id] ?? {
+      ...createDefaultSymmetryConfig(),
+      originX: origin.originX,
+      originY: origin.originY,
+    };
+    tileSessionByCanvas[canvas.id] =
+      existing.tileSessionByCanvas[canvas.id] ?? createIdleTileSession();
+  }
+
+  return { selectionByCanvas, symmetryByCanvas, tileSessionByCanvas };
+}
+
+export function getActiveCanvasSelection(
+  state: Pick<AppState, "project" | "selectionByCanvas" | "selection">,
+): SelectionState | null {
+  if (!state.project) return null;
+  const canvasId = getActiveCanvas(state.project).id;
+  return state.selectionByCanvas[canvasId] ?? state.selection;
+}
+
+type ActivePluginPage =
   | "pixelRestore"
   | "colorEdit"
   | "colorVariation"
   | "world"
   | "comfyui";
 
-function closeOtherToolPages(except?: ActiveToolPage): void {
+function closeOtherPluginPages(except?: ActivePluginPage): void {
   if (except !== "pixelRestore") {
     usePixelRestoreStore.getState().closePage();
   }
@@ -1085,6 +1350,8 @@ function closeOtherToolPages(except?: ActiveToolPage): void {
     useComfyUiStore.getState().closePage();
   }
 }
+
+const compositeRenderCache = new CompositeCache();
 
 export const useAppStore = create<AppState>((set, get) => {
 
@@ -1110,6 +1377,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
   const settingsSlice = createSettingsSlice(
     set as Parameters<typeof createSettingsSlice>[0],
+  );
+
+  const helpSlice = createHelpSlice(
+    set as Parameters<typeof createHelpSlice>[0],
   );
 
   const appSettingsSlice = createAppSettingsSlice(
@@ -1147,6 +1418,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
   ...settingsSlice,
 
+  ...helpSlice,
+
   ...appSettingsSlice,
 
   ...llmSettingsSlice,
@@ -1170,6 +1443,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
   zoom: 8,
 
+  fitActiveCanvasNonce: 0,
+
   alwaysOnTop: false,
 
   isDrawing: false,
@@ -1182,6 +1457,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
   drawingColor: null,
 
+  drawingStrokeSession: null,
+
+  canvasRenderNonce: 0,
+
   brushLineAnchor: null,
 
   manualScaleOverride: null,
@@ -1189,6 +1468,8 @@ export const useAppStore = create<AppState>((set, get) => {
   detectedScale: 1,
 
   layersPanelTab: "drawing",
+
+  drawingLayerClipboard: null,
 
   paletteViewMode: "grid",
 
@@ -1227,6 +1508,7 @@ export const useAppStore = create<AppState>((set, get) => {
     previewScale: 1,
     previewPan: { x: 0, y: 0 },
     edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
+    followViewport: false,
   },
 
   floatingPanelStack: ["navigator", "colorPicker", "comfyRunner"],
@@ -1280,6 +1562,12 @@ export const useAppStore = create<AppState>((set, get) => {
 
   tilePreviewRect: null,
 
+  selectionByCanvas: {},
+
+  symmetryByCanvas: {},
+
+  tileSessionByCanvas: {},
+
 
 
   init: async () => {
@@ -1295,7 +1583,16 @@ export const useAppStore = create<AppState>((set, get) => {
     if (softwareDataPath) {
       await migrateUserDataFromLocalStorage(softwareDataPath);
 
-      const [prefs, appSettings, imageExportRaw, alwaysOnTop, colorVariationPrefs] =
+      const [
+        prefs,
+        appSettings,
+        imageExportRaw,
+        alwaysOnTop,
+        colorVariationPrefs,
+        agentProfiles,
+        fieldPromptConfigs,
+        llmSettingsStore,
+      ] =
         await Promise.all([
         loadEditorPreferences(editorPreferencesRepository, softwareDataPath),
         loadAppSettings(appSettingsRepository, softwareDataPath),
@@ -1305,14 +1602,19 @@ export const useAppStore = create<AppState>((set, get) => {
           colorVariationAnalysisPreferencesRepository,
           softwareDataPath,
         ),
+        loadAgentProfiles(agentProfileRepository, softwareDataPath),
+        loadFieldPromptConfigs(fieldPromptConfigRepository, softwareDataPath),
+        loadLlmSettings(llmSettingsRepository, softwareDataPath),
       ]);
 
       set({
         appSettings,
         imageExportPreferences: parseImageExportPreferences(imageExportRaw),
+        llmSettingsStore,
       });
 
       useColorVariationAnalysisStore.getState().hydratePreferences(colorVariationPrefs);
+      useAiTextFieldSessionStore.getState().hydrateUserData(agentProfiles, fieldPromptConfigs);
 
       if (prefs) {
 
@@ -1351,6 +1653,8 @@ export const useAppStore = create<AppState>((set, get) => {
             size: prefs.navigatorLayout.size,
 
             edgeAnchor: prefs.navigatorLayout.edgeAnchor,
+
+            followViewport: prefs.navigatorLayout.followViewport,
 
             previewScale: 1,
 
@@ -1427,13 +1731,16 @@ export const useAppStore = create<AppState>((set, get) => {
 
         get().historyStack.clear();
 
+        const sessionMaps = initializeCanvasSessionMaps(lastProject);
+        const session = loadActiveCanvasSession(lastProject, sessionMaps);
+
         set({
 
           project: lastProject,
 
           manualScaleOverride: null,
 
-          detectedScale: lastProject.canvas.scaleFactor,
+          detectedScale: getActiveCanvas(lastProject).scaleFactor,
 
           projectManagerOpen: false,
 
@@ -1441,7 +1748,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
           projectManagerError: null,
 
-          selection: null,
+          ...sessionMaps,
+
+          selection: session.selection,
+
+          symmetry: session.symmetry,
+
+          tileSession: session.tileSession,
 
           selectionDrag: null,
 
@@ -1489,10 +1802,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
     const appSettings = get().appSettings;
     const palettePresetLibrary = get().palettePresetLibrary;
+    const project = createBlankProjectWithPreferences(appSettings, palettePresetLibrary);
+    const sessionMaps = initializeCanvasSessionMaps(project);
+    const session = loadActiveCanvasSession(project, sessionMaps);
 
     set({
 
-      project: createBlankProjectWithPreferences(appSettings, palettePresetLibrary),
+      project,
 
       manualScaleOverride: null,
 
@@ -1504,7 +1820,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
       projectManagerError: null,
 
-      selection: null,
+      ...sessionMaps,
+
+      selection: session.selection,
+
+      symmetry: session.symmetry,
+
+      tileSession: session.tileSession,
 
       selectionDrag: null,
 
@@ -1545,13 +1867,16 @@ export const useAppStore = create<AppState>((set, get) => {
 
     get().historyStack.clear();
 
+    const sessionMaps = initializeCanvasSessionMaps(project);
+    const session = loadActiveCanvasSession(project, sessionMaps);
+
     set({
 
       project,
 
       manualScaleOverride: null,
 
-      detectedScale: project.canvas.scaleFactor,
+      detectedScale: getActiveCanvas(project).scaleFactor,
 
       projectManagerOpen: false,
 
@@ -1559,7 +1884,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
       projectManagerError: null,
 
-      selection: null,
+      ...sessionMaps,
+
+      selection: session.selection,
+
+      symmetry: session.symmetry,
+
+      tileSession: session.tileSession,
 
       selectionDrag: null,
 
@@ -1835,7 +2166,10 @@ export const useAppStore = create<AppState>((set, get) => {
   resetSymmetryToCenter: () => {
     const { project } = get();
     if (!project) return;
-    const origin = createCenteredOrigin(project.canvas.width, project.canvas.height);
+    const origin = createCenteredOrigin(
+      getActiveCanvas(project).width,
+      getActiveCanvas(project).height,
+    );
     set({
       symmetry: {
         ...get().symmetry,
@@ -1872,9 +2206,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  setZoom: (zoom) => set({ zoom: Math.max(1, Math.min(32, zoom)) }),
+  setZoom: (zoom) => set({ zoom: clampEditorZoom(zoom) }),
 
-
+  requestFitActiveCanvasInViewport: () => {
+    const { project, cropEditorLayerId } = get();
+    if (!project || cropEditorLayerId) return;
+    set({ fitActiveCanvasNonce: get().fitActiveCanvasNonce + 1 });
+  },
 
   toggleGrid: () =>
 
@@ -2400,6 +2738,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
         previewScale: clampPreviewScale(scale),
 
+        followViewport: false,
+
       },
 
     })),
@@ -2436,6 +2776,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
         previewPan: { x: previewPan.panX, y: previewPan.panY },
 
+        followViewport: false,
+
       },
 
     });
@@ -2468,6 +2810,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
           previewPan: { x: nextPan.panX, y: nextPan.panY },
 
+          followViewport: false,
+
         },
 
       };
@@ -2476,11 +2820,59 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
+  syncNavigatorToViewport: () => {
+
+    const { viewportSnapshot, navigator } = get();
+
+    if (!viewportSnapshot) return;
+
+    const synced = applyNavigatorViewportSync(navigator, viewportSnapshot);
+
+    if (!synced) return;
+
+    set({ navigator: synced });
+
+  },
+
+
+
+  setNavigatorFollowViewport: (follow) => {
+
+    const { viewportSnapshot, navigator } = get();
+
+    if (!follow) {
+
+      set({ navigator: { ...navigator, followViewport: false } });
+
+      return;
+
+    }
+
+    const synced = viewportSnapshot
+
+      ? applyNavigatorViewportSync(navigator, viewportSnapshot)
+
+      : null;
+
+    set({
+
+      navigator: synced
+
+        ? { ...synced, followViewport: true }
+
+        : { ...navigator, followViewport: true },
+
+    });
+
+  },
+
+
+
   setViewportContainer: (el) => set({ viewportContainer: el }),
 
 
 
-  syncViewportSnapshot: (canvasEl) => {
+  syncViewportSnapshot: (options) => {
 
     const container = get().viewportContainer;
 
@@ -2492,33 +2884,48 @@ export const useAppStore = create<AppState>((set, get) => {
 
     }
 
-    const canvas = canvasEl ?? container.querySelector("canvas");
+    const canvasEl = options?.canvasEl ?? container.querySelector("canvas");
 
-    if (!canvas) return;
+    if (!canvasEl && !options?.boardContent) return;
 
     const containerRect = container.getBoundingClientRect();
 
-    const canvasRect = canvas.getBoundingClientRect();
+    const boardContent = options?.boardContent;
+    const canvasRect = canvasEl?.getBoundingClientRect();
 
-    const snapshot: ViewportSnapshot = {
+    const snapshot: ViewportSnapshot = boardContent
+      ? {
+          scrollX: container.scrollLeft,
+          scrollY: container.scrollTop,
+          containerWidth: container.clientWidth,
+          containerHeight: container.clientHeight,
+          canvasDisplayWidth: boardContent.width,
+          canvasDisplayHeight: boardContent.height,
+          canvasOffsetX: boardContent.left,
+          canvasOffsetY: boardContent.top,
+          pixelGridRect: options?.pixelGridRect,
+        }
+      : {
+          scrollX: container.scrollLeft,
+          scrollY: container.scrollTop,
+          containerWidth: container.clientWidth,
+          containerHeight: container.clientHeight,
+          canvasDisplayWidth: canvasRect!.width,
+          canvasDisplayHeight: canvasRect!.height,
+          canvasOffsetX:
+            canvasRect!.left - containerRect.left + container.scrollLeft,
+          canvasOffsetY:
+            canvasRect!.top - containerRect.top + container.scrollTop,
+        };
 
-      scrollX: container.scrollLeft,
-
-      scrollY: container.scrollTop,
-
-      containerWidth: container.clientWidth,
-
-      containerHeight: container.clientHeight,
-
-      canvasDisplayWidth: canvasRect.width,
-
-      canvasDisplayHeight: canvasRect.height,
-
-      canvasOffsetX: canvasRect.left - containerRect.left + container.scrollLeft,
-
-      canvasOffsetY: canvasRect.top - containerRect.top + container.scrollTop,
-
-    };
+    const { navigator } = get();
+    if (navigator.followViewport) {
+      const synced = applyNavigatorViewportSync(navigator, snapshot);
+      if (synced) {
+        set({ viewportSnapshot: snapshot, navigator: synced });
+        return;
+      }
+    }
 
     set({ viewportSnapshot: snapshot });
 
@@ -2554,7 +2961,20 @@ export const useAppStore = create<AppState>((set, get) => {
 
     viewportContainer.scrollTop = target.scrollY;
 
-    get().syncViewportSnapshot();
+    const prev = get().viewportSnapshot;
+    get().syncViewportSnapshot(
+      prev
+        ? {
+            boardContent: {
+              left: prev.canvasOffsetX,
+              top: prev.canvasOffsetY,
+              width: prev.canvasDisplayWidth,
+              height: prev.canvasDisplayHeight,
+            },
+            pixelGridRect: prev.pixelGridRect,
+          }
+        : undefined,
+    );
 
   },
 
@@ -2971,7 +3391,8 @@ export const useAppStore = create<AppState>((set, get) => {
       point,
     );
     if (drawProject !== project) set({ project: drawProject });
-    const drawGrid = getActiveLayerProjectedSurfaceFromProject(drawProject);
+    const drawSession = beginDrawingStroke(drawProject);
+    if (!drawSession) return;
 
     const drawOptions = mergeDrawOptions(
       buildPatternDrawOptions(get(), button),
@@ -2979,7 +3400,7 @@ export const useAppStore = create<AppState>((set, get) => {
     );
 
     applyToolPointerDown(
-      drawGrid,
+      drawSession.surface,
       activeTool,
       color,
       toolSettings,
@@ -2989,14 +3410,27 @@ export const useAppStore = create<AppState>((set, get) => {
       drawOptions,
     );
 
-    get().syncActiveLayer(drawGrid);
+    if (activeTool === "fill") {
+      get().syncActiveLayer(drawSession.surface);
+      set({
+        isDrawing: true,
+        drawStart: point,
+        lastPoint: point,
+        drawingButton: button,
+        drawingColor: color,
+        drawingStrokeSession: null,
+      });
+      return;
+    }
 
     set({
+      drawingStrokeSession: drawSession,
       isDrawing: true,
       drawStart: point,
       lastPoint: point,
       drawingButton: button,
       drawingColor: color,
+      canvasRenderNonce: get().canvasRenderNonce + 1,
     });
 
   },
@@ -3018,6 +3452,7 @@ export const useAppStore = create<AppState>((set, get) => {
       selectionDrag,
       lassoPoints,
       symmetry,
+      drawingStrokeSession,
     } = get();
 
     if (!project) return;
@@ -3138,20 +3573,45 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!isDrawingToolType(activeTool)) return;
 
+    const pointerModifiers = toPointerModifiers(modifiers);
     const layerExpandStart = activeTool === "shape" && drawStart ? drawStart : lastPoint;
+    let workingProject = project;
+    let session = drawingStrokeSession;
     const drawProject = prepareActiveLayerProjectForDrawing(
-      project,
+      workingProject,
       activeTool,
       toolSettings,
       layerExpandStart,
       point,
+      activeTool === "shape" ? pointerModifiers : undefined,
     );
-    if (drawProject !== project) set({ project: drawProject });
-    const drawGrid = getActiveLayerProjectedSurfaceFromProject(drawProject);
+
+    if (session) {
+      if (drawProject !== workingProject) {
+        workingProject = commitDrawingStroke(workingProject, session);
+        const expandedProject = prepareActiveLayerProjectForDrawing(
+          workingProject,
+          activeTool,
+          toolSettings,
+          layerExpandStart,
+          point,
+          activeTool === "shape" ? pointerModifiers : undefined,
+        );
+        session = beginDrawingStroke(expandedProject);
+        set({ project: expandedProject, drawingStrokeSession: session });
+      }
+    } else if (drawProject !== workingProject) {
+      set({ project: drawProject });
+    }
+
+    const drawGrid = session
+      ? session.surface
+      : getActiveLayerProjectedSurfaceFromProject(drawProject);
 
     const drawOptions = mergeDrawOptions(
       buildPatternDrawOptions(get(), drawingButton),
       tileDraw?.tileRegion,
+      activeTool === "shape" ? pointerModifiers : undefined,
     );
 
     applyToolPointerMove(
@@ -3165,6 +3625,11 @@ export const useAppStore = create<AppState>((set, get) => {
       activeSymmetry,
       drawOptions,
     );
+
+    if (session) {
+      set({ lastPoint: point, canvasRenderNonce: get().canvasRenderNonce + 1 });
+      return;
+    }
 
     get().syncActiveLayer(drawGrid);
 
@@ -3190,6 +3655,7 @@ export const useAppStore = create<AppState>((set, get) => {
       lassoPoints,
       historyStack,
       symmetry,
+      drawingStrokeSession,
     } = get();
 
     if (!project) return;
@@ -3276,10 +3742,11 @@ export const useAppStore = create<AppState>((set, get) => {
     const tileDraw = resolveTileDrawParams(tileSession, activeTool, grid);
 
     if (activeTool === "shape") {
+      const pointerModifiers = toPointerModifiers(modifiers);
       let selectionMask =
         selection && !isSelectionEmpty(selection) ? selection.mask : null;
       let activeSymmetry = isSymmetryActive(symmetry) ? symmetry : null;
-      const drawOptions = mergeDrawOptions(undefined, tileDraw?.tileRegion);
+      const drawOptions = mergeDrawOptions(undefined, tileDraw?.tileRegion, pointerModifiers);
 
       if (tileDraw) {
         selectionMask = tileDraw.selectionMask;
@@ -3293,9 +3760,12 @@ export const useAppStore = create<AppState>((set, get) => {
           toolSettings,
           drawStart,
           point,
+          pointerModifiers,
         );
         if (drawProject !== project) set({ project: drawProject });
-        const drawGrid = getActiveLayerProjectedSurfaceFromProject(drawProject);
+        const drawGrid = drawingStrokeSession
+          ? drawingStrokeSession.surface
+          : getActiveLayerProjectedSurfaceFromProject(drawProject);
 
         applyToolPointerUp(
           drawGrid,
@@ -3308,9 +3778,17 @@ export const useAppStore = create<AppState>((set, get) => {
           activeSymmetry,
           drawOptions,
         );
-
-        get().syncActiveLayer(drawGrid);
       }
+    }
+
+    if (drawingStrokeSession) {
+      compositeRenderCache.invalidate();
+      const committedProject = commitDrawingStroke(project, drawingStrokeSession);
+      set({
+        project: committedProject,
+        drawingStrokeSession: null,
+        canvasRenderNonce: get().canvasRenderNonce + 1,
+      });
     }
 
     set({
@@ -3344,38 +3822,110 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   undo: () => {
-    const { project, selection, historyStack } = get();
+    const state = get();
+    const {
+      project,
+      selection,
+      symmetry,
+      tileSession,
+      historyStack,
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    } = state;
     if (!project) return;
+
+    const savedMaps = saveActiveCanvasSession(project, selection, symmetry, tileSession, {
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    });
+
     const result = undoHistory(historyStack, project, selection);
     if (!result) return;
     if (result.structural) {
       clearReferenceLayerPixelCache();
     }
+
+    const focusId = result.focusCanvasId ?? getActiveCanvas(result.project).id;
+    const updatedMaps = reconcileCanvasSessionMaps(
+      result.project,
+      savedMaps,
+      result.selection,
+      focusId,
+    );
+    const session = loadActiveCanvasSession(result.project, updatedMaps);
+
     set({
       project: result.project,
+      ...updatedMaps,
       selection: result.selection,
+      symmetry: session.symmetry,
+      tileSession: session.tileSession,
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
       brushLineAnchor: null,
+      drawingStrokeSession: null,
+      isDrawing: false,
+      drawStart: null,
+      lastPoint: null,
+      drawingButton: null,
+      drawingColor: null,
     });
   },
 
   redo: () => {
-    const { project, selection, historyStack } = get();
+    const state = get();
+    const {
+      project,
+      selection,
+      symmetry,
+      tileSession,
+      historyStack,
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    } = state;
     if (!project) return;
+
+    const savedMaps = saveActiveCanvasSession(project, selection, symmetry, tileSession, {
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    });
+
     const result = redoHistory(historyStack, project, selection);
     if (!result) return;
     if (result.structural) {
       clearReferenceLayerPixelCache();
     }
+
+    const focusId = result.focusCanvasId ?? getActiveCanvas(result.project).id;
+    const updatedMaps = reconcileCanvasSessionMaps(
+      result.project,
+      savedMaps,
+      result.selection,
+      focusId,
+    );
+    const session = loadActiveCanvasSession(result.project, updatedMaps);
+
     set({
       project: result.project,
+      ...updatedMaps,
       selection: result.selection,
+      symmetry: session.symmetry,
+      tileSession: session.tileSession,
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
       brushLineAnchor: null,
+      drawingStrokeSession: null,
+      isDrawing: false,
+      drawStart: null,
+      lastPoint: null,
+      drawingButton: null,
+      drawingColor: null,
     });
   },
 
@@ -3386,8 +3936,9 @@ export const useAppStore = create<AppState>((set, get) => {
   selectAllCanvas: () => {
     const { project } = get();
     if (!project) return;
+    const canvas = getActiveCanvas(project);
     set({
-      selection: selectAll(project.canvas.width, project.canvas.height),
+      selection: selectAll(canvas.width, canvas.height),
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
@@ -3481,10 +4032,11 @@ export const useAppStore = create<AppState>((set, get) => {
         commitFloatingSelectionInProject(project, selection);
       set({ project: committedProject, selection: committedSelection });
     }
+    const canvas = getActiveCanvas(project);
     const pasted = await pasteFromClipboard(
       clipboardService,
-      project.canvas.width,
-      project.canvas.height,
+      canvas.width,
+      canvas.height,
       internalClipboard,
     );
     if (!pasted) return;
@@ -3731,7 +4283,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!project) return;
 
-    const found = project.canvas.layers.find((l) => l.id === layerId);
+    const found = getActiveCanvas(project).layers.find((l) => l.id === layerId);
     const layer = found && isReferenceLayer(found) ? found : null;
 
     if (!layer?.imageData) return;
@@ -3850,6 +4402,173 @@ export const useAppStore = create<AppState>((set, get) => {
       const updated = importAssetGridToNewDrawingLayer(project, grid, name);
       set({ project: updated });
       toast.info("已导入到新图层");
+    } catch {
+      toast.error("导入到图层失败");
+    }
+  },
+
+  importDroppedImageAtCanvasPoint: async (source, canvasId, canvasPoint, asReference = false) => {
+    const state = get();
+    let { project } = state;
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    try {
+      const imageData =
+        "file" in source
+          ? await imageProcessor.loadImageFromFile(source.file)
+          : await imageProcessor.loadImageFromPath(source.path);
+      const layerName = `导入图片 ${new Date().toLocaleString()}`;
+
+      let sessionPatch: Partial<{
+        project: Project;
+        selectionByCanvas: Record<string, SelectionState | null>;
+        symmetryByCanvas: Record<string, SymmetryConfig>;
+        tileSessionByCanvas: Record<string, TileSessionState>;
+        selection: SelectionState | null;
+        symmetry: SymmetryConfig;
+        tileSession: TileSessionState;
+        selectionDrag: null;
+        lassoPoints: [];
+        selectionPreviewRect: null;
+        brushLineAnchor: null;
+      }> = {};
+
+      if (project.board.activeCanvasId !== canvasId) {
+        const {
+          selection,
+          symmetry,
+          tileSession,
+          selectionByCanvas,
+          symmetryByCanvas,
+          tileSessionByCanvas,
+        } = state;
+        const savedMaps = saveActiveCanvasSession(project, selection, symmetry, tileSession, {
+          selectionByCanvas,
+          symmetryByCanvas,
+          tileSessionByCanvas,
+        });
+        project = withActiveCanvasId(project, canvasId);
+        const session = loadActiveCanvasSession(project, savedMaps);
+        sessionPatch = {
+          project,
+          selectionByCanvas: savedMaps.selectionByCanvas,
+          symmetryByCanvas: savedMaps.symmetryByCanvas,
+          tileSessionByCanvas: savedMaps.tileSessionByCanvas,
+          selection: session.selection,
+          symmetry: session.symmetry,
+          tileSession: session.tileSession,
+          selectionDrag: null,
+          lassoPoints: [],
+          selectionPreviewRect: null,
+          brushLineAnchor: null,
+        };
+      }
+
+      if (asReference) {
+        const result = dropImageAsReferenceLayerOntoCanvas(
+          project,
+          imageData,
+          canvasId,
+          canvasPoint,
+          layerName,
+        );
+        invalidateReferenceLayerPixelCache(result.layerId);
+        set({
+          ...sessionPatch,
+          project: setActiveReferenceLayer(result.project, result.layerId),
+          cropEditorLayerId: result.openCropEditor ? result.layerId : null,
+        });
+        toast.info("已导入到新参考图层");
+        return;
+      }
+
+      const grid = imageDataToPixelGrid(imageData);
+      const updated = dropImageAsDrawingLayerOntoCanvas(
+        project,
+        grid,
+        canvasId,
+        canvasPoint,
+        layerName,
+      );
+      set({
+        ...sessionPatch,
+        project: updated,
+      });
+      toast.info("已导入到新图层");
+    } catch {
+      toast.error("导入到图层失败");
+    }
+  },
+
+  importDroppedImageAtBoardPoint: async (source, boardPoint) => {
+    const {
+      project,
+      selection,
+      symmetry,
+      tileSession,
+      historyStack,
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    try {
+      const imageData =
+        "file" in source
+          ? await imageProcessor.loadImageFromFile(source.file)
+          : await imageProcessor.loadImageFromPath(source.path);
+      const layerName = `导入图片 ${new Date().toLocaleString()}`;
+
+      const savedMaps = saveActiveCanvasSession(project, selection, symmetry, tileSession, {
+        selectionByCanvas,
+        symmetryByCanvas,
+        tileSessionByCanvas,
+      });
+      pushBoardStructureHistory(historyStack, project, selection);
+
+      const grid = imageDataToPixelGrid(imageData);
+      const nextProject = createCanvasWithDroppedDrawingLayer(
+        project,
+        grid,
+        {
+          x: Math.floor(boardPoint.x),
+          y: Math.floor(boardPoint.y),
+        },
+        layerName,
+      );
+      const newCanvas = getActiveCanvas(nextProject);
+      const origin = createCenteredOrigin(newCanvas.width, newCanvas.height);
+      const newSymmetry = {
+        ...createDefaultSymmetryConfig(),
+        originX: origin.originX,
+        originY: origin.originY,
+      };
+      const nextMaps = {
+        selectionByCanvas: { ...savedMaps.selectionByCanvas, [newCanvas.id]: null },
+        symmetryByCanvas: { ...savedMaps.symmetryByCanvas, [newCanvas.id]: newSymmetry },
+        tileSessionByCanvas: {
+          ...savedMaps.tileSessionByCanvas,
+          [newCanvas.id]: createIdleTileSession(),
+        },
+      };
+
+      set({
+        project: nextProject,
+        ...nextMaps,
+        selection: null,
+        symmetry: newSymmetry,
+        tileSession: createIdleTileSession(),
+        selectionDrag: null,
+        lassoPoints: [],
+        selectionPreviewRect: null,
+        brushLineAnchor: null,
+      });
+      toast.info("已创建画板并导入");
     } catch {
       toast.error("导入到图层失败");
     }
@@ -4053,7 +4772,7 @@ export const useAppStore = create<AppState>((set, get) => {
     const updated = setReferenceCropInProject(project, layerId, crop);
 
     if (updated) {
-      const layer = updated.canvas.layers.find((l) => l.id === layerId);
+      const layer = getActiveCanvas(updated).layers.find((l) => l.id === layerId);
       if (layer && isReferenceLayer(layer) && layer.crop) {
         removeStaleReferenceLayerCropCaches(layerId, referenceLayerCropKey(layer.crop));
       }
@@ -4157,17 +4876,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
   closeExportImageModal: () => set({ exportImageModalOpen: false }),
 
-  pickExportDirectory: async () => {
-    const selected = await open({
-      directory: true,
-      multiple: false,
-    });
-    if (!selected || typeof selected !== "string") return null;
-    return selected;
-  },
-
   executeExportImage: async (input) => {
-    const { project, selection, softwareDataPath } = get();
+    const { project, selection, softwareDataPath, imageExportPreferences } = get();
     if (!project) return null;
     const activeSoftwareDataPath = softwareDataPath ?? softwareDataPathStore.getPath();
     if (!activeSoftwareDataPath) {
@@ -4175,12 +4885,30 @@ export const useAppStore = create<AppState>((set, get) => {
       return null;
     }
 
+    const defaultDirectory =
+      imageExportPreferences.lastExportDirectory ?? activeSoftwareDataPath;
+    const defaultPath = buildDefaultExportSavePath(
+      defaultDirectory,
+      project.name,
+      input.format,
+    );
+    const extension = getImageExportExtension(input.format);
+    const filePath = await save({
+      defaultPath,
+      filters: [
+        {
+          name: "图片",
+          extensions: extension === "jpg" ? ["jpg", "jpeg"] : [extension],
+        },
+      ],
+    });
+    if (!filePath) return "cancelled";
+
     try {
       const result = await exportImage({
         project,
         selection,
-        directory: input.directory,
-        fileName: input.fileName,
+        filePath,
         format: input.format,
         scope: input.scope,
         scalePreset: input.scalePreset,
@@ -4317,31 +5045,31 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
   openPixelRestorePage: () => {
-    closeOtherToolPages("pixelRestore");
+    closeOtherPluginPages("pixelRestore");
     usePixelRestoreStore.getState().openPage();
   },
 
   openColorEditPage: () => {
-    closeOtherToolPages("colorEdit");
+    closeOtherPluginPages("colorEdit");
     useColorEditStore.getState().openPage();
   },
 
   openColorVariationPage: () => {
-    closeOtherToolPages("colorVariation");
+    closeOtherPluginPages("colorVariation");
     useColorVariationAnalysisStore.getState().openPage();
   },
 
   openWorldPage: () => {
-    closeOtherToolPages("world");
+    closeOtherPluginPages("world");
     useWorldStore.getState().openPage();
   },
 
   openComfyUiPage: () => {
-    closeOtherToolPages("comfyui");
+    closeOtherPluginPages("comfyui");
     useComfyUiStore.getState().openPage();
   },
 
-  sendAssetToToolPage: async (assetId, toolPageId) => {
+  sendAssetToPlugin: async (assetId, pluginId) => {
     const { softwareDataPath, assetLibrary } = get();
     if (!softwareDataPath || !assetLibrary) {
       toast.error("无法访问资产库");
@@ -4353,7 +5081,7 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
     if (!isImageAsset(asset)) {
-      toast.info("笔记资产无法发送到工具");
+      toast.info("笔记资产无法发送到插件");
       return;
     }
     const imageData = await loadAssetImageAsImageData(
@@ -4365,8 +5093,8 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
-    if (toolPageId === "pixelRestore") {
-      closeOtherToolPages("pixelRestore");
+    if (pluginId === "pixelRestore") {
+      closeOtherPluginPages("pixelRestore");
       const store = usePixelRestoreStore.getState();
       store.reset();
       store.openPage();
@@ -4374,20 +5102,20 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
-    if (toolPageId === "colorVariation") {
+    if (pluginId === "colorVariation") {
       const grid = PixelGrid.fromRgba(imageData.width, imageData.height, imageData.data);
       const entries = buildColorEntriesInScanOrder(grid.toUint32Array());
       if (entries.length === 0) {
         toast.info("图像中没有可分析的颜色");
         return;
       }
-      closeOtherToolPages("colorVariation");
+      closeOtherPluginPages("colorVariation");
       useColorVariationAnalysisStore.getState().openPageWithColorEntries(entries);
       toast.info(`已发送 ${entries.length} 个颜色到颜色变化分析`);
       return;
     }
 
-    closeOtherToolPages("colorEdit");
+    closeOtherPluginPages("colorEdit");
     const store = useColorEditStore.getState();
     store.reset();
     store.openPage();
@@ -4417,7 +5145,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
   sendPixelRestoreResultToColorEdit: (imageData) => {
     usePixelRestoreStore.getState().closePage();
-    closeOtherToolPages("colorEdit");
+    closeOtherPluginPages("colorEdit");
     const colorEdit = useColorEditStore.getState();
     colorEdit.openPage();
     colorEdit.importFromImageData(cloneImageData(imageData));
@@ -4441,7 +5169,7 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
-    closeOtherToolPages("colorVariation");
+    closeOtherPluginPages("colorVariation");
     useColorVariationAnalysisStore.getState().openPageWithColorEntries(entries);
     if (selection.floating) {
       get().commitSelection();
@@ -4536,7 +5264,7 @@ export const useAppStore = create<AppState>((set, get) => {
     const { project, selection, historyStack } = get();
 
     if (!project) return;
-    const removedLayer = project.canvas.layers.find((layer) => layer.id === layerId);
+    const removedLayer = getActiveCanvas(project).layers.find((layer) => layer.id === layerId);
 
     const updated = removeLayerFromProject(project, layerId);
     if (!updated) return;
@@ -4551,7 +5279,36 @@ export const useAppStore = create<AppState>((set, get) => {
 
   },
 
+  copyDrawingLayer: (layerId) => {
+    const { project } = get();
+    if (!project) return;
 
+    const targetId = layerId ?? getActiveCanvas(project).activeLayerId;
+    const clipboard = copyDrawingLayerInProject(project, targetId);
+    if (!clipboard) return;
+
+    set({ drawingLayerClipboard: clipboard });
+  },
+
+  pasteDrawingLayer: () => {
+    const { project, selection, historyStack, drawingLayerClipboard } = get();
+    if (!project || !drawingLayerClipboard) return;
+
+    pushStructureHistory(historyStack, project, selection);
+    set({ project: pasteDrawingLayerInProject(project, drawingLayerClipboard) });
+  },
+
+  mergeDrawingLayerDown: (layerId) => {
+    const { project, selection, historyStack } = get();
+    if (!project) return;
+
+    const targetId = layerId ?? getActiveCanvas(project).activeLayerId;
+    const updated = mergeDrawingLayerDownInProject(project, targetId);
+    if (!updated) return;
+
+    pushStructureHistory(historyStack, project, selection);
+    set({ project: updated });
+  },
 
   reorderLayer: (fromIndex, toIndex) => {
 
@@ -4561,6 +5318,243 @@ export const useAppStore = create<AppState>((set, get) => {
 
     set({ project: reorderLayerInProject(project, fromIndex, toIndex) });
 
+  },
+
+  setActiveCanvas: (canvasId) => {
+    const state = get();
+    const {
+      project,
+      selection,
+      symmetry,
+      tileSession,
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    } = state;
+    if (!project || project.board.activeCanvasId === canvasId) return;
+    if (!project.board.canvases.some((c) => c.id === canvasId)) return;
+
+    const savedMaps = saveActiveCanvasSession(project, selection, symmetry, tileSession, {
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    });
+    const nextProject = withActiveCanvasId(project, canvasId);
+    const session = loadActiveCanvasSession(nextProject, savedMaps);
+
+    set({
+      project: nextProject,
+      selectionByCanvas: savedMaps.selectionByCanvas,
+      symmetryByCanvas: savedMaps.symmetryByCanvas,
+      tileSessionByCanvas: savedMaps.tileSessionByCanvas,
+      selection: session.selection,
+      symmetry: session.symmetry,
+      tileSession: session.tileSession,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+      brushLineAnchor: null,
+    });
+  },
+
+  addCanvas: (name) => {
+    const {
+      project,
+      selection,
+      symmetry,
+      tileSession,
+      historyStack,
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    } = get();
+    if (!project) return;
+
+    const savedMaps = saveActiveCanvasSession(project, selection, symmetry, tileSession, {
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    });
+    pushBoardStructureHistory(historyStack, project, selection);
+
+    const nextBoard = addPixelCanvasToBoard(project.board, name);
+    const nextProject = withBoard(project, nextBoard);
+    const newCanvas = getActiveCanvas(nextProject);
+    const origin = createCenteredOrigin(newCanvas.width, newCanvas.height);
+    const newSymmetry = {
+      ...createDefaultSymmetryConfig(),
+      originX: origin.originX,
+      originY: origin.originY,
+    };
+    const nextMaps = {
+      selectionByCanvas: { ...savedMaps.selectionByCanvas, [newCanvas.id]: null },
+      symmetryByCanvas: { ...savedMaps.symmetryByCanvas, [newCanvas.id]: newSymmetry },
+      tileSessionByCanvas: {
+        ...savedMaps.tileSessionByCanvas,
+        [newCanvas.id]: createIdleTileSession(),
+      },
+    };
+
+    set({
+      project: nextProject,
+      ...nextMaps,
+      selection: null,
+      symmetry: newSymmetry,
+      tileSession: createIdleTileSession(),
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+      brushLineAnchor: null,
+    });
+  },
+
+  removeCanvas: (canvasId) => {
+    const {
+      project,
+      selection,
+      symmetry,
+      tileSession,
+      historyStack,
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    } = get();
+    if (!project) return;
+
+    const savedMaps = saveActiveCanvasSession(project, selection, symmetry, tileSession, {
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    });
+    const nextBoard = removePixelCanvasFromBoard(project.board, canvasId);
+    if (!nextBoard) return;
+
+    pushBoardStructureHistory(historyStack, project, selection);
+    const nextProject = withBoard(project, nextBoard);
+    const { [canvasId]: _s, ...restSelection } = savedMaps.selectionByCanvas;
+    const { [canvasId]: _y, ...restSymmetry } = savedMaps.symmetryByCanvas;
+    const { [canvasId]: _t, ...restTile } = savedMaps.tileSessionByCanvas;
+    const nextMaps = {
+      selectionByCanvas: restSelection,
+      symmetryByCanvas: restSymmetry,
+      tileSessionByCanvas: restTile,
+    };
+    const session = loadActiveCanvasSession(nextProject, nextMaps);
+
+    set({
+      project: nextProject,
+      ...nextMaps,
+      selection: session.selection,
+      symmetry: session.symmetry,
+      tileSession: session.tileSession,
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+      brushLineAnchor: null,
+    });
+  },
+
+  moveCanvasOnBoard: (canvasId, boardPosition) => {
+    const { project, selection, historyStack } = get();
+    if (!project) return;
+
+    pushBoardStructureHistory(historyStack, project, selection);
+    set({
+      project: withBoard(
+        project,
+        movePixelCanvasOnBoard(project.board, canvasId, boardPosition),
+      ),
+    });
+  },
+
+  beginCanvasBoardMove: () => {
+    const { project, selection, historyStack } = get();
+    if (!project) return;
+
+    pushBoardStructureHistory(historyStack, project, selection);
+  },
+
+  previewCanvasOnBoard: (canvasId, boardPosition) => {
+    const { project } = get();
+    if (!project) return;
+
+    set({
+      project: withBoard(
+        project,
+        movePixelCanvasOnBoard(project.board, canvasId, boardPosition),
+      ),
+    });
+  },
+
+  renameCanvas: (canvasId, name) => {
+    const { project, selection, historyStack } = get();
+    if (!project) return;
+
+    pushBoardStructureHistory(historyStack, project, selection);
+    set({
+      project: withBoard(project, renamePixelCanvas(project.board, canvasId, name)),
+    });
+  },
+
+  duplicateCanvas: (canvasId) => {
+    const {
+      project,
+      selection,
+      symmetry,
+      tileSession,
+      historyStack,
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    } = get();
+    if (!project) return;
+
+    const savedMaps = saveActiveCanvasSession(project, selection, symmetry, tileSession, {
+      selectionByCanvas,
+      symmetryByCanvas,
+      tileSessionByCanvas,
+    });
+    pushBoardStructureHistory(historyStack, project, selection);
+
+    const nextBoard = duplicatePixelCanvasOnBoard(project.board, canvasId);
+    const nextProject = withBoard(project, nextBoard);
+    const newCanvas = getActiveCanvas(nextProject);
+    const origin = createCenteredOrigin(newCanvas.width, newCanvas.height);
+    const newSymmetry = {
+      ...createDefaultSymmetryConfig(),
+      originX: origin.originX,
+      originY: origin.originY,
+    };
+    const nextMaps = {
+      selectionByCanvas: { ...savedMaps.selectionByCanvas, [newCanvas.id]: null },
+      symmetryByCanvas: { ...savedMaps.symmetryByCanvas, [newCanvas.id]: newSymmetry },
+      tileSessionByCanvas: {
+        ...savedMaps.tileSessionByCanvas,
+        [newCanvas.id]: createIdleTileSession(),
+      },
+    };
+
+    set({
+      project: nextProject,
+      ...nextMaps,
+      selection: null,
+      symmetry: newSymmetry,
+      tileSession: createIdleTileSession(),
+      selectionDrag: null,
+      lassoPoints: [],
+      selectionPreviewRect: null,
+      brushLineAnchor: null,
+    });
+  },
+
+  autoLayoutBoardCanvases: () => {
+    const { project, selection, historyStack } = get();
+    if (!project || project.board.canvases.length <= 1) return;
+
+    pushBoardStructureHistory(historyStack, project, selection);
+    set({
+      project: autoLayoutBoardCanvasesUseCase(project),
+    });
   },
 
 
@@ -4573,6 +5567,41 @@ export const useAppStore = create<AppState>((set, get) => {
 
     return compositeProjectLayers(project);
 
+  },
+
+  getCompositeGridForRender: () => {
+    const { project, drawingStrokeSession } = get();
+    if (!project) return null;
+
+    const canvas = getActiveCanvas(project);
+    const size = getCanvasSize(project, canvas.id);
+    const activeLayer = getActiveLayer(project);
+    const activeIndex = canvas.layers.findIndex((layer) => layer.id === activeLayer.id);
+
+    if (
+      drawingStrokeSession &&
+      activeIndex >= 0 &&
+      isDrawingLayer(activeLayer)
+    ) {
+      const base = compositeRenderCache.getBelowActiveLayers(
+        canvas.layers,
+        size,
+        activeIndex,
+      );
+      return compositeActiveLayerOverBase(
+        base,
+        drawingStrokeSession.surface.underlyingGrid,
+        drawingStrokeSession.surface.layerPosition,
+        activeLayer.opacity,
+      );
+    }
+
+    compositeRenderCache.invalidate();
+    return compositeProjectLayers(project);
+  },
+
+  requestCanvasRender: () => {
+    set({ canvasRenderNonce: get().canvasRenderNonce + 1 });
   },
 
 
@@ -4599,6 +5628,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!project) return;
 
+    compositeRenderCache.invalidate();
     const updated = syncActiveLayerPixels(project, resolveLayerLocalGrid(grid));
 
     set({ project: updated });
@@ -4671,13 +5701,19 @@ export const useAppStore = create<AppState>((set, get) => {
     setActiveSoftwareDataPath(selected);
     markSoftwareDataPathAccessGranted(selected);
 
+    setUserDataHydrating(true);
+    const llmSettingsStore = await loadLlmSettings(llmSettingsRepository, selected);
+
     set({
 
       softwareDataPath: selected,
 
       projectManagerError: null,
 
+      llmSettingsStore,
+
     });
+    setUserDataHydrating(false);
 
     await get().refreshProjectList();
 
@@ -4764,13 +5800,16 @@ export const useAppStore = create<AppState>((set, get) => {
 
       get().historyStack.clear();
 
+      const sessionMaps = initializeCanvasSessionMaps(project);
+      const session = loadActiveCanvasSession(project, sessionMaps);
+
       set({
 
         project,
 
         manualScaleOverride: null,
 
-        detectedScale: project.canvas.scaleFactor,
+        detectedScale: getActiveCanvas(project).scaleFactor,
 
         projectManagerOpen: false,
 
@@ -4778,7 +5817,13 @@ export const useAppStore = create<AppState>((set, get) => {
 
         projectManagerError: null,
 
-        selection: null,
+        ...sessionMaps,
+
+        selection: session.selection,
+
+        symmetry: session.symmetry,
+
+        tileSession: session.tileSession,
 
         selectionDrag: null,
 

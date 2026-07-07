@@ -1,8 +1,10 @@
 import type { ReferenceLayer } from "@/domain/layer/Layer";
 import {
-  findTopReferenceLayerAtCanvasPoint,
+  findTopReferenceLayerAtBoardPoint,
   toReferenceLayerLocalPoint,
 } from "@/domain/layer/ReferenceLayerPalette";
+import { canvasPointToBoardPoint } from "@/domain/layer/ReferenceLayerOperations";
+import type { BoardPosition } from "@/domain/pixelCanvas/PixelCanvas";
 import type { Point } from "@/domain/tool/ITool";
 import {
   computeSecondaryGridCellOrigin,
@@ -31,13 +33,15 @@ export type MousePositionOverlayTarget =
 
 export function resolveMousePositionOverlayTarget(
   canvasPoint: Point,
+  canvasBoardPosition: BoardPosition,
   referenceLayers: ReferenceLayer[],
   projectSecondarySize: number,
   composite: { width: number; height: number } | null,
 ): MousePositionOverlayTarget | null {
-  const referenceLayer = findTopReferenceLayerAtCanvasPoint(referenceLayers, canvasPoint);
+  const boardPoint = canvasPointToBoardPoint(canvasPoint, canvasBoardPosition);
+  const referenceLayer = findTopReferenceLayerAtBoardPoint(referenceLayers, boardPoint);
   if (referenceLayer) {
-    const localPoint = toReferenceLayerLocalPoint(referenceLayer, canvasPoint);
+    const localPoint = toReferenceLayerLocalPoint(referenceLayer, boardPoint);
     if (!localPoint) return null;
 
     const secondarySize = referenceLayer.grid.secondary;
@@ -53,8 +57,8 @@ export function resolveMousePositionOverlayTarget(
       localY: localPoint.y,
       secondarySize,
       canvasCellOrigin: {
-        x: referenceLayer.position.x + cellOrigin.x,
-        y: referenceLayer.position.y + cellOrigin.y,
+        x: referenceLayer.position.x + cellOrigin.x - canvasBoardPosition.x,
+        y: referenceLayer.position.y + cellOrigin.y - canvasBoardPosition.y,
       },
     };
   }

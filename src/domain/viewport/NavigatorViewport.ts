@@ -7,6 +7,8 @@ export interface ViewportSnapshot {
   canvasDisplayHeight: number;
   canvasOffsetX: number;
   canvasOffsetY: number;
+  /** 画板像素合成区域，坐标相对于内容区左上角 */
+  pixelGridRect?: Rect;
 }
 
 export interface NavigatorLayout {
@@ -52,6 +54,31 @@ const MAX_PREVIEW_SCALE = 4;
 
 export function clampPreviewScale(scale: number): number {
   return Math.max(MIN_PREVIEW_SCALE, Math.min(MAX_PREVIEW_SCALE, scale));
+}
+
+export function resolvePixelGridDisplayRect(snapshot: ViewportSnapshot): Rect {
+  return (
+    snapshot.pixelGridRect ?? {
+      x: 0,
+      y: 0,
+      width: snapshot.canvasDisplayWidth,
+      height: snapshot.canvasDisplayHeight,
+    }
+  );
+}
+
+export function mapDisplayRectToPreview(
+  rect: Rect,
+  snapshot: ViewportSnapshot,
+  layout: NavigatorLayout,
+): Rect {
+  const transform = computePreviewTransform(snapshot, layout);
+  return {
+    x: transform.offsetX + rect.x * transform.scale,
+    y: transform.offsetY + rect.y * transform.scale,
+    width: rect.width * transform.scale,
+    height: rect.height * transform.scale,
+  };
 }
 
 export function computePreviewTransform(
@@ -248,5 +275,39 @@ export function mapVisibleRectToPreview(
     y: topLeft.y,
     width: bottomRight.x - topLeft.x,
     height: bottomRight.y - topLeft.y,
+  };
+}
+
+export interface NavigatorViewportSync {
+  previewScale: number;
+  previewPan: PreviewPan;
+}
+
+export function computePreviewSyncForViewport(
+  snapshot: ViewportSnapshot,
+  layout: Pick<NavigatorLayout, "previewWidth" | "previewHeight">,
+): NavigatorViewportSync | null {
+  const visibleRect = computeVisibleRect(snapshot);
+  if (visibleRect.width <= 0 || visibleRect.height <= 0) {
+    return null;
+  }
+
+  const fitScale = computeFitPreviewScale(snapshot, layout);
+  const scaleX = layout.previewWidth / (visibleRect.width * fitScale);
+  const scaleY = layout.previewHeight / (visibleRect.height * fitScale);
+  const previewScale = clampPreviewScale(Math.min(scaleX, scaleY));
+
+  const scale = fitScale * previewScale;
+  const drawnWidth = snapshot.canvasDisplayWidth * scale;
+  const drawnHeight = snapshot.canvasDisplayHeight * scale;
+  const centerX = visibleRect.x + visibleRect.width / 2;
+  const centerY = visibleRect.y + visibleRect.height / 2;
+
+  return {
+    previewScale,
+    previewPan: {
+      panX: drawnWidth / 2 - centerX * scale,
+      panY: drawnHeight / 2 - centerY * scale,
+    },
   };
 }

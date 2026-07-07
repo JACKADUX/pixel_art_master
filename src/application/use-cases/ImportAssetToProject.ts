@@ -1,7 +1,15 @@
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
-import { createDrawingLayer } from "@/domain/layer/Layer";
+import { createDrawingLayer, type LayerPosition } from "@/domain/layer/Layer";
 import { extractUniqueColorsFromPixels } from "@/domain/layer/ReferenceLayerPalette";
-import { touchProject, type Project } from "@/domain/project/Project";import {
+import {
+  getActiveCanvas,
+  resolveProjectCanvas,
+  touchProject,
+  withActiveCanvasId,
+  withActiveLayerId,
+  type Project,
+} from "@/domain/project/Project";
+import {
   importImageDataToReferenceLayer,
   type ImportToReferenceLayerResult,
 } from "./ImportToReferenceLayer";
@@ -11,16 +19,48 @@ export function importAssetGridToNewDrawingLayer(
   assetGrid: PixelGrid,
   layerName?: string,
 ): Project {
-  const drawingLayer = createDrawingLayer(assetGrid, layerName);
-  const layers = [...project.canvas.layers, drawingLayer];
-  return touchProject({
-    ...project,
-    canvas: {
-      ...project.canvas,
-      layers,
-      activeLayerId: drawingLayer.id,
-    },
-  });
+  return importAssetGridToNewDrawingLayerAtPosition(
+    project,
+    assetGrid,
+    getActiveCanvas(project).id,
+    { x: 0, y: 0 },
+    layerName,
+  );
+}
+
+export function importAssetGridToNewDrawingLayerAtPosition(
+  project: Project,
+  assetGrid: PixelGrid,
+  canvasId: string,
+  position: LayerPosition,
+  layerName?: string,
+): Project {
+  const canvas = resolveProjectCanvas(project, canvasId);
+  if (!canvas) {
+    throw new Error(`Canvas not found: ${canvasId}`);
+  }
+
+  const drawingLayer = createDrawingLayer(assetGrid, layerName, position);
+  const layers = [...canvas.layers, drawingLayer];
+
+  return withActiveLayerId(
+    withActiveCanvasId(
+      touchProject({
+        ...project,
+        board: {
+          ...project.board,
+          canvases: project.board.canvases.map((entry) =>
+            entry.id === canvasId
+              ? { ...entry, layers, activeLayerId: drawingLayer.id }
+              : entry,
+          ),
+        },
+      }),
+      canvasId,
+    ),
+    drawingLayer.id,
+    canvasId,
+  );
 }
 
 export function importAssetImageDataToNewReferenceLayer(

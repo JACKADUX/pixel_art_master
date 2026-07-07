@@ -13,6 +13,16 @@ export interface Point {
   y: number;
 }
 
+export interface PointerModifiers {
+  shiftKey: boolean;
+  altKey: boolean;
+}
+
+export const DEFAULT_POINTER_MODIFIERS: PointerModifiers = {
+  shiftKey: false,
+  altKey: false,
+};
+
 export type PixelSurface =
   | PixelGrid
   | LayerProjectedSurface
@@ -32,6 +42,7 @@ export interface ToolContext {
   grid: PixelSurface;
   color: PixelColor;
   settings: ToolSettings;
+  modifiers: PointerModifiers;
   selectionMask?: SelectionMask | null;
   patternStamp?: PatternStampContext | null;
 }

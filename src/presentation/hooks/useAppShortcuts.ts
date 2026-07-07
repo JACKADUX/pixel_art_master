@@ -135,6 +135,13 @@ export function useAppShortcuts() {
       }
 
       if (ctrl && (event.key === "c" || event.key === "C")) {
+        const layerPanelActive =
+          store.activeRegion === "layers" && store.layersPanelTab === "drawing";
+        if (layerPanelActive) {
+          event.preventDefault();
+          store.copyDrawingLayer();
+          return;
+        }
         if (!hasSelection) return;
         event.preventDefault();
         void store.copySelection();
@@ -166,6 +173,14 @@ export function useAppShortcuts() {
         ) {
           event.preventDefault();
           void currentStore.importAssetFromClipboardAction();
+          return;
+        }
+        if (
+          currentStore.activeRegion === "layers" &&
+          currentStore.layersPanelTab === "drawing"
+        ) {
+          event.preventDefault();
+          currentStore.pasteDrawingLayer();
           return;
         }
         event.preventDefault();
@@ -211,6 +226,13 @@ export function useAppShortcuts() {
           event.preventDefault();
           store.setActiveTool("select");
           store.setToolSettings({ selectionMode });
+          return;
+        }
+
+        if (event.code === "KeyF") {
+          if (pixelRestore.open || !store.project || store.cropEditorLayerId) return;
+          event.preventDefault();
+          store.requestFitActiveCanvasInViewport();
           return;
         }
 

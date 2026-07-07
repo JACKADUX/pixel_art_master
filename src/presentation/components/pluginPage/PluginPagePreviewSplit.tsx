@@ -1,12 +1,12 @@
 import { useRef, type ReactNode } from "react";
 import { usePreviewSplitDirection } from "../../hooks/usePreviewSplitDirection";
 
-interface ToolPagePreviewSplitProps {
+interface PluginPagePreviewSplitProps {
   source: ReactNode;
   result: ReactNode;
 }
 
-export function ToolPagePreviewSplit({ source, result }: ToolPagePreviewSplitProps) {
+export function PluginPagePreviewSplit({ source, result }: PluginPagePreviewSplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const direction = usePreviewSplitDirection(containerRef);
 

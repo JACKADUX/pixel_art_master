@@ -28,7 +28,7 @@ describe("computeReferenceLayerChromeZIndex", () => {
     expect(activeZ).toBeGreaterThan(inactiveZ);
   });
 
-  it("始终低于悬浮工具窗与弹窗", () => {
+  it("始终低于悬浮插件窗与弹窗", () => {
     for (let count = 1; count <= 20; count += 1) {
       for (let stackIndex = 0; stackIndex < count; stackIndex += 1) {
         expect(

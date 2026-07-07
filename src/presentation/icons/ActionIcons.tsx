@@ -14,6 +14,7 @@ export {
   EyeIcon,
   FolderOpenIcon,
   GlobeAltIcon,
+  InformationCircleIcon,
   MapPinIcon,
   PauseIcon,
   PhotoIcon,

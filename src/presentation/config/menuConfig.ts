@@ -7,6 +7,7 @@ import {
   ArrowsPointingOutIcon,
   CommandLineIcon,
   DocumentDuplicateIcon,
+  InformationCircleIcon,
   ChartBarSquareIcon,
   Cog6ToothIcon,
   DocumentPlusIcon,
@@ -37,6 +38,7 @@ export const SHORTCUT_LABELS = {
   flipVertical: "Shift+V",
   toggleGrid: "Ctrl+' / Ctrl+2",
   toggleOklchLightness: "Ctrl+1",
+  fitActiveCanvas: "F",
 } as const;
 
 export type ShortcutAction = keyof typeof SHORTCUT_LABELS;
@@ -55,6 +57,7 @@ export interface MenuActions {
   alwaysOnTop: boolean;
   toggleCanvasDisplayMode: () => void;
   canvasDisplayMode: "normal" | "oklchLightness";
+  fitActiveCanvasInViewport: () => void;
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
@@ -70,12 +73,14 @@ export interface MenuActions {
   openColorVariationPage: () => void;
   openWorldPage: () => void;
   openComfyUiPage: () => void;
-  /** 已保存的 ComfyUI 应用列表（用于工具菜单二级子菜单） */
+  /** 已保存的 ComfyUI 应用列表（用于插件菜单二级子菜单） */
   comfyApps: { id: string; name: string }[];
   /** 在画布上以悬浮窗口打开指定 ComfyUI 应用 */
   openComfyAppWindow: (appId: string) => void;
   openAssetLibrary: () => void;
   openSettingsModal: () => void;
+  openAboutModal: () => void;
+  openShortcutReferenceModal: () => void;
 }
 
 export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
@@ -211,8 +216,47 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
       ],
     },
     {
-      id: "tools",
-      label: "工具",
+      id: "image",
+      label: "图像",
+      items: [
+        {
+          type: "action",
+          label: "画布尺寸",
+          icon: ArrowsPointingOutIcon,
+          onClick: actions.openCanvasSizeModal,
+        },
+      ],
+    },
+    {
+      id: "view",
+      label: "视图",
+      items: [
+        {
+          type: "toggle",
+          label: "窗口置顶",
+          icon: MapPinIcon,
+          checked: actions.alwaysOnTop,
+          onClick: actions.toggleAlwaysOnTop,
+        },
+        {
+          type: "toggle",
+          label: "OKLCH 明度",
+          shortcut: SHORTCUT_LABELS.toggleOklchLightness,
+          checked: actions.canvasDisplayMode === "oklchLightness",
+          onClick: actions.toggleCanvasDisplayMode,
+        },
+        {
+          type: "action",
+          label: "适配活动画板",
+          shortcut: SHORTCUT_LABELS.fitActiveCanvas,
+          onClick: actions.fitActiveCanvasInViewport,
+          disabled: !actions.hasOpenProject(),
+        },
+      ],
+    },
+    {
+      id: "plugins",
+      label: "插件",
       items: [
         {
           type: "action",
@@ -267,34 +311,20 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
       ],
     },
     {
-      id: "image",
-      label: "图像",
+      id: "help",
+      label: "帮助",
       items: [
         {
           type: "action",
-          label: "画布尺寸",
-          icon: ArrowsPointingOutIcon,
-          onClick: actions.openCanvasSizeModal,
-        },
-      ],
-    },
-    {
-      id: "view",
-      label: "视图",
-      items: [
-        {
-          type: "toggle",
-          label: "窗口置顶",
-          icon: MapPinIcon,
-          checked: actions.alwaysOnTop,
-          onClick: actions.toggleAlwaysOnTop,
+          label: "关于",
+          icon: InformationCircleIcon,
+          onClick: actions.openAboutModal,
         },
         {
-          type: "toggle",
-          label: "OKLCH 明度",
-          shortcut: SHORTCUT_LABELS.toggleOklchLightness,
-          checked: actions.canvasDisplayMode === "oklchLightness",
-          onClick: actions.toggleCanvasDisplayMode,
+          type: "action",
+          label: "快捷键参考",
+          icon: CommandLineIcon,
+          onClick: actions.openShortcutReferenceModal,
         },
       ],
     },

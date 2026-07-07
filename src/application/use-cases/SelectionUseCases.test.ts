@@ -3,6 +3,7 @@ import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { rgba, TRANSPARENT } from "@/domain/canvas/PixelColor";
 import { createEmptyReferenceLayer } from "@/domain/layer/Layer";
 import { createEmptyProject, withLayers } from "@/domain/project/Project";
+import { getActiveCanvas } from "@/domain/project/ProjectTestUtils";
 import { setActiveReferenceLayer } from "@/application/use-cases/LayerUseCases";
 import { createSelectionFromFloating } from "@/application/use-cases/ClipboardUseCases";
 import {
@@ -25,9 +26,10 @@ function setDrawingPixel(
   y: number,
   color: number,
 ) {
-  const drawing = project.canvas.layers.find((layer) => layer.type === "drawing");
+  const canvas = getActiveCanvas(project);
+  const drawing = canvas.layers.find((layer) => layer.type === "drawing");
   if (!drawing || drawing.type !== "drawing") return;
-  drawing.pixels[y * project.canvas.width + x] = color;
+  drawing.pixels[y * canvas.width + x] = color;
 }
 
 describe("resolveSelectionForTransform", () => {
@@ -63,7 +65,7 @@ describe("resolveSelectionForTransform", () => {
     const reference = createEmptyReferenceLayer("ref");
     const baseProject = createEmptyProject("test", { width: 8, height: 8 });
     const project = setActiveReferenceLayer(
-      withLayers(baseProject, [...baseProject.canvas.layers, reference]),
+      withLayers(baseProject, [...getActiveCanvas(baseProject).layers, reference]),
       reference.id,
     );
     setDrawingPixel(project, 2, 2, rgba(255, 0, 0));

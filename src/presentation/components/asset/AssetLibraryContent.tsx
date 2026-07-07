@@ -73,7 +73,7 @@ export function AssetLibraryContent({
   const importAssetToNewDrawingLayer = useAppStore((s) => s.importAssetToNewDrawingLayer);
   const importAssetToNewReferenceLayer = useAppStore((s) => s.importAssetToNewReferenceLayer);
   const importAssetColorsToPalette = useAppStore((s) => s.importAssetColorsToPalette);
-  const sendAssetToToolPage = useAppStore((s) => s.sendAssetToToolPage);
+  const sendAssetToPlugin = useAppStore((s) => s.sendAssetToPlugin);
   const revealAssetInFolder = useAppStore((s) => s.revealAssetInFolder);
 
   const [contextMenu, setContextMenu] = useState<{
@@ -92,7 +92,7 @@ export function AssetLibraryContent({
       onImportDrawingLayer: (assetId) => void importAssetToNewDrawingLayer(assetId),
       onImportReferenceLayer: (assetId) => void importAssetToNewReferenceLayer(assetId),
       onImportColors: (assetId) => void importAssetColorsToPalette(assetId),
-      onSendToToolPage: (assetId, toolPageId) => void sendAssetToToolPage(assetId, toolPageId),
+      onSendToPlugin: (assetId, pluginId) => void sendAssetToPlugin(assetId, pluginId),
       onRevealInFolder: (assetId) => void revealAssetInFolder(assetId),
     });
   }, [
@@ -101,7 +101,7 @@ export function AssetLibraryContent({
     importAssetToNewDrawingLayer,
     importAssetToNewReferenceLayer,
     importAssetColorsToPalette,
-    sendAssetToToolPage,
+    sendAssetToPlugin,
     revealAssetInFolder,
   ]);
 

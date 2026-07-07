@@ -9,12 +9,14 @@ import type { SymmetryConfig } from "@/domain/symmetry/SymmetryConfig";
 import { paintBrushStraightLine } from "@/domain/tool/BrushStroke";
 import { PixelPerfectStrokeSession } from "@/domain/tool/PixelPerfectStroke";
 import { getTool } from "@/domain/tool/ToolRegistry";
-import type { Point, ToolContext, PixelSurface, PatternStampContext } from "@/domain/tool/ITool";
+import type { Point, ToolContext, PixelSurface, PatternStampContext, PointerModifiers } from "@/domain/tool/ITool";
+import { DEFAULT_POINTER_MODIFIERS } from "@/domain/tool/ITool";
 import type { ToolSettings, DrawingToolType } from "@/domain/tool/ToolType";
 
 export interface DrawToolOptions {
   patternStamp?: PatternStampContext | null;
   tileRegion?: SelectionRect | null;
+  pointerModifiers?: PointerModifiers;
 }
 
 function createToolContext(
@@ -35,6 +37,7 @@ function createToolContext(
     grid: surface,
     color,
     settings,
+    modifiers: options?.pointerModifiers ?? DEFAULT_POINTER_MODIFIERS,
     selectionMask: selectionMask ?? null,
     patternStamp: options?.patternStamp ?? null,
   };

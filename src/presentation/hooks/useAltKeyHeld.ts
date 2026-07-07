@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import {
+  ALT_MODIFIER_SYNC_EVENT,
+  type AltModifierSyncDetail,
+} from "@/domain/input/AltModifierChannel";
 
 export function useAltKeyHeld(): boolean {
   const [altHeld, setAltHeld] = useState(false);
@@ -18,6 +22,13 @@ export function useAltKeyHeld(): boolean {
       setAltHeld(event.altKey);
     };
 
+    const syncFromNative = (event: Event) => {
+      const detail = (event as CustomEvent<AltModifierSyncDetail>).detail;
+      if (typeof detail?.pressed === "boolean") {
+        setAltHeld(detail.pressed);
+      }
+    };
+
     const resetAltState = () => {
       setAltHeld(false);
     };
@@ -26,6 +37,8 @@ export function useAltKeyHeld(): boolean {
     window.addEventListener("keyup", syncFromKeyboard);
     window.addEventListener("mousemove", syncFromMouse);
     window.addEventListener("mousedown", syncFromMouse);
+    window.addEventListener("mouseup", syncFromMouse);
+    window.addEventListener(ALT_MODIFIER_SYNC_EVENT, syncFromNative);
     window.addEventListener("blur", resetAltState);
 
     return () => {
@@ -33,6 +46,8 @@ export function useAltKeyHeld(): boolean {
       window.removeEventListener("keyup", syncFromKeyboard);
       window.removeEventListener("mousemove", syncFromMouse);
       window.removeEventListener("mousedown", syncFromMouse);
+      window.removeEventListener("mouseup", syncFromMouse);
+      window.removeEventListener(ALT_MODIFIER_SYNC_EVENT, syncFromNative);
       window.removeEventListener("blur", resetAltState);
     };
   }, []);

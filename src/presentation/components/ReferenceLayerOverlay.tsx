@@ -10,7 +10,10 @@ import type { ColorEntry } from "@/domain/palette/Palette";
 
 import { buildReferenceColorPalette } from "@/domain/layer/ReferenceLayerPalette";
 
-import { clampReferenceScale } from "@/domain/layer/ReferenceLayerOperations";
+import {
+  boardPointToCanvasPoint,
+  clampReferenceScale,
+} from "@/domain/layer/ReferenceLayerOperations";
 
 import type { LayerPosition, ReferenceLayer } from "@/domain/layer/Layer";
 import {
@@ -37,6 +40,8 @@ import { ensureReferenceLayerPixelCache } from "@/infrastructure/canvas/Referenc
 import { useAltKeyHeld } from "../hooks/useAltKeyHeld";
 import { useSpaceKeyHeldRef } from "../hooks/useSpaceKeyHeld";
 
+import { getActiveCanvas } from "@/domain/project/Project";
+
 import { useAppStore, type ColorSlot } from "../stores/appStore";
 
 import { focusCanvasKeyboard } from "../utils/canvasKeyboardFocus";
@@ -49,8 +54,8 @@ interface ReferenceLayerOverlayProps {
   layer: ReferenceLayer;
   stackIndex: number;
   referenceLayerCount: number;
-  canvasLeft: number;
-  canvasTop: number;
+  boardOriginLeft: number;
+  boardOriginTop: number;
   zoom: number;
   isActive: boolean;
   onContextMenuRequest?: (layerId: string, clientX: number, clientY: number) => void;
@@ -66,8 +71,8 @@ export function ReferenceLayerOverlay({
   layer,
   stackIndex,
   referenceLayerCount,
-  canvasLeft,
-  canvasTop,
+  boardOriginLeft,
+  boardOriginTop,
   zoom,
   isActive,
   onContextMenuRequest,
@@ -91,6 +96,7 @@ export function ReferenceLayerOverlay({
   const pointerDown = useAppStore((s) => s.pointerDown);
 
   const pickColorAt = useAppStore((s) => s.pickColorAt);
+  const project = useAppStore((s) => s.project);
 
   const setColorSlot = useAppStore((s) => s.setColorSlot);
 
@@ -161,6 +167,14 @@ export function ReferenceLayerOverlay({
   const transformToolActive = activeTool === "transform";
   const showTransformBox = isActive && !altHeld && transformToolActive;
   const imageAcceptsPointer = true;
+
+  const toActiveCanvasPoint = useCallback(
+    (boardPoint: LayerPosition): LayerPosition => {
+      if (!project) return boardPoint;
+      return boardPointToCanvasPoint(boardPoint, getActiveCanvas(project).boardPosition);
+    },
+    [project],
+  );
 
   useEffect(() => {
     oklchRendererRef.current = new OklchDisplayGlRenderer();
@@ -314,14 +328,12 @@ export function ReferenceLayerOverlay({
       const rect = canvas.getBoundingClientRect();
       const localX = Math.floor((e.clientX - rect.left) / zoom);
       const localY = Math.floor((e.clientY - rect.top) / zoom);
+      const canvasPoint = toActiveCanvasPoint({
+        x: layer.position.x + localX,
+        y: layer.position.y + localY,
+      });
 
-      void pickColorAt(
-        {
-          x: layer.position.x + localX,
-          y: layer.position.y + localY,
-        },
-        colorSlotFromMouseButton(e.button),
-      );
+      void pickColorAt(canvasPoint, colorSlotFromMouseButton(e.button));
       return;
     }
 
@@ -339,12 +351,13 @@ export function ReferenceLayerOverlay({
       const rect = canvas.getBoundingClientRect();
       const localX = Math.floor((e.clientX - rect.left) / zoom);
       const localY = Math.floor((e.clientY - rect.top) / zoom);
+      const canvasPoint = toActiveCanvasPoint({
+        x: layer.position.x + localX,
+        y: layer.position.y + localY,
+      });
 
       pointerDown(
-        {
-          x: layer.position.x + localX,
-          y: layer.position.y + localY,
-        },
+        canvasPoint,
         "primary",
         {
           shiftKey: e.shiftKey,
@@ -521,9 +534,9 @@ export function ReferenceLayerOverlay({
 
 
 
-  const left = canvasLeft + layer.position.x * zoom;
+  const left = boardOriginLeft + layer.position.x * zoom;
 
-  const top = canvasTop + layer.position.y * zoom;
+  const top = boardOriginTop + layer.position.y * zoom;
 
   const overlayPosition = { left, top, width: displayWidth };
 

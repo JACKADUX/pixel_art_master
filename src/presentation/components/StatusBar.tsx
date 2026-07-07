@@ -7,6 +7,12 @@ import {
 } from "../icons/ActionIcons";
 import { SHORTCUT_LABELS } from "../config/menuConfig";
 import { PomodoroTimer } from "./PomodoroTimer";
+import { getActiveCanvas } from "@/domain/project/Project";
+import {
+  editorZoomFromSlider,
+  editorZoomToSlider,
+  formatEditorZoomLabel,
+} from "@/domain/viewport/EditorZoom";
 import { useAppStore } from "../stores/appStore";
 
 function StatusBarIconButton({
@@ -55,6 +61,8 @@ export function StatusBar() {
 
   if (!project) return null;
 
+  const activeCanvas = getActiveCanvas(project);
+
   const handleSave = () => {
     void saveCurrentProject();
   };
@@ -62,20 +70,21 @@ export function StatusBar() {
   return (
     <footer className="flex items-center gap-4 border-t border-zinc-700 bg-zinc-900 px-4 py-1.5 text-xs text-zinc-400">
       <span>
-        画布: {project.canvas.width}×{project.canvas.height}
+        画布: {activeCanvas.width}×{activeCanvas.height}
       </span>
 
       <label className="flex items-center gap-1.5">
         缩放:
         <input
           type="range"
-          min={1}
-          max={32}
-          value={zoom}
-          onChange={(e) => setZoom(Number(e.target.value))}
+          min={0}
+          max={1}
+          step={0.001}
+          value={editorZoomToSlider(zoom)}
+          onChange={(e) => setZoom(editorZoomFromSlider(Number(e.target.value)))}
           className="w-20"
         />
-        <span className="w-8">{zoom}×</span>
+        <span className="w-12">{formatEditorZoomLabel(zoom)}</span>
       </label>
 
       <button

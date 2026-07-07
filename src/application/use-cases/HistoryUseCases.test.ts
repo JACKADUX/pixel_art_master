@@ -8,8 +8,8 @@ import {
   undoHistory,
 } from "./HistoryUseCases";
 import { HistoryStack } from "@/domain/history/HistoryStack";
-import { createEmptyProject } from "@/domain/project/Project";
-import { resizeProjectCanvas } from "@/domain/project/Project";
+import { createEmptyProject, resizeProjectCanvas } from "@/domain/project/Project";
+import { getActiveCanvas, mutateActiveCanvas } from "@/domain/project/ProjectTestUtils";
 import { expandDrawingLayerToIncludeCanvasPoint } from "@/domain/layer/DrawingLayerOperations";
 import { createEmptyDrawingLayer } from "@/domain/layer/Layer";
 import { getCompositeGrid } from "@/domain/project/Project";
@@ -26,11 +26,13 @@ describe("HistoryUseCases canvas resize", () => {
     const result = undoHistory(historyStack, resized, null);
     expect(result).not.toBeNull();
     expect(result!.structural).toBe(true);
-    expect(result!.project.canvas.width).toBe(64);
-    expect(result!.project.canvas.height).toBe(64);
-    expect(result!.project.canvas.layers[0].type).toBe("drawing");
-    if (result!.project.canvas.layers[0].type === "drawing") {
-      expect(result!.project.canvas.layers[0].pixels.length).toBe(64 * 64);
+    const restoredCanvas = getActiveCanvas(result!.project);
+    expect(result!.focusCanvasId).toBe(restoredCanvas.id);
+    expect(restoredCanvas.width).toBe(64);
+    expect(restoredCanvas.height).toBe(64);
+    expect(restoredCanvas.layers[0].type).toBe("drawing");
+    if (restoredCanvas.layers[0].type === "drawing") {
+      expect(restoredCanvas.layers[0].pixels.length).toBe(64 * 64);
     }
   });
 
@@ -42,21 +44,22 @@ describe("HistoryUseCases canvas resize", () => {
     }
     const resized = resizeProjectCanvas(project, 64, 64);
     const restored = applyStructureSnapshot(resized, snapshot);
+    const restoredCanvas = getActiveCanvas(restored);
 
-    expect(restored.canvas.width).toBe(32);
-    expect(restored.canvas.height).toBe(32);
+    expect(restoredCanvas.width).toBe(32);
+    expect(restoredCanvas.height).toBe(32);
   });
 
   it("expands drawing layers when canvas grows", () => {
     const project = createEmptyProject("test", { width: 64, height: 64 });
-    const layer = project.canvas.layers.find((entry) => entry.type === "drawing");
+    const layer = getActiveCanvas(project).layers.find((entry) => entry.type === "drawing");
     if (!layer || layer.type !== "drawing") {
       throw new Error("drawing layer missing");
     }
     layer.pixels[0] = 0xff0000ff;
 
     const resized = resizeProjectCanvas(project, 96, 80);
-    const resizedLayer = resized.canvas.layers.find((entry) => entry.id === layer.id);
+    const resizedLayer = getActiveCanvas(resized).layers.find((entry) => entry.id === layer.id);
     expect(resizedLayer?.type).toBe("drawing");
     if (resizedLayer?.type === "drawing") {
       expect(resizedLayer.width).toBe(96);
@@ -69,14 +72,14 @@ describe("HistoryUseCases canvas resize", () => {
 
   it("does not resize drawing layer pixels when canvas shrinks", () => {
     const project = createEmptyProject("test", { width: 64, height: 64 });
-    const layer = project.canvas.layers.find((entry) => entry.type === "drawing");
+    const layer = getActiveCanvas(project).layers.find((entry) => entry.type === "drawing");
     if (!layer || layer.type !== "drawing") {
       throw new Error("drawing layer missing");
     }
     layer.pixels[0] = 0xff0000ff;
 
     const resized = resizeProjectCanvas(project, 32, 32);
-    const resizedLayer = resized.canvas.layers.find((entry) => entry.id === layer.id);
+    const resizedLayer = getActiveCanvas(resized).layers.find((entry) => entry.id === layer.id);
     expect(resizedLayer?.type).toBe("drawing");
     if (resizedLayer?.type === "drawing") {
       expect(resizedLayer.width).toBe(64);
@@ -92,22 +95,17 @@ describe("HistoryUseCases layer geometry", () => {
   it("restores layer width, height, and position when undoing after draw-time expansion", () => {
     const baseLayer = createEmptyDrawingLayer({ width: 32, height: 32 });
     baseLayer.pixels[0] = rgba(255, 0, 0, 255);
-    const project = createEmptyProject("test", { width: 64, height: 64 });
-    project.canvas.layers = [baseLayer];
-    project.canvas.activeLayerId = baseLayer.id;
+    const project = mutateActiveCanvas(createEmptyProject("test", { width: 64, height: 64 }), {
+      layers: [baseLayer],
+      activeLayerId: baseLayer.id,
+    });
 
     const historyStack = new HistoryStack();
     pushHistory(historyStack, project, null);
 
     const expandedLayer = expandDrawingLayerToIncludeCanvasPoint(baseLayer, { x: 40, y: 35 });
     expandedLayer.pixels[35 * expandedLayer.width + 40] = rgba(0, 0, 255, 255);
-    const expandedProject = {
-      ...project,
-      canvas: {
-        ...project.canvas,
-        layers: [expandedLayer],
-      },
-    };
+    const expandedProject = mutateActiveCanvas(project, { layers: [expandedLayer] });
 
     expect(expandedLayer.width).toBeGreaterThan(baseLayer.width);
     getCompositeGrid(expandedProject);
@@ -115,7 +113,7 @@ describe("HistoryUseCases layer geometry", () => {
     const result = undoHistory(historyStack, expandedProject, null);
     expect(result).not.toBeNull();
 
-    const restoredLayer = result!.project.canvas.layers[0];
+    const restoredLayer = getActiveCanvas(result!.project).layers[0];
     expect(restoredLayer.type).toBe("drawing");
     if (restoredLayer.type !== "drawing") return;
 
@@ -133,14 +131,16 @@ describe("HistoryUseCases layer geometry", () => {
       ...createEmptyDrawingLayer({ width: 32, height: 24 }),
       position: { x: 5, y: 3 },
     };
-    const project = createEmptyProject("test", { width: 64, height: 64 });
-    project.canvas.layers = [layer];
-    project.canvas.activeLayerId = layer.id;
+    const project = mutateActiveCanvas(createEmptyProject("test", { width: 64, height: 64 }), {
+      layers: [layer],
+      activeLayerId: layer.id,
+    });
 
     const snapshot = captureEditorSnapshot(project, null);
     expect(snapshot?.kind).toBe("pixels");
     if (snapshot?.kind !== "pixels") return;
 
+    expect(snapshot.canvasId).toBe(getActiveCanvas(project).id);
     expect(snapshot.width).toBe(32);
     expect(snapshot.height).toBe(24);
     expect(snapshot.position).toEqual({ x: 5, y: 3 });
@@ -152,35 +152,24 @@ describe("HistoryUseCases layer geometry", () => {
     const layerB = createEmptyDrawingLayer({ width: 4, height: 4 });
     layerA.pixels[0] = rgba(255, 0, 0, 255);
 
-    const project = createEmptyProject("test", { width: 8, height: 8 });
-    project.canvas.layers = [layerA, layerB];
-    project.canvas.activeLayerId = layerA.id;
+    const project = mutateActiveCanvas(createEmptyProject("test", { width: 8, height: 8 }), {
+      layers: [layerA, layerB],
+      activeLayerId: layerA.id,
+    });
 
     const historyStack = new HistoryStack();
     pushHistory(historyStack, project, null);
 
     layerA.pixels[0] = rgba(0, 0, 255, 255);
-    const afterDraw = {
-      ...project,
-      canvas: {
-        ...project.canvas,
-        layers: [layerA, layerB],
-      },
-    };
-
-    const switched = {
-      ...afterDraw,
-      canvas: {
-        ...afterDraw.canvas,
-        activeLayerId: layerB.id,
-      },
-    };
+    const afterDraw = mutateActiveCanvas(project, { layers: [layerA, layerB] });
+    const switched = mutateActiveCanvas(afterDraw, { activeLayerId: layerB.id });
 
     const result = undoHistory(historyStack, switched, null);
     expect(result).not.toBeNull();
-    expect(result!.project.canvas.activeLayerId).toBe(layerA.id);
+    expect(result!.focusCanvasId).toBe(getActiveCanvas(project).id);
+    expect(getActiveCanvas(result!.project).activeLayerId).toBe(layerA.id);
 
-    const restoredA = result!.project.canvas.layers.find((l) => l.id === layerA.id);
+    const restoredA = getActiveCanvas(result!.project).layers.find((l) => l.id === layerA.id);
     expect(restoredA?.type).toBe("drawing");
     if (restoredA?.type !== "drawing") return;
     expect(restoredA.pixels[0]).toBe(rgba(255, 0, 0, 255));

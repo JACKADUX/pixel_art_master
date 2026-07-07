@@ -4,7 +4,7 @@ import { clampCropRect } from "@/domain/layer/ReferenceLayerOperations";
 /**
  * 图像查看器「区域选框」的纯几何运算。
  *
- * 与像素还原工具的基准格选框（GridCellOperations）保持一致的交互语义，
+ * 与像素还原插件的基准格选框（GridCellOperations）保持一致的交互语义，
  * 但不耦合像素还原领域：这里只描述「在一张图像上选取一块矩形区域」这一通用概念，
  * 因此放在 selection 领域中以便被任意图像预览场景复用。
  */

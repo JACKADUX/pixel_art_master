@@ -2,10 +2,10 @@ import {
   toggleReferencePaletteVisibility,
   updateReferenceLayer,
 } from "@/domain/layer/ReferenceLayerOperations";
+import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 import {
   getLayerById,
   touchProject,
-  withLayers,
   type Project,
 } from "@/domain/project/Project";
 
@@ -16,9 +16,9 @@ export function toggleReferenceLayerPaletteInProject(
   const layer = getLayerById(project, layerId);
   if (!layer || layer.type !== "reference") return null;
 
-  const layers = updateReferenceLayer(project.canvas.layers, layerId, (ref) =>
+  const referenceLayers = updateReferenceLayer(project.referenceLayers, layerId, (ref) =>
     toggleReferencePaletteVisibility(ref),
-  );
+  ).filter(isReferenceLayer);
 
-  return touchProject(withLayers(project, layers));
+  return touchProject({ ...project, referenceLayers });
 }

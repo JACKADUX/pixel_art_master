@@ -11,6 +11,7 @@ import {
 import { createSelectionState } from "@/domain/selection/SelectionState";
 import { commitFloatingSelectionInProject } from "@/application/use-cases/SelectionUseCases";
 import { createEmptyProject, getCompositeGrid } from "@/domain/project/Project";
+import { getActiveCanvas, mutateActiveCanvas } from "@/domain/project/ProjectTestUtils";
 
 describe("FloatingSelectionGeometry", () => {
   it("returns canvas corner points for floating offset", () => {
@@ -47,9 +48,10 @@ describe("commitFloatingSelectionInProject", () => {
     const layer = createEmptyDrawingLayer({ width: 16, height: 16 });
     layer.pixels[0] = rgba(255, 0, 0, 255);
 
-    const project = createEmptyProject("test", { width: 64, height: 64 });
-    project.canvas.layers = [layer];
-    project.canvas.activeLayerId = layer.id;
+    const project = mutateActiveCanvas(createEmptyProject("test", { width: 64, height: 64 }), {
+      layers: [layer],
+      activeLayerId: layer.id,
+    });
 
     const floatingPixels = PixelGrid.createEmpty(4, 4);
     floatingPixels.setPixel(1, 1, rgba(0, 0, 255, 255));
@@ -69,7 +71,7 @@ describe("commitFloatingSelectionInProject", () => {
       commitFloatingSelectionInProject(project, selection);
 
     expect(committedSelection.floating).toBeNull();
-    const committedLayer = committedProject.canvas.layers[0];
+    const committedLayer = getActiveCanvas(committedProject).layers[0];
     expect(committedLayer.type).toBe("drawing");
     if (committedLayer.type !== "drawing") return;
 

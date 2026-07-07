@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { rgba } from "@/domain/canvas/PixelColor";
 import { createEmptyReferenceLayer } from "@/domain/layer/Layer";
-import { createEmptyProject, withLayers } from "@/domain/project/Project";
+import { createEmptyProject, withReferenceLayers } from "@/domain/project/Project";
 import { resolveMagicWandTargetColor } from "@/application/use-cases/ResolveMagicWandTargetColor";
 import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 
@@ -15,7 +15,7 @@ describe("resolveMagicWandTargetColor", () => {
     reference.position = { x: 2, y: 2 };
 
     const baseProject = createEmptyProject("test");
-    const project = withLayers(baseProject, [...baseProject.canvas.layers, reference]);
+    const project = withReferenceLayers(baseProject, [reference]);
     const grid = PixelGrid.createEmpty(64, 64);
 
     const cache: ReferenceLayerPixelData = {

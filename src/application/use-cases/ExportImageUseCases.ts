@@ -2,7 +2,7 @@ import type { IImageExportPreferencesRepository } from "@/application/ports/IIma
 import type { Project } from "@/domain/project/Project";
 import type { SelectionState } from "@/domain/selection/SelectionState";
 import {
-  buildExportFilePath,
+  dirnameFromFilePath,
   resolveExportPixelGrid,
   resolveTargetLongestEdge,
   scalePixelGridToLongestEdge,
@@ -19,8 +19,7 @@ import { writeFile } from "@tauri-apps/plugin-fs";
 export interface ExportImageInput {
   project: Project;
   selection: SelectionState | null;
-  directory: string;
-  fileName: string;
+  filePath: string;
   format: ImageExportFormat;
   scope: ImageExportScope;
   scalePreset: ImageExportScalePreset;
@@ -40,12 +39,11 @@ export async function exportImage(input: ExportImageInput): Promise<{ filePath: 
   );
   const scaled = scalePixelGridToLongestEdge(grid, targetLongestEdge);
   const bytes = await pixelGridToImageBytes(scaled, input.format);
-  const filePath = buildExportFilePath(input.directory, input.fileName, input.format);
 
-  await writeFile(filePath, bytes);
+  await writeFile(input.filePath, bytes);
 
   const preferences: ImageExportPreferences = {
-    lastExportDirectory: input.directory,
+    lastExportDirectory: dirnameFromFilePath(input.filePath),
     format: input.format,
     scope: input.scope,
     scalePreset: input.scalePreset,
@@ -53,5 +51,5 @@ export async function exportImage(input: ExportImageInput): Promise<{ filePath: 
   };
   await input.preferencesRepository.save(input.softwareDataPath, preferences);
 
-  return { filePath };
+  return { filePath: input.filePath };
 }

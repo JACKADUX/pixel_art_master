@@ -29,6 +29,7 @@ describe("resolveMousePositionOverlayTarget", () => {
     const layer = createReferenceLayer();
     const target = resolveMousePositionOverlayTarget(
       { x: 12, y: 22 },
+      { x: 0, y: 0 },
       [layer],
       8,
       composite,
@@ -47,6 +48,7 @@ describe("resolveMousePositionOverlayTarget", () => {
     const layer = createReferenceLayer({ position: { x: 80, y: 80 } });
     const target = resolveMousePositionOverlayTarget(
       { x: 4, y: 6 },
+      { x: 0, y: 0 },
       [layer],
       8,
       composite,
@@ -65,6 +67,7 @@ describe("resolveMousePositionOverlayTarget", () => {
     const layer = createReferenceLayer({ position: { x: 80, y: 80 } });
     const target = resolveMousePositionOverlayTarget(
       { x: 70, y: 70 },
+      { x: 0, y: 0 },
       [layer],
       8,
       composite,

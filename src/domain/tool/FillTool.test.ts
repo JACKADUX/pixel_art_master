@@ -4,6 +4,7 @@ import { rgba, TRANSPARENT } from "@/domain/canvas/PixelColor";
 import { FillTool, fillColorMatches } from "@/domain/tool/FillTool";
 import { DEFAULT_TOOL_SETTINGS } from "@/domain/tool/ToolType";
 import type { ToolContext } from "@/domain/tool/ITool";
+import { DEFAULT_POINTER_MODIFIERS } from "@/domain/tool/ITool";
 
 function makeContext(
   grid: PixelGrid,
@@ -14,6 +15,7 @@ function makeContext(
     grid,
     color,
     settings: { ...DEFAULT_TOOL_SETTINGS },
+    modifiers: DEFAULT_POINTER_MODIFIERS,
     ...overrides,
   };
 }

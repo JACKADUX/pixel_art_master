@@ -1,4 +1,6 @@
 import type { CanvasSize } from "../canvas/CanvasSize";
+import type { BoardPosition } from "../pixelCanvas/PixelCanvas";
+import { DEFAULT_BOARD_POSITION } from "../pixelCanvas/PixelCanvas";
 import type {
   CropRect,
   ImageSize,
@@ -40,6 +42,41 @@ export function centerReferencePosition(
   };
 }
 
+/** 将画板局部坐标转换为工作区（画板）绝对坐标 */
+export function canvasPointToBoardPoint(
+  canvasPoint: LayerPosition,
+  canvasBoardPosition: BoardPosition,
+): LayerPosition {
+  return {
+    x: canvasPoint.x + canvasBoardPosition.x,
+    y: canvasPoint.y + canvasBoardPosition.y,
+  };
+}
+
+/** 将工作区绝对坐标转换为画板局部坐标 */
+export function boardPointToCanvasPoint(
+  boardPoint: LayerPosition,
+  canvasBoardPosition: BoardPosition,
+): LayerPosition {
+  return {
+    x: boardPoint.x - canvasBoardPosition.x,
+    y: boardPoint.y - canvasBoardPosition.y,
+  };
+}
+
+/** 在指定画板内居中，返回工作区绝对坐标 */
+export function centerReferenceBoardPosition(
+  crop: CropRect,
+  canvasSize: CanvasSize,
+  canvasBoardPosition: BoardPosition = DEFAULT_BOARD_POSITION,
+): LayerPosition {
+  const centered = centerReferencePosition(crop, canvasSize);
+  return {
+    x: canvasBoardPosition.x + centered.x,
+    y: canvasBoardPosition.y + centered.y,
+  };
+}
+
 export function getReferenceDisplaySize(layer: ReferenceLayer): ImageSize | null {
   if (!layer.crop) return null;
   const scale = clampReferenceScale(layer.scale);
@@ -73,6 +110,7 @@ export function setReferenceImage(
   imageData: string,
   imageSize: ImageSize,
   canvasSize: CanvasSize,
+  canvasBoardPosition: BoardPosition = DEFAULT_BOARD_POSITION,
 ): ReferenceLayer {
   const crop = fullImageCrop(imageSize);
   return {
@@ -80,7 +118,7 @@ export function setReferenceImage(
     imageData,
     imageSize,
     crop,
-    position: centerReferencePosition(crop, canvasSize),
+    position: centerReferenceBoardPosition(crop, canvasSize, canvasBoardPosition),
     scale: 1,
   };
 }

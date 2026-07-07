@@ -21,7 +21,7 @@ const TOOLS: { type: ToolType; label: string }[] = [
   { type: "select", label: "选区" },
   { type: "transform", label: "变换" },
   { type: "repeatTile", label: "重复Tile" },
-  { type: "canvasResize", label: "画布尺寸" },
+  { type: "canvasResize", label: "画板" },
 ];
 
 export function Toolbar() {

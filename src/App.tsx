@@ -15,6 +15,8 @@ import { ColorVariationAnalysisPage } from "./presentation/components/colorVaria
 import { WorldCreatorPage } from "./presentation/components/world/WorldCreatorPage";
 import { ComfyUiPage } from "./presentation/components/comfyui/ComfyUiPage";
 import { SettingsModal } from "./presentation/components/settings/SettingsModal";
+import { AboutModal } from "./presentation/components/help/AboutModal";
+import { ShortcutReferenceModal } from "./presentation/components/help/ShortcutReferenceModal";
 import { AiTextFieldHost } from "./presentation/components/aiTextField/AiTextFieldHost";
 import { ToastContainer } from "./presentation/components/ToastContainer";
 import { TopBar } from "./presentation/components/TopBar";
@@ -52,6 +54,8 @@ function App() {
       <CanvasSizeModal />
       <ExportImageModal />
       <SettingsModal />
+      <AboutModal />
+      <ShortcutReferenceModal />
       <PixelRestorePage />
       <ColorEditPage />
       <ColorVariationAnalysisPage />

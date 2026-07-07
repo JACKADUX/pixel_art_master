@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ViewfinderCircleIcon } from "@heroicons/react/24/outline";
 import {
-  computePreviewTransform,
   computeVisibleRect,
+  mapDisplayRectToPreview,
   mapVisibleRectToPreview,
+  resolvePixelGridDisplayRect,
 } from "@/domain/viewport/NavigatorViewport";
 import {
   computePanScrollDelta,
@@ -24,8 +26,11 @@ import {
 } from "@/domain/viewport/OrthographicView";
 import { renderTransparencyCheckerboard } from "@/infrastructure/canvas/CanvasBackgroundRenderer";
 import { renderPixelGrid1x } from "@/infrastructure/canvas/PixelGridCanvasRenderer";
+import { compositeBoardPixelGrid } from "@/domain/pixelCanvas/BoardExport";
+import { getActiveCanvas } from "@/domain/project/Project";
 import { useAppStore } from "../stores/appStore";
 
+const NAVIGATOR_PROJECT_RENDER_DEBOUNCE_MS = 150;
 const HEADER_HEIGHT = 28;
 const PREVIEW_ZOOM_STEP = 0.1;
 const HEADER_ZOOM_STEP = 0.25;
@@ -70,11 +75,11 @@ export function NavigatorPanel() {
   const isPanningRef = useRef(false);
 
   const project = useAppStore((s) => s.project);
+  const drawingStrokeSession = useAppStore((s) => s.drawingStrokeSession);
   const zoom = useAppStore((s) => s.zoom);
   const appSettings = useAppStore((s) => s.appSettings);
   const navigator = useAppStore((s) => s.navigator);
   const viewportSnapshot = useAppStore((s) => s.viewportSnapshot);
-  const getCompositeGrid = useAppStore((s) => s.getCompositeGrid);
   const setNavigatorPositionWithAnchor = useAppStore(
     (s) => s.setNavigatorPositionWithAnchor,
   );
@@ -86,6 +91,10 @@ export function NavigatorPanel() {
   );
   const panNavigatorPreview = useAppStore((s) => s.panNavigatorPreview);
   const navigateToPreviewPoint = useAppStore((s) => s.navigateToPreviewPoint);
+  const syncNavigatorToViewport = useAppStore((s) => s.syncNavigatorToViewport);
+  const setNavigatorFollowViewport = useAppStore(
+    (s) => s.setNavigatorFollowViewport,
+  );
   const floatingPanelStack = useAppStore((s) => s.floatingPanelStack);
   const bringFloatingPanelToFront = useAppStore((s) => s.bringFloatingPanelToFront);
 
@@ -129,19 +138,23 @@ export function NavigatorPanel() {
       return;
     }
 
-    const composite = getCompositeGrid();
-    if (!composite) return;
+    const composite = compositeBoardPixelGrid(project);
 
-    const transform = computePreviewTransform(viewportSnapshot, previewLayout);
-    const effectiveZoom = transform.drawnWidth / composite.width;
+    const pixelGridRect = resolvePixelGridDisplayRect(viewportSnapshot);
+    const contentRect = mapDisplayRectToPreview(
+      pixelGridRect,
+      viewportSnapshot,
+      previewLayout,
+    );
+    const effectiveZoom = contentRect.width / composite.width;
 
-    backgroundCanvas.width = transform.drawnWidth;
-    backgroundCanvas.height = transform.drawnHeight;
+    backgroundCanvas.width = Math.max(1, Math.round(contentRect.width));
+    backgroundCanvas.height = Math.max(1, Math.round(contentRect.height));
     backgroundCanvas.style.position = "absolute";
-    backgroundCanvas.style.left = `${transform.offsetX}px`;
-    backgroundCanvas.style.top = `${transform.offsetY}px`;
-    backgroundCanvas.style.width = `${transform.drawnWidth}px`;
-    backgroundCanvas.style.height = `${transform.drawnHeight}px`;
+    backgroundCanvas.style.left = `${contentRect.x}px`;
+    backgroundCanvas.style.top = `${contentRect.y}px`;
+    backgroundCanvas.style.width = `${contentRect.width}px`;
+    backgroundCanvas.style.height = `${contentRect.height}px`;
     backgroundCanvas.style.imageRendering = "pixelated";
 
     const backgroundCtx = backgroundCanvas.getContext("2d");
@@ -167,10 +180,10 @@ export function NavigatorPanel() {
     pixelCanvas.width = composite.width;
     pixelCanvas.height = composite.height;
     pixelCanvas.style.position = "absolute";
-    pixelCanvas.style.left = `${transform.offsetX}px`;
-    pixelCanvas.style.top = `${transform.offsetY}px`;
-    pixelCanvas.style.width = `${transform.drawnWidth}px`;
-    pixelCanvas.style.height = `${transform.drawnHeight}px`;
+    pixelCanvas.style.left = `${contentRect.x}px`;
+    pixelCanvas.style.top = `${contentRect.y}px`;
+    pixelCanvas.style.width = `${contentRect.width}px`;
+    pixelCanvas.style.height = `${contentRect.height}px`;
     pixelCanvas.style.imageRendering = "pixelated";
 
     const pixelCtx = pixelCanvas.getContext("2d");
@@ -200,11 +213,31 @@ export function NavigatorPanel() {
         previewRect.height - 1,
       );
     }
+
+    if (project.board.canvases.length > 0) {
+      const activeCanvas = getActiveCanvas(project);
+      let minX = Infinity;
+      let minY = Infinity;
+      for (const canvas of project.board.canvases) {
+        minX = Math.min(minX, canvas.boardPosition.x);
+        minY = Math.min(minY, canvas.boardPosition.y);
+      }
+      const activeLeft = activeCanvas.boardPosition.x - minX;
+      const activeTop = activeCanvas.boardPosition.y - minY;
+      const scale = contentRect.width / composite.width;
+      overlayCtx.strokeStyle = "rgba(250, 204, 21, 0.95)";
+      overlayCtx.lineWidth = 1;
+      overlayCtx.strokeRect(
+        contentRect.x + activeLeft * scale + 0.5,
+        contentRect.y + activeTop * scale + 0.5,
+        activeCanvas.width * scale - 1,
+        activeCanvas.height * scale - 1,
+      );
+    }
   }, [
     project,
     previewLayout,
     viewportSnapshot,
-    getCompositeGrid,
     appSettings.checkerboardTileSize,
     appSettings.checkerboardLightHex,
     appSettings.checkerboardDarkHex,
@@ -215,10 +248,19 @@ export function NavigatorPanel() {
   }, [renderPreview, zoom, renderTick]);
 
   useEffect(() => {
-    if (!navigator.visible) return;
+    if (!navigator.visible || drawingStrokeSession) return;
+    const timer = window.setTimeout(
+      () => setRenderTick((tick) => tick + 1),
+      NAVIGATOR_PROJECT_RENDER_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [project, navigator.visible, drawingStrokeSession]);
+
+  useEffect(() => {
+    if (!navigator.visible || drawingStrokeSession) return;
     const id = requestAnimationFrame(() => setRenderTick((t) => t + 1));
     return () => cancelAnimationFrame(id);
-  }, [navigator.visible, viewportSnapshot]);
+  }, [navigator.visible, viewportSnapshot, drawingStrokeSession]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -415,12 +457,38 @@ export function NavigatorPanel() {
       }}
     >
       <div
-        className="flex cursor-move select-none items-center justify-between border-b-2 border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-300"
+        className="flex cursor-move select-none items-center justify-between gap-1 border-b-2 border-zinc-600 bg-zinc-800 px-2 text-xs text-zinc-300"
         style={{ height: HEADER_HEIGHT }}
         onMouseDown={handleHeaderMouseDown}
       >
-        <span>导航</span>
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="shrink-0">导航</span>
+          <button
+            type="button"
+            title="定位到当前视口"
+            disabled={!viewportSnapshot}
+            onClick={() => syncNavigatorToViewport()}
+            className="shrink-0 rounded p-0.5 hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-40"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <ViewfinderCircleIcon className="h-3.5 w-3.5" />
+          </button>
+          <label
+            className={`flex shrink-0 cursor-pointer items-center gap-0.5 ${
+              navigator.followViewport ? "text-sky-400" : "text-zinc-400"
+            }`}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <input
+              type="checkbox"
+              checked={navigator.followViewport}
+              onChange={(e) => setNavigatorFollowViewport(e.target.checked)}
+              className="h-3 w-3 accent-sky-500"
+            />
+            <span>锚定</span>
+          </label>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           <button
             type="button"
             onClick={handleZoomOut}

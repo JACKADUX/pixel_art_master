@@ -10,12 +10,11 @@ import {
 } from "../layer/DrawingLayerOperations";
 import {
   addDrawingLayer as addDrawingLayerOp,
-  addReferenceLayer as addReferenceLayerOp,
   getLayerGrid,
 } from "../layer/LayerOperations";
 import { createCanvasSize, type CanvasSize } from "../canvas/CanvasSize";
 import { DEFAULT_CANVAS_SIZE } from "../canvas/CanvasSizePreset";
-import { isDrawingLayer, isReferenceLayer } from "../layer/LayerTypeGuards";
+import { isDrawingLayer } from "../layer/LayerTypeGuards";
 import type { ReferenceLayer } from "../layer/Layer";
 import {
   setReferenceImage,
@@ -26,6 +25,18 @@ import {
   DEFAULT_ORTHOGRAPHIC_VIEW,
   type OrthographicViewConfig,
 } from "../viewport/OrthographicView";
+import {
+  createCanvasBoard,
+  getActiveCanvas as getActiveCanvasFromBoard,
+  resolveCanvas,
+  withActiveCanvasId as withBoardActiveCanvasId,
+  type CanvasBoard,
+} from "../pixelCanvas/CanvasBoard";
+import {
+  createEmptyPixelCanvas,
+  type PixelCanvas,
+} from "../pixelCanvas/PixelCanvas";
+import { updatePixelCanvasOnBoard } from "../pixelCanvas/PixelCanvasOperations";
 
 export interface GridConfig {
   primary: number;
@@ -33,14 +44,8 @@ export interface GridConfig {
   visible: boolean;
 }
 
-export interface ProjectCanvas {
-  width: number;
-  height: number;
-  scaleFactor: number;
-  layers: Layer[];
-  activeLayerId: string;
-  activeReferenceLayerId: string | null;
-}
+/** @deprecated Use PixelCanvas from pixelCanvas/PixelCanvas.ts */
+export type ProjectCanvas = PixelCanvas;
 
 export interface Project {
   id: string;
@@ -48,7 +53,10 @@ export interface Project {
   filePath: string | null;
   createdAt: string;
   updatedAt: string;
-  canvas: ProjectCanvas;
+  board: CanvasBoard;
+  /** 工作区共享参考层，所有画板可见 */
+  referenceLayers: ReferenceLayer[];
+  activeReferenceLayerId: string | null;
   palette: Palette;
   notes: Note[];
   grid: GridConfig;
@@ -60,12 +68,6 @@ export const DEFAULT_GRID: GridConfig = {
   secondary: 8,
   visible: true,
 };
-
-function createDefaultLayers(width: number, height: number): Layer[] {
-  const size = { width, height };
-  const drawing = createEmptyDrawingLayer(size, "绘制层");
-  return [drawing];
-}
 
 /** 生成基于创建时间的默认项目名（文件名安全） */
 export function createDefaultProjectName(date = new Date()): string {
@@ -83,10 +85,6 @@ export function createEmptyProject(name?: string, size?: CanvasSize): Project {
   const projectName = name ?? createDefaultProjectName();
   const now = new Date().toISOString();
   const canvasSize = size ?? DEFAULT_CANVAS_SIZE;
-  const width = canvasSize.width;
-  const height = canvasSize.height;
-  const layers = createDefaultLayers(width, height);
-  const drawingLayer = layers.find((l) => l.type === "drawing")!;
 
   return {
     id: crypto.randomUUID(),
@@ -94,14 +92,9 @@ export function createEmptyProject(name?: string, size?: CanvasSize): Project {
     filePath: null,
     createdAt: now,
     updatedAt: now,
-    canvas: {
-      width,
-      height,
-      scaleFactor: 1,
-      layers,
-      activeLayerId: drawingLayer.id,
-      activeReferenceLayerId: null,
-    },
+    board: createCanvasBoard("画板 1", canvasSize),
+    referenceLayers: [],
+    activeReferenceLayerId: null,
     palette: Palette.empty(),
     notes: [],
     grid: { ...DEFAULT_GRID },
@@ -111,12 +104,16 @@ export function createEmptyProject(name?: string, size?: CanvasSize): Project {
 
 export function isUnsavedEmptyProject(project: Project): boolean {
   if (project.filePath) return false;
-  return project.canvas.layers.every((layer) => {
-    if (layer.type === "reference") {
-      return layer.imageData === null;
-    }
-    return layer.pixels.every((p) => p === 0);
-  });
+  const referencesEmpty = project.referenceLayers.every(
+    (layer) => layer.imageData === null,
+  );
+  const canvasesEmpty = project.board.canvases.every((canvas) =>
+    canvas.layers.every((layer) => {
+      if (layer.type === "reference") return true;
+      return layer.pixels.every((p) => p === 0);
+    }),
+  );
+  return referencesEmpty && canvasesEmpty;
 }
 
 export interface ReferenceImageInput {
@@ -140,6 +137,13 @@ export function createProjectFromImage(
     size,
   );
   const drawing = createEmptyDrawingLayer(size, "绘制层");
+  const canvas = createEmptyPixelCanvas("画板 1", size);
+  const pixelCanvas: PixelCanvas = {
+    ...canvas,
+    scaleFactor,
+    layers: [drawing],
+    activeLayerId: drawing.id,
+  };
 
   return {
     id: crypto.randomUUID(),
@@ -147,14 +151,13 @@ export function createProjectFromImage(
     filePath: null,
     createdAt: now,
     updatedAt: now,
-    canvas: {
-      width: canvasSize.width,
-      height: canvasSize.height,
-      scaleFactor,
-      layers: [reference, drawing],
-      activeLayerId: drawing.id,
-      activeReferenceLayerId: reference.id,
+    board: {
+      canvases: [pixelCanvas],
+      activeCanvasId: pixelCanvas.id,
+      totalCanvasCount: 1,
     },
+    referenceLayers: [reference],
+    activeReferenceLayerId: reference.id,
     palette,
     notes: [],
     grid: { ...DEFAULT_GRID },
@@ -175,6 +178,13 @@ export function createProjectFromPixelGrid(
   const reference = createEmptyReferenceLayer("参考层");
   const drawing = createEmptyDrawingLayer(size, "绘制层");
   drawing.pixels = referenceGrid.toUint32Array();
+  const canvas = createEmptyPixelCanvas("画板 1", size);
+  const pixelCanvas: PixelCanvas = {
+    ...canvas,
+    scaleFactor,
+    layers: [drawing],
+    activeLayerId: drawing.id,
+  };
 
   return {
     id: crypto.randomUUID(),
@@ -182,14 +192,13 @@ export function createProjectFromPixelGrid(
     filePath: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    canvas: {
-      width,
-      height,
-      scaleFactor,
-      layers: [reference, drawing],
-      activeLayerId: drawing.id,
-      activeReferenceLayerId: reference.id,
+    board: {
+      canvases: [pixelCanvas],
+      activeCanvasId: pixelCanvas.id,
+      totalCanvasCount: 1,
     },
+    referenceLayers: [reference],
+    activeReferenceLayerId: reference.id,
     palette,
     notes: [],
     grid: { ...DEFAULT_GRID },
@@ -197,82 +206,154 @@ export function createProjectFromPixelGrid(
   };
 }
 
-export function getCanvasSize(project: Project): { width: number; height: number } {
-  return { width: project.canvas.width, height: project.canvas.height };
+export function getActiveCanvas(project: Project): PixelCanvas {
+  return getActiveCanvasFromBoard(project.board);
 }
 
-export function getLayerById(project: Project, layerId: string): Layer | undefined {
-  return project.canvas.layers.find((l) => l.id === layerId);
+export function resolveProjectCanvas(project: Project, canvasId: string): PixelCanvas | undefined {
+  return resolveCanvas(project.board, canvasId);
 }
 
-export function getActiveLayer(project: Project): Layer {
-  const active = getLayerById(project, project.canvas.activeLayerId);
+export function getCanvasSize(
+  project: Project,
+  canvasId?: string,
+): { width: number; height: number } {
+  const canvas = canvasId
+    ? resolveProjectCanvas(project, canvasId)
+    : getActiveCanvas(project);
+  if (!canvas) {
+    return { width: 0, height: 0 };
+  }
+  return { width: canvas.width, height: canvas.height };
+}
+
+export function getLayerById(
+  project: Project,
+  layerId: string,
+  canvasId?: string,
+): Layer | undefined {
+  const reference = project.referenceLayers.find((l) => l.id === layerId);
+  if (reference) return reference;
+
+  const canvas = canvasId
+    ? resolveProjectCanvas(project, canvasId)
+    : getActiveCanvas(project);
+  return canvas?.layers.find((l) => l.id === layerId);
+}
+
+export function getActiveLayer(project: Project, canvasId?: string): Layer {
+  const canvas = canvasId
+    ? resolveProjectCanvas(project, canvasId) ?? getActiveCanvas(project)
+    : getActiveCanvas(project);
+  const active = canvas.layers.find((l) => l.id === canvas.activeLayerId);
   if (active && isDrawingLayer(active)) return active;
-  const drawing = project.canvas.layers.find((l) => l.type === "drawing");
+  const drawing = canvas.layers.find((l) => l.type === "drawing");
   if (drawing) return drawing;
-  return project.canvas.layers[0];
+  return canvas.layers[0];
 }
 
-export function getActiveReferenceLayer(project: Project): ReferenceLayer | null {
-  const { activeReferenceLayerId, layers } = project.canvas;
-  if (!activeReferenceLayerId) return null;
-  const active = layers.find((l) => l.id === activeReferenceLayerId);
-  return active && isReferenceLayer(active) ? active : null;
+export function getActiveReferenceLayer(
+  project: Project,
+): ReferenceLayer | null {
+  if (!project.activeReferenceLayerId) return null;
+  const active = project.referenceLayers.find(
+    (layer) => layer.id === project.activeReferenceLayerId,
+  );
+  return active ?? null;
 }
 
-export function getActiveLayerGrid(project: Project): PixelGrid {
-  const layer = getActiveLayer(project);
+export function getActiveLayerGrid(project: Project, canvasId?: string): PixelGrid {
+  const layer = getActiveLayer(project, canvasId);
   if (!isDrawingLayer(layer)) {
     throw new Error("Active layer is not a drawing layer");
   }
   return getLayerGrid(layer);
 }
 
-export function getCompositeGrid(project: Project): PixelGrid {
-  return compositeDrawingLayers(project.canvas.layers, getCanvasSize(project));
+export function getCompositeGrid(project: Project, canvasId?: string): PixelGrid {
+  const canvas = canvasId
+    ? resolveProjectCanvas(project, canvasId) ?? getActiveCanvas(project)
+    : getActiveCanvas(project);
+  return compositeDrawingLayers(canvas.layers, getCanvasSize(project, canvas.id));
 }
 
-export function withLayers(project: Project, layers: Layer[]): Project {
+export function withBoard(project: Project, board: CanvasBoard): Project {
+  return { ...project, board };
+}
+
+export function withActiveCanvasId(project: Project, canvasId: string): Project {
   return {
     ...project,
-    canvas: { ...project.canvas, layers },
+    board: withBoardActiveCanvasId(project.board, canvasId),
   };
 }
 
-export function withActiveLayerId(project: Project, layerId: string): Project {
-  return {
+export function withLayers(
+  project: Project,
+  layers: Layer[],
+  canvasId?: string,
+): Project {
+  const targetId = canvasId ?? getActiveCanvas(project).id;
+  return touchProject({
     ...project,
-    canvas: { ...project.canvas, activeLayerId: layerId },
-  };
+    board: updatePixelCanvasOnBoard(project.board, targetId, { layers }),
+  });
+}
+
+export function withActiveLayerId(
+  project: Project,
+  layerId: string,
+  canvasId?: string,
+): Project {
+  const targetId = canvasId ?? getActiveCanvas(project).id;
+  return touchProject({
+    ...project,
+    board: updatePixelCanvasOnBoard(project.board, targetId, { activeLayerId: layerId }),
+  });
 }
 
 export function withActiveReferenceLayerId(
   project: Project,
   layerId: string | null,
 ): Project {
-  return {
+  return touchProject({
     ...project,
-    canvas: { ...project.canvas, activeReferenceLayerId: layerId },
-  };
+    activeReferenceLayerId: layerId,
+  });
+}
+
+export function withReferenceLayers(
+  project: Project,
+  referenceLayers: ReferenceLayer[],
+): Project {
+  return touchProject({
+    ...project,
+    referenceLayers,
+  });
 }
 
 export function withCanvasSize(
   project: Project,
   width: number,
   height: number,
+  canvasId?: string,
 ): Project {
-  return {
+  const targetId = canvasId ?? getActiveCanvas(project).id;
+  return touchProject({
     ...project,
-    canvas: { ...project.canvas, width, height },
-  };
+    board: updatePixelCanvasOnBoard(project.board, targetId, { width, height }),
+  });
 }
 
 export function resizeProjectCanvas(
   project: Project,
   width: number,
   height: number,
+  canvasId?: string,
 ): Project {
-  const oldSize = getCanvasSize(project);
+  const targetId = canvasId ?? getActiveCanvas(project).id;
+  const canvas = resolveProjectCanvas(project, targetId) ?? getActiveCanvas(project);
+  const oldSize = { width: canvas.width, height: canvas.height };
   const newSize = createCanvasSize(width, height);
   if (oldSize.width === newSize.width && oldSize.height === newSize.height) {
     return project;
@@ -281,47 +362,50 @@ export function resizeProjectCanvas(
   const isGrowing =
     newSize.width > oldSize.width || newSize.height > oldSize.height;
   const layers = isGrowing
-    ? expandDrawingLayersForCanvasGrow(project.canvas.layers, oldSize, newSize)
-    : project.canvas.layers;
+    ? expandDrawingLayersForCanvasGrow(canvas.layers, oldSize, newSize)
+    : canvas.layers;
 
   return touchProject({
     ...project,
-    canvas: {
-      ...project.canvas,
+    board: updatePixelCanvasOnBoard(project.board, targetId, {
       width: newSize.width,
       height: newSize.height,
       layers,
-    },
+    }),
   });
 }
 
-export function addDrawingLayerToProject(project: Project, name?: string): Project {
+export function addDrawingLayerToProject(
+  project: Project,
+  name?: string,
+  canvasId?: string,
+): Project {
+  const targetId = canvasId ?? getActiveCanvas(project).id;
+  const canvas = resolveProjectCanvas(project, targetId) ?? getActiveCanvas(project);
   const layers = addDrawingLayerOp(
-    project.canvas.layers,
-    getCanvasSize(project),
+    canvas.layers,
+    getCanvasSize(project, targetId),
     name,
   );
   const newLayer = layers[layers.length - 1];
   return touchProject({
-    ...withLayers(project, layers),
-    canvas: { ...project.canvas, layers, activeLayerId: newLayer.id },
+    ...withLayers(project, layers, targetId),
+    board: updatePixelCanvasOnBoard(project.board, targetId, {
+      layers,
+      activeLayerId: newLayer.id,
+    }),
   });
 }
 
-export function addReferenceLayerToProject(project: Project, name?: string): Project {
-  const layers = addReferenceLayerOp(project.canvas.layers, name);
-  const newLayer = layers.find(
-    (layer) =>
-      layer.type === "reference" &&
-      !project.canvas.layers.some((existing) => existing.id === layer.id),
-  );
+export function addReferenceLayerToProject(
+  project: Project,
+  name?: string,
+): Project {
+  const newLayer = createEmptyReferenceLayer(name);
   return touchProject({
-    ...withLayers(project, layers),
-    canvas: {
-      ...project.canvas,
-      layers,
-      activeReferenceLayerId: newLayer?.id ?? project.canvas.activeReferenceLayerId,
-    },
+    ...project,
+    referenceLayers: [newLayer, ...project.referenceLayers],
+    activeReferenceLayerId: newLayer.id,
   });
 }
 
@@ -356,4 +440,9 @@ export function renameProject(project: Project, name: string): Project | null {
     return null;
   }
   return touchProject({ ...project, name: trimmed });
+}
+
+/** 兼容旧代码：返回活动画板 */
+export function getProjectCanvas(project: Project): PixelCanvas {
+  return getActiveCanvas(project);
 }

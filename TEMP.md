@@ -1,3 +1,1 @@
- 
-
-o- 试着接一个ai助手，问一些问题，强迫我去思考，做完训练出一些题，可以让我举一反三
+[https://lucide.dev/icons/](https://lucide.dev/icons/)

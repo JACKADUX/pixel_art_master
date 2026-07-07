@@ -1,4 +1,4 @@
-import type { PixelColor } from "../canvas/PixelColor";
+import { isTransparent, TRANSPARENT, type PixelColor } from "../canvas/PixelColor";
 import type { Point, PixelSurface } from "./ITool";
 
 function pixelKey(x: number, y: number): string {
@@ -12,6 +12,10 @@ export function isRedundantCorner(a: Point, b: Point, c: Point): boolean {
     a.x !== c.x &&
     a.y !== c.y
   );
+}
+
+export function canRestoreCornerPixel(preStrokeColor: PixelColor): boolean {
+  return isTransparent(preStrokeColor);
 }
 
 export class PixelPerfectStrokeSession {
@@ -35,8 +39,8 @@ export class PixelPerfectStrokeSession {
   }
 
   /**
-   * If the last three stroke centers form an L-shape, restore the corner pixel
-   * to its pre-stroke color and remove it from the sequence.
+   * If the last three stroke centers form an L-shape, cull the corner from the
+   * stroke path. Only restore the canvas pixel when it was empty pre-stroke.
    */
   tryRemoveCorner(grid: PixelSurface, nextPoint: Point): void {
     if (this.strokeCenters.length < 2) return;
@@ -48,12 +52,18 @@ export class PixelPerfectStrokeSession {
     if (!isRedundantCorner(a, b, c)) return;
 
     const key = pixelKey(b.x, b.y);
-    const original = this.originalPixels.get(key) ?? 0;
-    grid.setPixel(b.x, b.y, original);
+    const original = this.originalPixels.get(key) ?? TRANSPARENT;
+    if (canRestoreCornerPixel(original)) {
+      grid.setPixel(b.x, b.y, original);
+    }
+
     this.strokeCenters.pop();
   }
 
   commitPixel(grid: PixelSurface, point: Point, color: PixelColor): void {
+    const last = this.strokeCenters[this.strokeCenters.length - 1];
+    if (last && last.x === point.x && last.y === point.y) return;
+
     this.rememberOriginal(grid, point.x, point.y);
     grid.setPixel(point.x, point.y, color);
     this.strokeCenters.push({ x: point.x, y: point.y });

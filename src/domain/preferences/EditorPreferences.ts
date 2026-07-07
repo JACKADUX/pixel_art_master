@@ -11,6 +11,11 @@ import {
   type PanelEdgeAnchor,
 } from "@/domain/viewport/FloatingPanelAnchor";
 import {
+  clampEditorZoom,
+  EDITOR_MAX_ZOOM,
+  EDITOR_MIN_ZOOM,
+} from "@/domain/viewport/EditorZoom";
+import {
   clampStampSize,
   clampMagicWandTolerance,
   clampFillTolerance,
@@ -46,6 +51,7 @@ export interface NavigatorPanelLayout {
   position: PanelPosition;
   size: PanelSize;
   edgeAnchor: PanelEdgeAnchor;
+  followViewport: boolean;
 }
 
 export interface FloatingColorPickerLayout {
@@ -83,12 +89,12 @@ export const EDITOR_PREFERENCES_VERSION = 1;
 
 export const DEFAULT_SIDEBAR_WIDTH = 224;
 export const DEFAULT_SPLIT_PANE_RATIO = 0.55;
-export const DEFAULT_NAVIGATOR_WIDTH = 160;
+export const DEFAULT_NAVIGATOR_WIDTH = 200;
 export const DEFAULT_NAVIGATOR_HEIGHT = 120;
 export const DEFAULT_COLOR_PICKER_PANEL_HEIGHT = 400;
 
-const MIN_ZOOM = 1;
-const MAX_ZOOM = 32;
+const MIN_ZOOM = EDITOR_MIN_ZOOM;
+const MAX_ZOOM = EDITOR_MAX_ZOOM;
 const MIN_SIDEBAR_WIDTH = 180;
 const MAX_SIDEBAR_WIDTH = 400;
 const MIN_SPLIT_PANE_RATIO = 0.15;
@@ -143,6 +149,7 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
     position: { x: 16, y: 16 },
     size: { width: DEFAULT_NAVIGATOR_WIDTH, height: DEFAULT_NAVIGATOR_HEIGHT },
     edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
+    followViewport: false,
   },
   floatingColorPickerLayout: {
     visible: false,
@@ -177,6 +184,7 @@ export interface EditorPreferencesSource {
     position: PanelPosition;
     size: PanelSize;
     edgeAnchor: PanelEdgeAnchor;
+    followViewport: boolean;
   };
   floatingColorPicker: {
     visible: boolean;
@@ -332,6 +340,10 @@ function parseNavigatorLayout(value: unknown): NavigatorPanelLayout {
     position: parsePosition(value.position, defaults.position),
     size: parseSize(value.size, defaults.size, MIN_NAVIGATOR_WIDTH, MIN_NAVIGATOR_HEIGHT),
     edgeAnchor: parseEdgeAnchor(value.edgeAnchor, defaults.edgeAnchor),
+    followViewport:
+      typeof value.followViewport === "boolean"
+        ? value.followViewport
+        : defaults.followViewport,
   };
 }
 
@@ -367,8 +379,10 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
   const defaults = DEFAULT_EDITOR_PREFERENCES;
   if (!isRecord(raw)) return { ...defaults };
 
-  const activeTool = TOOL_TYPES.includes(raw.activeTool as ToolType)
-    ? (raw.activeTool as ToolType)
+  const rawActiveTool =
+    raw.activeTool === "canvasBoard" ? "canvasResize" : raw.activeTool;
+  const activeTool = TOOL_TYPES.includes(rawActiveTool as ToolType)
+    ? (rawActiveTool as ToolType)
     : defaults.activeTool;
   const paletteViewMode =
     raw.paletteViewMode === "oklabMap"
@@ -400,7 +414,7 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
     symmetry: parseSymmetryConfig(raw.symmetry),
     foregroundColor: parsePixelColor(raw.foregroundColor, defaults.foregroundColor),
     backgroundColor: parsePixelColor(raw.backgroundColor, defaults.backgroundColor),
-    zoom: clampNumber(raw.zoom, MIN_ZOOM, MAX_ZOOM, defaults.zoom),
+    zoom: clampEditorZoom(clampNumber(raw.zoom, MIN_ZOOM, MAX_ZOOM, defaults.zoom)),
     paletteViewMode,
     colorPickerMode,
     colorPickerLayoutOrientation,
@@ -453,7 +467,7 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
     symmetry: { ...source.symmetry },
     foregroundColor: source.foregroundColor,
     backgroundColor: source.backgroundColor,
-    zoom: clampNumber(source.zoom, MIN_ZOOM, MAX_ZOOM, DEFAULT_EDITOR_PREFERENCES.zoom),
+    zoom: clampEditorZoom(clampNumber(source.zoom, MIN_ZOOM, MAX_ZOOM, DEFAULT_EDITOR_PREFERENCES.zoom)),
     paletteViewMode: source.paletteViewMode,
     colorPickerMode: source.colorPickerMode,
     colorPickerLayoutOrientation: source.colorPickerLayoutOrientation,
@@ -474,6 +488,7 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
       position: { ...source.navigator.position },
       size: { ...source.navigator.size },
       edgeAnchor: { ...source.navigator.edgeAnchor },
+      followViewport: source.navigator.followViewport,
     },
     floatingColorPickerLayout: {
       visible: source.floatingColorPicker.visible,

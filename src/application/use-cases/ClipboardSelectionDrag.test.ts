@@ -3,6 +3,7 @@ import { rgba } from "@/domain/canvas/PixelColor";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { createEmptyDrawingLayer } from "@/domain/layer/Layer";
 import { createEmptyProject } from "@/domain/project/Project";
+import { mutateActiveCanvas } from "@/domain/project/ProjectTestUtils";
 import { createSelectionFromFloating } from "@/application/use-cases/ClipboardUseCases";
 import {
   ensureActiveLayerContainsFloatingSelectionInProject,
@@ -46,9 +47,10 @@ describe("copy paste selection drag", () => {
 
   it("allows dragging after paste when layer is smaller than pasted bounds", async () => {
     const layer = createEmptyDrawingLayer({ width: 8, height: 8 });
-    const project = createEmptyProject("test", { width: 64, height: 64 });
-    project.canvas.layers = [layer];
-    project.canvas.activeLayerId = layer.id;
+    const project = mutateActiveCanvas(createEmptyProject("test", { width: 64, height: 64 }), {
+      layers: [layer],
+      activeLayerId: layer.id,
+    });
 
     const pixels = PixelGrid.createEmpty(3, 3);
     pixels.setPixel(1, 1, rgba(0, 255, 0, 255));

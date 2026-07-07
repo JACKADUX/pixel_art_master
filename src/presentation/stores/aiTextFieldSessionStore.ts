@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { loadAgentProfiles } from "@/application/use-cases/LoadAgentProfiles";
+import { loadFieldPromptConfigs } from "@/application/use-cases/LoadFieldPromptConfigs";
 import { saveAgentProfiles } from "@/application/use-cases/SaveAgentProfiles";
 import { saveFieldPromptConfigs } from "@/application/use-cases/SaveFieldPromptConfigs";
 import { agentProfileRepository } from "@/infrastructure/storage/FileAgentProfileRepository";
@@ -333,7 +335,7 @@ export const useAiTextFieldSessionStore = create<AiTextFieldSessionStore>((set, 
   };
 
   return {
-  profiles: [],
+  profiles: [...BUILT_IN_AGENT_PROFILES],
   fieldConfigs: {},
   fieldSessions: {},
 
@@ -363,7 +365,18 @@ export const useAiTextFieldSessionStore = create<AiTextFieldSessionStore>((set, 
   error: null,
   abortController: null,
 
-  init: () => {},
+  init: () => {
+    void (async () => {
+      const softwareDataPath = getActiveSoftwareDataPath();
+      if (!softwareDataPath) return;
+
+      const [profiles, fieldConfigs] = await Promise.all([
+        loadAgentProfiles(agentProfileRepository, softwareDataPath),
+        loadFieldPromptConfigs(fieldPromptConfigRepository, softwareDataPath),
+      ]);
+      set({ profiles, fieldConfigs });
+    })();
+  },
 
   hydrateUserData: (profiles, fieldConfigs) => set({ profiles, fieldConfigs }),
 

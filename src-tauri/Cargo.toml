@@ -33,4 +33,5 @@ base64 = "0.22"
 # 版本与 Tauri 内部使用的 webview2-com 保持一致，确保 ICoreWebView2Controller 类型兼容。
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
+windows-sys = { version = "0.59", features = ["Win32_UI_Input_KeyboardAndMouse"] }
 
