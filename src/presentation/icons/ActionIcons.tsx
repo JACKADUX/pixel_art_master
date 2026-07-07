@@ -1,5 +1,4 @@
 export {
-  ArrowDownTrayIcon,
   ArrowPathIcon,
   ArrowUpTrayIcon,
   ArrowsPointingOutIcon,
@@ -23,3 +22,5 @@ export {
   Squares2X2Icon,
   SwatchIcon,
 } from "@heroicons/react/24/outline";
+
+export { Save } from "lucide-react";

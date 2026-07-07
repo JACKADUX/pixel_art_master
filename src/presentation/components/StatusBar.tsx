@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
 import {
-  ArrowDownTrayIcon,
   ArrowUturnLeftIcon,
   ArrowUturnRightIcon,
+  Save,
 } from "../icons/ActionIcons";
 import { SHORTCUT_LABELS } from "../config/menuConfig";
 import { PomodoroTimer } from "./PomodoroTimer";
@@ -150,7 +150,7 @@ export function StatusBar() {
             title={`保存 (${SHORTCUT_LABELS.saveCurrentProject})`}
             onClick={handleSave}
           >
-            <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+            <Save className="h-3.5 w-3.5" />
           </StatusBarIconButton>
         </div>
       </div>

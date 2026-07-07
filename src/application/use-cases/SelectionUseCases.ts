@@ -91,9 +91,11 @@ export function createSelectionFromDrag(
 
   altKey: boolean,
 
+  ctrlKey = false,
+
 ): SelectionState {
 
-  const combineMode = resolveCombineMode(shiftKey, altKey);
+  const combineMode = resolveCombineMode(shiftKey, altKey, ctrlKey);
 
   const incoming =
 
@@ -127,9 +129,11 @@ export function createSelectionFromLasso(
 
   altKey: boolean,
 
+  ctrlKey = false,
+
 ): SelectionState {
 
-  const combineMode = resolveCombineMode(shiftKey, altKey);
+  const combineMode = resolveCombineMode(shiftKey, altKey, ctrlKey);
 
   const incoming = createLassoMask(points, canvasWidth, canvasHeight);
 
@@ -155,13 +159,15 @@ export function createSelectionFromMagicWand(
 
   altKey: boolean,
 
+  ctrlKey = false,
+
   project?: Project,
 
   getPixelCache?: (layerId: string, cropKey: string) => ReferenceLayerPixelData | null,
 
 ): SelectionState {
 
-  const combineMode = resolveCombineMode(shiftKey, altKey);
+  const combineMode = resolveCombineMode(shiftKey, altKey, ctrlKey);
 
   const targetColor =
     project && getPixelCache

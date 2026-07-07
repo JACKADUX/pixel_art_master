@@ -30,9 +30,12 @@ import { renderBrushStampPreview } from "@/infrastructure/canvas/BrushStampPrevi
 import { renderBrushLinePreview } from "@/infrastructure/canvas/BrushLinePreviewRenderer";
 import { renderPatternBrushPreview } from "@/infrastructure/canvas/PatternBrushPreviewRenderer";
 import {
+  hitTestTransformHandle,
   renderSelectionOverlay,
   renderTransformHandles,
+  type TransformHandle,
 } from "@/infrastructure/canvas/SelectionOverlayRenderer";
+import { getTransformHandleCursor } from "@/domain/selection/TransformHandleInteraction";
 import { renderSymmetryAxis } from "@/infrastructure/canvas/SymmetryAxisRenderer";
 import { renderTileOverlay } from "@/infrastructure/canvas/TileOverlayRenderer";
 import type { Point } from "@/domain/tool/ITool";
@@ -243,6 +246,7 @@ export function CanvasView() {
   const [shiftKeyHeld, setShiftKeyHeld] = useState(false);
   const [spaceKeyHeld, setSpaceKeyHeld] = useState(false);
   const [symmetryAxisHover, setSymmetryAxisHover] = useState<"horizontal" | "vertical" | null>(null);
+  const [transformHandleHover, setTransformHandleHover] = useState<TransformHandle | null>(null);
   const spaceKeyHeldRef = useRef(false);
   const [marchPhase, setMarchPhase] = useState(0);
   const marchFrameRef = useRef<number | null>(null);
@@ -804,6 +808,23 @@ export function CanvasView() {
     [symmetry, zoom],
   );
 
+  const resolveTransformHandleAtClient = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (
+        activeTool !== "transform" ||
+        !canvas ||
+        !selection ||
+        isSelectionEmpty(selection)
+      ) {
+        return null;
+      }
+      const floatPoint = clientToPixelFloat(clientX, clientY, canvas, zoom);
+      return hitTestTransformHandle(floatPoint, selection, zoom);
+    },
+    [activeTool, selection, zoom],
+  );
+
   const activeSymmetryAxisInteraction = symmetryAxisDrag ?? symmetryAxisHover;
 
   const symmetryCursorClass =
@@ -812,6 +833,22 @@ export function CanvasView() {
       : activeSymmetryAxisInteraction === "vertical"
         ? " cursor-row-resize"
         : "";
+
+  const activeTransformHandleInteraction =
+    selectionDrag?.mode === "transform"
+      ? (selectionDrag.transformHandle ?? null)
+      : transformHandleHover;
+  const transformCursor =
+    activeTool === "transform" && activeTransformHandleInteraction
+      ? getTransformHandleCursor(activeTransformHandleInteraction)
+      : undefined;
+  const transformCursorStyle =
+    !isPanning &&
+    !isAssetCaptureActive &&
+    !(altHeld && activeTool !== "select") &&
+    transformCursor
+      ? transformCursor
+      : undefined;
 
   const preventSpaceScroll = useCallback((e: KeyboardEvent | React.KeyboardEvent) => {
     if (isTextEntryElement(document.activeElement)) return;
@@ -840,6 +877,36 @@ export function CanvasView() {
       container.removeEventListener("mouseleave", handleLeave);
     };
   }, [symmetry, resolveSymmetryHitAtClient]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || activeTool !== "transform" || !selection) {
+      setTransformHandleHover(null);
+      return;
+    }
+
+    const handleMove = (e: MouseEvent) => {
+      if (isPanningRef.current || useAppStore.getState().selectionDrag?.mode === "transform") {
+        return;
+      }
+      setTransformHandleHover(resolveTransformHandleAtClient(e.clientX, e.clientY));
+    };
+
+    const handleLeave = () => setTransformHandleHover(null);
+
+    container.addEventListener("mousemove", handleMove);
+    container.addEventListener("mouseleave", handleLeave);
+    return () => {
+      container.removeEventListener("mousemove", handleMove);
+      container.removeEventListener("mouseleave", handleLeave);
+    };
+  }, [activeTool, selection, resolveTransformHandleAtClient]);
+
+  useEffect(() => {
+    if (activeTool !== "transform") {
+      setTransformHandleHover(null);
+    }
+  }, [activeTool]);
 
   useEffect(() => {
     if (!symmetryAxisDrag) return;
@@ -882,6 +949,7 @@ export function CanvasView() {
       pointerMove(drag.current, button, {
         shiftKey: e.shiftKey,
         altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
         spaceKey: true,
       });
     };
@@ -906,6 +974,7 @@ export function CanvasView() {
       pointerMove(drag.current, button, {
         shiftKey: e.shiftKey,
         altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
         spaceKey: false,
       });
     };
@@ -1430,9 +1499,10 @@ export function CanvasView() {
     const modifiers = {
       shiftKey: e.shiftKey,
       altKey: e.altKey,
+      ctrlKey: e.ctrlKey,
       spaceKey: spaceKeyHeldRef.current,
     };
-    if (e.altKey) {
+    if (e.altKey && activeTool !== "select") {
       void pickColorAt(point, colorSlotFromDrawingButton(button));
       return;
     }
@@ -1468,6 +1538,7 @@ export function CanvasView() {
     const modifiers = {
       shiftKey: e.shiftKey,
       altKey: e.altKey,
+      ctrlKey: e.ctrlKey,
       spaceKey: spaceKeyHeldRef.current,
     };
     if (activeTool === "select" || activeTool === "transform") {
@@ -1497,6 +1568,7 @@ export function CanvasView() {
     pointerUp(toPixel(e), button, {
       shiftKey: e.shiftKey,
       altKey: e.altKey,
+      ctrlKey: e.ctrlKey,
       spaceKey: spaceKeyHeldRef.current,
     });
   };
@@ -1508,6 +1580,7 @@ export function CanvasView() {
     pointerUp(toPixel(e), drawingButton ?? "primary", {
       shiftKey: e.shiftKey,
       altKey: e.altKey,
+      ctrlKey: e.ctrlKey,
       spaceKey: spaceKeyHeldRef.current,
     });
   };
@@ -1575,6 +1648,7 @@ export function CanvasView() {
       const modifiers = {
         shiftKey: e.shiftKey,
         altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
         spaceKey: spaceKeyHeldRef.current,
       };
 
@@ -1630,6 +1704,7 @@ export function CanvasView() {
       pointerUp(point, button, {
         shiftKey: e.shiftKey,
         altKey: e.altKey,
+        ctrlKey: e.ctrlKey,
         spaceKey: spaceKeyHeldRef.current,
       });
     };
@@ -1710,12 +1785,14 @@ export function CanvasView() {
         className={`relative min-h-0 min-w-0 flex-1 overflow-auto bg-zinc-800 outline-none${
           isPanning ? " cursor-grabbing" : isAssetCaptureActive ? " cursor-capture" : symmetryCursorClass
         }`}
+        style={transformCursorStyle ? { cursor: transformCursorStyle } : undefined}
         onMouseDown={handleContainerMouseDown}
         onKeyDown={preventSpaceScroll}
         onAuxClick={handleAuxClick}
         onMouseUp={stopPanning}
         onMouseLeave={() => {
           setHoverPoint(null);
+          setTransformHandleHover(null);
           stopPanning();
         }}
       >
@@ -1745,11 +1822,14 @@ export function CanvasView() {
                     ? " cursor-grabbing"
                     : isAssetCaptureActive
                       ? " cursor-capture"
-                      : altHeld
+                      : altHeld && activeTool !== "select"
                         ? " cursor-eyedropper"
                         : symmetryCursorClass || " cursor-crosshair"
                 }`}
-                style={{ imageRendering: "pixelated" }}
+                style={{
+                  imageRendering: "pixelated",
+                  ...(transformCursorStyle ? { cursor: transformCursorStyle } : {}),
+                }}
                 onMouseDown={handleMouseDown}
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}

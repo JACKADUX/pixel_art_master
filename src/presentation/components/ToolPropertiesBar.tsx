@@ -5,7 +5,6 @@ import type {
   SelectionMode,
   ShapeMode,
   ToolType,
-  TransformMode,
 } from "@/domain/tool/ToolType";
 import {
   MAX_CANVAS_RESIZE_STEP,
@@ -43,12 +42,6 @@ const SELECTION_MODES: { mode: SelectionMode; label: string }[] = [
   { mode: "ellipse", label: "椭圆选区" },
   { mode: "lasso", label: "套索" },
   { mode: "magicWand", label: "魔棒" },
-];
-
-const TRANSFORM_MODES: { mode: TransformMode; label: string }[] = [
-  { mode: "move", label: "移动" },
-  { mode: "scale", label: "缩放" },
-  { mode: "rotate", label: "旋转" },
 ];
 
 const BRUSH_SHAPES: { shape: BrushShape; label: string }[] = [
@@ -294,6 +287,14 @@ export function ToolPropertiesBar() {
             />
             <span className="w-6">{toolSettings.fillTolerance}</span>
           </label>
+          <label className="flex items-center gap-2 text-zinc-400">
+            <input
+              type="checkbox"
+              checked={toolSettings.fillContiguous}
+              onChange={(e) => setToolSettings({ fillContiguous: e.target.checked })}
+            />
+            连续区域
+          </label>
           <span className="text-zinc-500">点击区域进行填充 · 透明区域视为同色</span>
         </>
       )}
@@ -346,28 +347,9 @@ export function ToolPropertiesBar() {
               </label>
             </>
           )}
-          <span className="text-zinc-500">Shift 加选 / Alt 减选</span>
-        </>
-      )}
-
-      {activeTool === "transform" && (
-        <>
-          <label className="flex items-center gap-2 text-zinc-400">
-            模式
-            <span className="flex gap-1">
-              {TRANSFORM_MODES.map((item) => (
-                <SegmentedButton
-                  key={item.mode}
-                  active={toolSettings.transformMode === item.mode}
-                  title={item.label}
-                  onClick={() => setToolSettings({ transformMode: item.mode })}
-                >
-                  {item.label.slice(0, 1)}
-                </SegmentedButton>
-              ))}
-            </span>
-          </label>
-          <span className="text-zinc-500">拖拽手柄变换选区内容</span>
+          <span className="text-zinc-500">
+            Shift 加选 · Alt+Shift 减选 · Ctrl+Shift 交集
+          </span>
         </>
       )}
 

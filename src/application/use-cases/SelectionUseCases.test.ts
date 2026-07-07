@@ -12,6 +12,7 @@ import {
   invertSelection,
   moveFloatingSelection,
   commitFloatingSelection,
+  nudgeSelection,
   resolveSelectionForTransform,
 } from "@/application/use-cases/SelectionUseCases";
 import { createRectMask } from "@/domain/selection/SelectionMaskOperations";
@@ -87,6 +88,19 @@ describe("SelectionUseCases floating model", () => {
     expect(restoredGrid.getPixel(2, 2)).toBe(rgba(255, 0, 0));
     expect(restoredSelection.floating).toBeNull();
     expect(restoredGrid.getPixel(5, 5)).toBe(rgba(0, 255, 0));
+  });
+
+  it("nudge clears source pixels when selection is not yet floating", () => {
+    const grid = PixelGrid.createEmpty(8, 8);
+    grid.setPixel(2, 2, rgba(255, 0, 0));
+    const mask = createRectMask({ x: 2, y: 2 }, { x: 2, y: 2 }, 8, 8);
+    const state = createSelectionState(mask);
+
+    const { selection } = nudgeSelection(grid, state, 1, 0);
+
+    expect(grid.getPixel(2, 2)).toBe(TRANSPARENT);
+    expect(selection.floating?.offset).toEqual({ x: 3, y: 2 });
+    expect(selection.floating?.pixels.getPixel(0, 0)).toBe(rgba(255, 0, 0));
   });
 
   it("cut creates floating selection with cleared source", () => {

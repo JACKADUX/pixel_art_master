@@ -1,3 +1,5 @@
+import { TRANSPARENT } from "../canvas/PixelColor";
+import type { WritableCanvasSurface } from "../canvas/MaskedPixelGrid";
 import {
   createEmptyMask,
   type SelectionMask,
@@ -5,6 +7,45 @@ import {
 import { fillRectInMask } from "../selection/SelectionMaskOperations";
 import type { SelectionRect } from "../selection/SelectionRect";
 import { findTileCellAt, getAllTileCells, getTileCell, toLocalCoord } from "./TileRegion";
+
+export function regionHasVisiblePixels(
+  grid: WritableCanvasSurface,
+  region: SelectionRect,
+): boolean {
+  for (let y = 0; y < region.height; y++) {
+    for (let x = 0; x < region.width; x++) {
+      const pixel = grid.getPixel(region.x + x, region.y + y);
+      if (pixel !== TRANSPARENT && pixel !== 0) return true;
+    }
+  }
+  return false;
+}
+
+export function replicateTilePatternFromRegion(
+  grid: WritableCanvasSurface,
+  region: SelectionRect,
+): void {
+  const pattern: number[] = [];
+  for (let y = 0; y < region.height; y++) {
+    for (let x = 0; x < region.width; x++) {
+      pattern.push(grid.getPixel(region.x + x, region.y + y));
+    }
+  }
+
+  for (const cell of getAllTileCells(region)) {
+    let index = 0;
+    for (let dy = 0; dy < region.height; dy++) {
+      for (let dx = 0; dx < region.width; dx++) {
+        const wx = cell.x + dx;
+        const wy = cell.y + dy;
+        if (grid.inBounds(wx, wy)) {
+          grid.setPixel(wx, wy, pattern[index]!);
+        }
+        index++;
+      }
+    }
+  }
+}
 
 export function forEachTileReplicatedPoint(
   x: number,

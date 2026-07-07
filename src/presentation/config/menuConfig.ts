@@ -1,6 +1,5 @@
 import type { MenuGroup } from "../components/MenuDropdown";
 import {
-  ArrowDownTrayIcon,
   ArrowPathIcon,
   ArrowUpTrayIcon,
   ArrowUturnLeftIcon,
@@ -16,6 +15,7 @@ import {
   MapPinIcon,
   PhotoIcon,
   RectangleStackIcon,
+  Save,
   Squares2X2Icon,
   SwatchIcon,
 } from "../icons/ActionIcons";
@@ -102,7 +102,7 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
         {
           type: "action",
           label: "保存",
-          icon: ArrowDownTrayIcon,
+          icon: Save,
           shortcut: SHORTCUT_LABELS.saveCurrentProject,
           onClick: actions.saveCurrentProject,
         },

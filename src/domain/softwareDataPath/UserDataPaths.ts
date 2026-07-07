@@ -8,6 +8,8 @@ export const COMFY_PROMPT_PRESETS_FILE = "comfy-prompt-presets.json";
 export const IMAGE_EXPORT_PREFERENCES_FILE = "image-export-preferences.json";
 export const COLOR_EDIT_PREFERENCES_FILE = "color-edit-preferences.json";
 export const PIXEL_RESTORE_PREFERENCES_FILE = "pixel-restore-preferences.json";
+export const COLOR_VARIATION_ANALYSIS_PREFERENCES_FILE =
+  "color-variation-analysis-preferences.json";
 export const LLM_SETTINGS_FILE = "llm-settings.json";
 export const COMFYUI_SETTINGS_FILE = "comfyui-settings.json";
 export const COMFYUI_OUTPUT_TYPES_FILE = "comfyui-output-types.json";
@@ -58,6 +60,13 @@ export function buildColorEditPreferencesPath(softwareDataPath: string): string 
 
 export function buildPixelRestorePreferencesPath(softwareDataPath: string): string {
   return joinPath(buildUserDataRoot(softwareDataPath), PIXEL_RESTORE_PREFERENCES_FILE);
+}
+
+export function buildColorVariationAnalysisPreferencesPath(softwareDataPath: string): string {
+  return joinPath(
+    buildUserDataRoot(softwareDataPath),
+    COLOR_VARIATION_ANALYSIS_PREFERENCES_FILE,
+  );
 }
 
 export function buildLlmSettingsPath(softwareDataPath: string): string {

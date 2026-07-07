@@ -18,6 +18,7 @@ import {
   handleSelectPointerMove,
   handleSelectPointerUp,
   handleTransformPointerDown,
+  handleTransformPointerMove,
   handleTransformPointerUp,
   resolveLayerPositionFromDrag,
 } from "@/presentation/controllers/canvasInteraction";
@@ -60,7 +61,7 @@ describe("handleSelectPointerUp blank click", () => {
         mode: "create",
       },
       lassoPoints: [],
-      modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+      modifiers: { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false },
       historyStack,
       grid,
     });
@@ -92,7 +93,7 @@ describe("handleSelectPointerUp blank click", () => {
         mode: "create",
       },
       lassoPoints: [],
-      modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+      modifiers: { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false },
       historyStack,
       grid,
     });
@@ -126,7 +127,7 @@ describe("handleSelectPointerMove create offset", () => {
       selectionDrag,
       lassoPoints: [],
       grid,
-      modifiers: { shiftKey: false, altKey: false, spaceKey: true },
+      modifiers: { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: true },
       historyStack,
     });
 
@@ -145,7 +146,7 @@ describe("handleSelectPointerMove create offset", () => {
       selectionDrag: withOffset.selectionDrag,
       lassoPoints: [],
       grid,
-      modifiers: { shiftKey: false, altKey: false, spaceKey: true },
+      modifiers: { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: true },
       historyStack,
     });
 
@@ -166,7 +167,7 @@ describe("handleSelectPointerMove create offset", () => {
       selectionDrag: moved.selectionDrag,
       lassoPoints: [],
       grid,
-      modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+      modifiers: { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false },
       historyStack,
     });
 
@@ -196,6 +197,7 @@ describe("handleTransformPointerDown layer position", () => {
       selection: null,
       historyStack,
       transformMode: "move",
+      zoom: 1,
     });
 
     expect(down.selectionDrag?.mode).toBe("layerPosition");
@@ -218,6 +220,7 @@ describe("handleTransformPointerDown layer position", () => {
       selection: null,
       historyStack,
       transformMode: "move",
+      zoom: 1,
     });
 
     expect(down.selectionDrag).toBeNull();
@@ -236,6 +239,7 @@ describe("handleTransformPointerDown layer position", () => {
       selection: null,
       historyStack,
       transformMode: "scale",
+      zoom: 1,
     });
 
     expect(down.selectionDrag).toBeNull();
@@ -255,6 +259,7 @@ describe("handleTransformPointerDown layer position", () => {
       selection: null,
       historyStack,
       transformMode: "move",
+      zoom: 1,
     });
 
     const nextPosition = resolveLayerPositionFromDrag(down.selectionDrag!, { x: 3, y: 1 });
@@ -288,5 +293,62 @@ describe("handleTransformPointerDown layer position", () => {
 
     const moved = moveDrawingLayerInProject(project, activeLayer.id, { x: 2, y: 0 });
     expect(moved).toBeNull();
+  });
+});
+
+describe("handleTransformPointerDown selection handles", () => {
+  it("starts resizing from an edge segment away from the old center handle", () => {
+    const project = createEmptyProject("test", { width: 32, height: 32 });
+    const grid = canvasSurface(32, 32);
+    const mask = createRectMask({ x: 4, y: 4 }, { x: 23, y: 13 }, 32, 32);
+    const selection = createSelectionState(mask);
+    const historyStack = new HistoryStack();
+
+    const down = handleTransformPointerDown({
+      project,
+      grid,
+      point: { x: 8, y: 4 },
+      selection,
+      historyStack,
+      transformMode: "scale",
+      zoom: 1,
+    });
+
+    expect(down.selectionDrag?.mode).toBe("transform");
+    expect(down.selectionDrag?.transformHandle).toBe("top");
+  });
+
+  it("keeps the rotated floating selection centered while dragging the rotate handle", () => {
+    const project = createEmptyProject("test", { width: 16, height: 16 });
+    const grid = canvasSurface(16, 16);
+    grid.setPixel(2, 2, rgba(255, 0, 0));
+    grid.setPixel(3, 2, rgba(0, 255, 0));
+    const mask = createRectMask({ x: 2, y: 2 }, { x: 3, y: 2 }, 16, 16);
+    const selection = createSelectionState(mask);
+    const historyStack = new HistoryStack();
+
+    const down = handleTransformPointerDown({
+      project,
+      grid,
+      point: { x: 3, y: -18 },
+      selection,
+      historyStack,
+      transformMode: "rotate",
+      zoom: 1,
+    });
+    expect(down.selectionDrag?.transformHandle).toBe("rotate");
+
+    const moved = handleTransformPointerMove({
+      point: { x: 23, y: 2.5 },
+      selection: down.selection!,
+      selectionDrag: down.selectionDrag!,
+      grid,
+      shiftKey: true,
+      altKey: false,
+    });
+
+    expect(moved.selection.floating?.pixels.width).toBe(1);
+    expect(moved.selection.floating?.pixels.height).toBe(2);
+    expect(moved.selection.floating?.offset).toEqual({ x: 3, y: 2 });
   });
 });

@@ -85,6 +85,14 @@ export function unwrapHueForChart(hues: number[]): number[] {
   return unwrapped;
 }
 
+/** 色相最短路径差值（度），例如 350°→10° 为 +20°。 */
+export function shortestHueDelta(fromDeg: number, toDeg: number): number {
+  let delta = toDeg - fromDeg;
+  while (delta > 180) delta -= 360;
+  while (delta < -180) delta += 360;
+  return delta;
+}
+
 export function analyzeColorVariation(entries: ColorEntry[]): ColorVariationSeries {
   if (entries.length === 0) {
     return { points: [] };

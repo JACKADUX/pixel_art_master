@@ -298,6 +298,8 @@ function parseToolSettings(value: unknown): ToolSettings {
     fillTolerance: clampFillTolerance(
       typeof value.fillTolerance === "number" ? value.fillTolerance : defaults.fillTolerance,
     ),
+    fillContiguous:
+      typeof value.fillContiguous === "boolean" ? value.fillContiguous : defaults.fillContiguous,
     selectionMode,
     magicWandTolerance: clampMagicWandTolerance(
       typeof value.magicWandTolerance === "number"

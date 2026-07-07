@@ -20,10 +20,24 @@ export class FillTool implements ITool {
     if (ctx.selectionMask && !isMaskSelected(ctx.selectionMask, point.x, point.y)) return;
 
     const tolerance = ctx.settings.fillTolerance;
+    const contiguous = ctx.settings.fillContiguous;
     const target = ctx.grid.getPixel(point.x, point.y);
     if (fillColorMatches(target, ctx.color, tolerance)) return;
 
-    const queue: Point[] = [point];
+    if (contiguous) {
+      this.fillContiguous(ctx, point, target, tolerance);
+    } else {
+      this.fillNonContiguous(ctx, target, tolerance);
+    }
+  }
+
+  private fillContiguous(
+    ctx: ToolContext,
+    seed: Point,
+    target: PixelColor,
+    tolerance: number,
+  ): void {
+    const queue: Point[] = [seed];
     const visited = new Set<string>();
 
     while (queue.length > 0) {
@@ -43,6 +57,16 @@ export class FillTool implements ITool {
         { x: current.x, y: current.y + 1 },
         { x: current.x, y: current.y - 1 },
       );
+    }
+  }
+
+  private fillNonContiguous(ctx: ToolContext, target: PixelColor, tolerance: number): void {
+    for (let y = 0; y < ctx.grid.height; y++) {
+      for (let x = 0; x < ctx.grid.width; x++) {
+        if (ctx.selectionMask && !isMaskSelected(ctx.selectionMask, x, y)) continue;
+        if (!fillColorMatches(ctx.grid.getPixel(x, y), target, tolerance)) continue;
+        ctx.grid.setPixel(x, y, ctx.color);
+      }
     }
   }
 

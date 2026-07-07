@@ -4,6 +4,11 @@ import { isMaskSelected } from "@/domain/selection/SelectionMask";
 import type { SelectionRect } from "@/domain/selection/SelectionRect";
 import type { SelectionState } from "@/domain/selection/SelectionState";
 import { getEffectiveBounds } from "@/domain/selection/SelectionState";
+import {
+  hitTestTransformHandleAtBounds,
+  TRANSFORM_HANDLE_SIZE,
+  type TransformHandle,
+} from "@/domain/selection/TransformHandleInteraction";
 
 const MARCH_COLOR = "#ffffff";
 const MARCH_SHADOW = "#000000";
@@ -144,17 +149,7 @@ function drawMarchLine(
   ctx.setLineDash([]);
 }
 
-export type TransformHandle =
-  | "topLeft"
-  | "top"
-  | "topRight"
-  | "right"
-  | "bottomRight"
-  | "bottom"
-  | "bottomLeft"
-  | "left"
-  | "rotate"
-  | "move";
+export type { TransformHandle };
 
 export interface TransformOverlayOptions {
   selection: SelectionState;
@@ -162,7 +157,7 @@ export interface TransformOverlayOptions {
   phase: number;
 }
 
-const HANDLE_SIZE = 6;
+const HANDLE_SIZE = TRANSFORM_HANDLE_SIZE;
 
 export function renderTransformHandles(
   ctx: CanvasRenderingContext2D,
@@ -182,13 +177,9 @@ export function renderTransformHandles(
 
   const handles: Array<{ hx: number; hy: number }> = [
     { hx: x, hy: y },
-    { hx: x + w / 2, hy: y },
     { hx: x + w, hy: y },
-    { hx: x + w, hy: y + h / 2 },
     { hx: x + w, hy: y + h },
-    { hx: x + w / 2, hy: y + h },
     { hx: x, hy: y + h },
-    { hx: x, hy: y + h / 2 },
   ];
 
   for (const handle of handles) {
@@ -232,41 +223,5 @@ export function hitTestTransformHandle(
   const bounds = getEffectiveBounds(selection);
   if (bounds.width <= 0 || bounds.height <= 0) return null;
 
-  const x = bounds.x;
-  const y = bounds.y;
-  const w = bounds.width;
-  const h = bounds.height;
-  const threshold = Math.max(1, Math.ceil(HANDLE_SIZE / zoom / 2));
-
-  const handles: Array<{ id: TransformHandle; hx: number; hy: number }> = [
-    { id: "topLeft", hx: x, hy: y },
-    { id: "top", hx: x + w / 2, hy: y },
-    { id: "topRight", hx: x + w, hy: y },
-    { id: "right", hx: x + w, hy: y + h / 2 },
-    { id: "bottomRight", hx: x + w, hy: y + h },
-    { id: "bottom", hx: x + w / 2, hy: y + h },
-    { id: "bottomLeft", hx: x, hy: y + h },
-    { id: "left", hx: x, hy: y + h / 2 },
-    { id: "rotate", hx: x + w / 2, hy: y - Math.round(20 / zoom) },
-  ];
-
-  for (const handle of handles) {
-    if (
-      Math.abs(point.x - handle.hx) <= threshold &&
-      Math.abs(point.y - handle.hy) <= threshold
-    ) {
-      return handle.id;
-    }
-  }
-
-  if (
-    point.x >= x &&
-    point.x < x + w &&
-    point.y >= y &&
-    point.y < y + h
-  ) {
-    return "move";
-  }
-
-  return null;
+  return hitTestTransformHandleAtBounds(point, bounds, zoom);
 }

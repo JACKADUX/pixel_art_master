@@ -24,6 +24,7 @@ describe("ExportImageOperations", () => {
     it("joins directory, sanitized name and extension", () => {
       expect(buildExportFilePath("/tmp", "my project", "png")).toBe("/tmp/my project.png");
       expect(buildExportFilePath("C:\\out", "test", "webp")).toBe("C:\\out\\test.webp");
+      expect(buildExportFilePath("C:\\out", "test", "jpg")).toBe("C:\\out\\test.jpg");
     });
   });
 

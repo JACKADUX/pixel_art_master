@@ -65,6 +65,7 @@ export interface ToolSettings {
   shapeMode: ShapeMode;
   shapeFilled: boolean;
   fillTolerance: number;
+  fillContiguous: boolean;
   selectionMode: SelectionMode;
   magicWandTolerance: number;
   magicWandContiguous: boolean;
@@ -83,6 +84,7 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
   shapeMode: "rectangle",
   shapeFilled: false,
   fillTolerance: 0,
+  fillContiguous: true,
   selectionMode: "rectangle",
   magicWandTolerance: 0,
   magicWandContiguous: true,

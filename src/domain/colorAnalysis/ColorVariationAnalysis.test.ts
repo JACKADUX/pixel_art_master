@@ -5,6 +5,7 @@ import {
   analyzeColorVariation,
   normalizeOklchForChart,
   parseColorListInput,
+  shortestHueDelta,
   unwrapHueForChart,
 } from "./ColorVariationAnalysis";
 
@@ -50,6 +51,18 @@ describe("unwrapHueForChart", () => {
 
   it("returns empty array for empty input", () => {
     expect(unwrapHueForChart([])).toEqual([]);
+  });
+});
+
+describe("shortestHueDelta", () => {
+  it("returns shortest path across 360° wrap", () => {
+    expect(shortestHueDelta(350, 10)).toBe(20);
+    expect(shortestHueDelta(10, 350)).toBe(-20);
+  });
+
+  it("returns direct difference within half circle", () => {
+    expect(shortestHueDelta(30, 90)).toBe(60);
+    expect(shortestHueDelta(90, 30)).toBe(-60);
   });
 });
 

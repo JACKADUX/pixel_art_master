@@ -349,6 +349,7 @@ export function ReferenceLayerOverlay({
         {
           shiftKey: e.shiftKey,
           altKey: e.altKey,
+          ctrlKey: e.ctrlKey,
           spaceKey: spaceKeyHeldRef.current,
         },
       );
@@ -560,7 +561,7 @@ export function ReferenceLayerOverlay({
           className={`block${
             isDragging
               ? " cursor-grabbing"
-              : altHeld
+              : altHeld && !selectionToolActive
                 ? " cursor-eyedropper"
                 : selectionToolActive
                   ? " cursor-crosshair"

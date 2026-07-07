@@ -150,6 +150,7 @@ import {
 import { resolveColorAtCanvasPointAsync } from "@/application/use-cases/PickColorAtPoint";
 import { loadAppSettings } from "@/application/use-cases/LoadAppSettings";
 import { loadEditorPreferences } from "@/application/use-cases/LoadEditorPreferences";
+import { loadColorVariationAnalysisPreferences } from "@/application/use-cases/LoadColorVariationAnalysisPreferences";
 import { exportImage } from "@/application/use-cases/ExportImageUseCases";
 import { loadProject } from "@/application/use-cases/LoadProject";
 import { createBlankProjectWithPreferences } from "@/application/use-cases/CanvasSizePreferences";
@@ -350,6 +351,7 @@ import {
   type PalettePresetSliceState,
 } from "@/presentation/stores/palettePresetSlice";
 import { editorPreferencesRepository } from "@/infrastructure/storage/FileEditorPreferencesRepository";
+import { colorVariationAnalysisPreferencesRepository } from "@/infrastructure/storage/FileColorVariationAnalysisPreferencesRepository";
 import { appSettingsRepository } from "@/infrastructure/storage/FileAppSettingsRepository";
 import { llmSettingsRepository } from "@/infrastructure/storage/FileLlmSettingsRepository";
 import { palettePresetRepository } from "@/infrastructure/storage/FilePalettePresetRepository";
@@ -704,19 +706,19 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   pointerDown: (
     point: Point,
     button: DrawingButton,
-    modifiers?: { shiftKey: boolean; altKey: boolean; spaceKey: boolean },
+    modifiers?: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; spaceKey: boolean },
   ) => void;
 
   pointerMove: (
     point: Point,
     button: DrawingButton,
-    modifiers?: { shiftKey: boolean; altKey: boolean; spaceKey: boolean },
+    modifiers?: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; spaceKey: boolean },
   ) => void;
 
   pointerUp: (
     point: Point,
     button: DrawingButton,
-    modifiers?: { shiftKey: boolean; altKey: boolean; spaceKey: boolean },
+    modifiers?: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; spaceKey: boolean },
   ) => void;
 
   undo: () => void;
@@ -1293,17 +1295,24 @@ export const useAppStore = create<AppState>((set, get) => {
     if (softwareDataPath) {
       await migrateUserDataFromLocalStorage(softwareDataPath);
 
-      const [prefs, appSettings, imageExportRaw, alwaysOnTop] = await Promise.all([
+      const [prefs, appSettings, imageExportRaw, alwaysOnTop, colorVariationPrefs] =
+        await Promise.all([
         loadEditorPreferences(editorPreferencesRepository, softwareDataPath),
         loadAppSettings(appSettingsRepository, softwareDataPath),
         imageExportPreferencesRepository.load(softwareDataPath),
         windowService.getStoredPreference(softwareDataPath),
+        loadColorVariationAnalysisPreferences(
+          colorVariationAnalysisPreferencesRepository,
+          softwareDataPath,
+        ),
       ]);
 
       set({
         appSettings,
         imageExportPreferences: parseImageExportPreferences(imageExportRaw),
       });
+
+      useColorVariationAnalysisStore.getState().hydratePreferences(colorVariationPrefs);
 
       if (prefs) {
 
@@ -1705,7 +1714,7 @@ export const useAppStore = create<AppState>((set, get) => {
           selection: state.selection,
           selectionDrag: state.selectionDrag,
           lassoPoints: state.lassoPoints,
-          modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+          modifiers: { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false },
           historyStack: state.historyStack,
           grid,
         });
@@ -2799,7 +2808,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  pointerDown: (point, button, modifiers = { shiftKey: false, altKey: false, spaceKey: false }) => {
+  pointerDown: (point, button, modifiers = { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false }) => {
 
     const {
       project,
@@ -2859,6 +2868,7 @@ export const useAppStore = create<AppState>((set, get) => {
         selection,
         historyStack,
         transformMode: toolSettings.transformMode,
+        zoom: get().zoom,
       });
       if (result.grid) get().syncActiveLayer(result.grid);
       set({
@@ -2993,7 +3003,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  pointerMove: (point, button, modifiers = { shiftKey: false, altKey: false, spaceKey: false }) => {
+  pointerMove: (point, button, modifiers = { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false }) => {
 
     const {
       project,
@@ -3164,7 +3174,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
 
 
-  pointerUp: (point, button, modifiers = { shiftKey: false, altKey: false, spaceKey: false }) => {
+  pointerUp: (point, button, modifiers = { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false }) => {
 
     const {
       project,
@@ -3242,6 +3252,9 @@ export const useAppStore = create<AppState>((set, get) => {
 
       if (tileSession.phase === "creating" && tileCreateDrag) {
         const { session, previewRect } = handleTileCreatePointerUp(grid, tileCreateDrag, point);
+        if (session.phase === "drawing") {
+          get().syncActiveLayer(grid);
+        }
         set({
           tileSession: session,
           tilePreviewRect: previewRect,
@@ -3526,13 +3539,14 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!project || !selection || isSelectionEmpty(selection)) return;
     const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
-    if (!selection.floating) {
+    const wasFloating = selection.floating != null;
+    if (!wasFloating) {
       pushHistory(historyStack, project, selection);
     }
     const result = nudgeSelection(grid, selection, dx, dy);
     const expandedProject = withFloatingSelectionLayerExpand(project, result.selection);
-    if (result.grid !== grid) {
-      get().syncActiveLayer(result.grid);
+    if (!wasFloating) {
+      get().syncActiveLayer(grid);
     }
     set({
       ...(expandedProject !== project ? { project: expandedProject } : {}),
@@ -4432,6 +4446,7 @@ export const useAppStore = create<AppState>((set, get) => {
     if (selection.floating) {
       get().commitSelection();
     }
+    get().deselectCanvas();
     toast.info(`已发送 ${entries.length} 个颜色到颜色变化分析`);
   },
 

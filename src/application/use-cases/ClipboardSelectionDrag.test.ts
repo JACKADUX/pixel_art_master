@@ -83,7 +83,7 @@ describe("copy paste selection drag", () => {
       point: clickPoint,
       settings: DEFAULT_TOOL_SETTINGS,
       selection: pasted,
-      modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+      modifiers: { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false },
       historyStack,
     });
 
@@ -97,7 +97,7 @@ describe("copy paste selection drag", () => {
       selectionDrag: down.selectionDrag!,
       lassoPoints: [],
       grid: surface,
-      modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+      modifiers: { shiftKey: false, altKey: false, ctrlKey: false, spaceKey: false },
       historyStack,
     });
 

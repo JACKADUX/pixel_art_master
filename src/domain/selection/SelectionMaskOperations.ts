@@ -259,12 +259,14 @@ export function extractMaskedRegionAsGrid(
   return result;
 }
 
+/** Aseprite 风格：Shift 加选、Alt+Shift 减选、Ctrl+Shift 交集。 */
 export function resolveCombineMode(
   shiftKey: boolean,
   altKey: boolean,
+  ctrlKey = false,
 ): SelectionCombineMode {
-  if (shiftKey && altKey) return "intersect";
+  if (ctrlKey && shiftKey) return "intersect";
+  if (shiftKey && altKey) return "subtract";
   if (shiftKey) return "add";
-  if (altKey) return "subtract";
   return "new";
 }

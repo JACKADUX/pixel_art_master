@@ -1,5 +1,5 @@
 export type ImageExportScope = "project" | "layer" | "selection";
-export type ImageExportFormat = "png" | "webp";
+export type ImageExportFormat = "png" | "webp" | "jpg";
 export type ImageExportScalePreset = "original" | "256" | "512" | "1024" | "custom";
 
 export interface ImageExportPreferences {
@@ -24,7 +24,7 @@ export const DEFAULT_IMAGE_EXPORT_PREFERENCES: ImageExportPreferences = {
 };
 
 const SCOPES: ImageExportScope[] = ["project", "layer", "selection"];
-const FORMATS: ImageExportFormat[] = ["png", "webp"];
+const FORMATS: ImageExportFormat[] = ["png", "webp", "jpg"];
 const SCALE_PRESETS: ImageExportScalePreset[] = [
   "original",
   "256",
@@ -67,5 +67,12 @@ export function parseImageExportPreferences(raw: unknown): ImageExportPreference
 }
 
 export function getImageExportExtension(format: ImageExportFormat): string {
-  return format === "webp" ? "webp" : "png";
+  switch (format) {
+    case "webp":
+      return "webp";
+    case "jpg":
+      return "jpg";
+    default:
+      return "png";
+  }
 }

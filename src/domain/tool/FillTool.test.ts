@@ -82,4 +82,42 @@ describe("FillTool", () => {
     expect(grid.getPixel(1, 0)).toBe(red);
     expect(grid.getPixel(2, 0)).toBe(rgba(200, 100, 100));
   });
+
+  it("fills only contiguous pixels when fillContiguous is true", () => {
+    const gray = rgba(100, 100, 100);
+    const blue = rgba(0, 0, 255);
+    const grid = PixelGrid.createEmpty(3, 1);
+    grid.setPixel(0, 0, gray);
+    grid.setPixel(1, 0, blue);
+    grid.setPixel(2, 0, gray);
+
+    const red = rgba(255, 0, 0);
+    tool.onPointerDown(
+      makeContext(grid, red, { settings: { ...DEFAULT_TOOL_SETTINGS, fillContiguous: true } }),
+      { x: 0, y: 0 },
+    );
+
+    expect(grid.getPixel(0, 0)).toBe(red);
+    expect(grid.getPixel(1, 0)).toBe(blue);
+    expect(grid.getPixel(2, 0)).toBe(gray);
+  });
+
+  it("fills all matching pixels when fillContiguous is false", () => {
+    const gray = rgba(100, 100, 100);
+    const blue = rgba(0, 0, 255);
+    const grid = PixelGrid.createEmpty(3, 1);
+    grid.setPixel(0, 0, gray);
+    grid.setPixel(1, 0, blue);
+    grid.setPixel(2, 0, gray);
+
+    const red = rgba(255, 0, 0);
+    tool.onPointerDown(
+      makeContext(grid, red, { settings: { ...DEFAULT_TOOL_SETTINGS, fillContiguous: false } }),
+      { x: 0, y: 0 },
+    );
+
+    expect(grid.getPixel(0, 0)).toBe(red);
+    expect(grid.getPixel(1, 0)).toBe(blue);
+    expect(grid.getPixel(2, 0)).toBe(red);
+  });
 });

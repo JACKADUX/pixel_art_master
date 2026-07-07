@@ -149,7 +149,7 @@ export function ExportImageModal() {
       <div className="w-[28rem] max-w-[92vw] rounded-lg border border-zinc-600 bg-zinc-900 p-5 shadow-xl">
         <h3 className="mb-1 text-sm font-semibold text-zinc-100">导出为图片</h3>
         <p className="mb-4 text-xs text-zinc-500">
-          将像素画导出为 PNG 或 WebP 文件，支持按最长边放大。
+          将像素画导出为 PNG、WebP 或 JPG 文件，支持按最长边放大。
         </p>
 
         <div className="mb-4 flex flex-col gap-3">
@@ -185,6 +185,7 @@ export function ExportImageModal() {
             >
               <option value="png">PNG</option>
               <option value="webp">WebP</option>
+              <option value="jpg">JPG</option>
             </select>
           </label>
 

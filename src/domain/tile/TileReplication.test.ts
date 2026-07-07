@@ -5,6 +5,8 @@ import {
   createTileCellMask,
   createTileUnionMask,
   forEachTileReplicatedPoint,
+  regionHasVisiblePixels,
+  replicateTilePatternFromRegion,
 } from "./TileReplication";
 import {
   findTileCellAt,
@@ -83,5 +85,31 @@ describe("TileReplication", () => {
     expect(grid.getPixel(7, 11)).toBe(color);
     expect(grid.getPixel(15, 14)).toBe(color);
     expect(grid.getPixel(0, 0)).toBe(0);
+  });
+
+  it("detects visible pixels in region", () => {
+    const grid = PixelGrid.createEmpty(32, 32);
+    expect(regionHasVisiblePixels(grid, region)).toBe(false);
+
+    grid.setPixel(11, 11, rgba(255, 0, 0, 255));
+    expect(regionHasVisiblePixels(grid, region)).toBe(true);
+  });
+
+  it("replicates existing region pixels to all tile cells", () => {
+    const grid = PixelGrid.createEmpty(32, 32);
+    const red = rgba(255, 0, 0, 255);
+    const blue = rgba(0, 0, 255, 255);
+
+    grid.setPixel(11, 11, red);
+    grid.setPixel(12, 11, blue);
+
+    replicateTilePatternFromRegion(grid, region);
+
+    expect(grid.getPixel(11, 11)).toBe(red);
+    expect(grid.getPixel(12, 11)).toBe(blue);
+    expect(grid.getPixel(7, 11)).toBe(red);
+    expect(grid.getPixel(8, 11)).toBe(blue);
+    expect(grid.getPixel(15, 14)).toBe(red);
+    expect(grid.getPixel(16, 14)).toBe(blue);
   });
 });

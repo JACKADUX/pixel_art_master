@@ -1,8 +1,17 @@
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
 import type { ImageExportFormat } from "@/domain/export/ImageExportPreferences";
 
+const JPEG_EXPORT_QUALITY = 0.92;
+
 function getMimeType(format: ImageExportFormat): string {
-  return format === "webp" ? "image/webp" : "image/png";
+  switch (format) {
+    case "webp":
+      return "image/webp";
+    case "jpg":
+      return "image/jpeg";
+    default:
+      return "image/png";
+  }
 }
 
 export function pixelGridToImageBlob(
@@ -22,12 +31,15 @@ export function pixelGridToImageBlob(
     const imageData = ctx.createImageData(grid.width, grid.height);
     imageData.data.set(grid.toRgba());
     ctx.putImageData(imageData, 0, 0);
+    const mimeType = getMimeType(format);
+    const quality = format === "jpg" ? JPEG_EXPORT_QUALITY : undefined;
     canvas.toBlob(
       (blob) => {
         if (blob) resolve(blob);
         else reject(new Error(`Failed to create ${format.toUpperCase()} blob`));
       },
-      getMimeType(format),
+      mimeType,
+      quality,
     );
   });
 }

@@ -44,3 +44,14 @@ export const COLOR_VARIATION_CHART_SORT_OPTIONS: ReadonlyArray<{
   { id: "chroma", label: "饱和度" },
   { id: "hue", label: "色相" },
 ];
+
+const CHART_SORT_MODES = new Set<ColorVariationChartSortMode>(
+  COLOR_VARIATION_CHART_SORT_OPTIONS.map((option) => option.id),
+);
+
+export function parseColorVariationChartSortMode(raw: unknown): ColorVariationChartSortMode {
+  if (typeof raw === "string" && CHART_SORT_MODES.has(raw as ColorVariationChartSortMode)) {
+    return raw as ColorVariationChartSortMode;
+  }
+  return "lightness";
+}

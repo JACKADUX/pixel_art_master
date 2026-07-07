@@ -4,10 +4,10 @@ import {
   formatChartPercentLabel,
 } from "@/domain/colorAnalysis/ColorVariationChartLayout";
 import type { ColorVariationPoint } from "@/domain/colorAnalysis/ColorVariationAnalysis";
+import { shortestHueDelta } from "@/domain/colorAnalysis/ColorVariationAnalysis";
 import {
   COLOR_VARIATION_CHART_SORT_OPTIONS,
   sortColorVariationPointsForChart,
-  type ColorVariationChartSortMode,
 } from "@/domain/colorAnalysis/ColorVariationChartSort";
 import {
   useColorVariationAnalysisStore,
@@ -141,16 +141,12 @@ function buildChannelDeltaRows(
       label: "H",
       value: `${formatChartPercentLabel(point.normalized.h)} · ${Math.round(point.oklch.h)}°`,
       leftDelta: formatSignedDelta(
-        prev === undefined
-          ? null
-          : point.normalized.h - prev.normalized.h,
-        "%",
+        prev === undefined ? null : shortestHueDelta(prev.oklch.h, point.oklch.h),
+        "°",
       ),
       rightDelta: formatSignedDelta(
-        next === undefined
-          ? null
-          : next.normalized.h - point.normalized.h,
-        "%",
+        next === undefined ? null : shortestHueDelta(point.oklch.h, next.oklch.h),
+        "°",
       ),
     });
   }
@@ -167,19 +163,20 @@ export function ColorVariationChart({ points }: ColorVariationChartProps) {
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
-  const [sortMode, setSortMode] = useState<ColorVariationChartSortMode>("list");
+  const chartSortMode = useColorVariationAnalysisStore((s) => s.chartSortMode);
+  const setChartSortMode = useColorVariationAnalysisStore((s) => s.setChartSortMode);
   const visibleChannels = useColorVariationAnalysisStore((s) => s.visibleChannels);
   const toggleChannel = useColorVariationAnalysisStore((s) => s.toggleChannel);
 
   const chartPoints = useMemo(
-    () => sortColorVariationPointsForChart(points, sortMode),
-    [points, sortMode],
+    () => sortColorVariationPointsForChart(points, chartSortMode),
+    [points, chartSortMode],
   );
 
   useEffect(() => {
     setHoveredIndex(null);
     setMousePos(null);
-  }, [sortMode, points]);
+  }, [chartSortMode, points]);
 
   useEffect(() => {
     const chartArea = chartAreaRef.current;
@@ -267,9 +264,9 @@ export function ColorVariationChart({ points }: ColorVariationChartProps) {
             <button
               key={option.id}
               type="button"
-              onClick={() => setSortMode(option.id)}
+              onClick={() => setChartSortMode(option.id)}
               className={`rounded px-2 py-1 text-[10px] transition ${
-                sortMode === option.id
+                chartSortMode === option.id
                   ? "bg-blue-600 text-white"
                   : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200"
               }`}

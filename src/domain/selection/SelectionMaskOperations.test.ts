@@ -6,6 +6,7 @@ import {
   createMaskFromOpaquePixels,
   createRectMask,
   invertMask,
+  resolveCombineMode,
 } from "@/domain/selection/SelectionMaskOperations";
 import { isMaskSelected } from "@/domain/selection/SelectionMask";
 
@@ -41,5 +42,22 @@ describe("SelectionMaskOperations", () => {
     expect(isMaskSelected(mask, 1, 1)).toBe(true);
     expect(isMaskSelected(mask, 2, 2)).toBe(true);
     expect(isMaskSelected(mask, 0, 0)).toBe(false);
+  });
+
+  it("resolves combine modes like Aseprite", () => {
+    expect(resolveCombineMode(false, false, false)).toBe("new");
+    expect(resolveCombineMode(true, false, false)).toBe("add");
+    expect(resolveCombineMode(true, true, false)).toBe("subtract");
+    expect(resolveCombineMode(true, false, true)).toBe("intersect");
+    expect(resolveCombineMode(false, true, false)).toBe("new");
+  });
+
+  it("combines masks with intersect mode", () => {
+    const a = createRectMask({ x: 0, y: 0 }, { x: 2, y: 2 }, 4, 4);
+    const b = createRectMask({ x: 1, y: 1 }, { x: 3, y: 3 }, 4, 4);
+    const combined = combineMasks(a, b, "intersect");
+    expect(isMaskSelected(combined, 1, 1)).toBe(true);
+    expect(isMaskSelected(combined, 0, 0)).toBe(false);
+    expect(isMaskSelected(combined, 3, 3)).toBe(false);
   });
 });

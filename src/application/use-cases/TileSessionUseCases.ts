@@ -6,6 +6,10 @@ import {
   finalizeTileSession,
   type TileSessionState,
 } from "@/domain/tile/TileSession";
+import {
+  regionHasVisiblePixels,
+  replicateTilePatternFromRegion,
+} from "@/domain/tile/TileReplication";
 import type { Point } from "@/domain/tool/ITool";
 
 export function beginTileRegionCreate(): Pick<TileSessionState, "phase"> {
@@ -24,10 +28,16 @@ export function confirmTileRegion(
     return createIdleTileSession();
   }
 
+  const snapshot = captureCanvasSnapshot(grid);
+
+  if (regionHasVisiblePixels(grid, rect)) {
+    replicateTilePatternFromRegion(grid, rect);
+  }
+
   return {
     phase: "drawing",
     region: rect,
-    peripheralSnapshot: captureCanvasSnapshot(grid),
+    peripheralSnapshot: snapshot,
   };
 }
 

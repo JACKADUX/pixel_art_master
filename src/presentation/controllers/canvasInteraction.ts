@@ -18,7 +18,7 @@ import {
   flipFloatingVertical,
   rotateFloatingSelection90,
   resizeFloatingSelectionByHandle,
-  rotateFloatingSelection,
+  rotateFloatingSelectionByDelta,
 } from "@/application/use-cases/TransformUseCases";
 import type { HistoryStack } from "@/domain/history/HistoryStack";
 import type { Project } from "@/domain/project/Project";
@@ -42,6 +42,11 @@ import {
   hitTestTransformHandle,
   type TransformHandle,
 } from "@/infrastructure/canvas/SelectionOverlayRenderer";
+import {
+  computeRotationAngleDelta,
+  computeRotationPointerAngle,
+  getTransformCenter,
+} from "@/domain/selection/TransformHandleInteraction";
 
 export interface DeferredCreateDrag {
   start: Point;
@@ -77,6 +82,7 @@ export interface SelectionDragState {
 export interface ModifierKeys {
   shiftKey: boolean;
   altKey: boolean;
+  ctrlKey: boolean;
   spaceKey: boolean;
 }
 
@@ -175,6 +181,7 @@ export function handleSelectPointerDown(options: {
       selection,
       modifiers.shiftKey,
       modifiers.altKey,
+      modifiers.ctrlKey,
       project,
       getReferencePixelCache,
     );
@@ -561,6 +568,7 @@ export function handleSelectPointerUp(options: {
       existingSelection,
       modifiers.shiftKey,
       modifiers.altKey,
+      modifiers.ctrlKey,
     );
     return {
       project: projectChanged ? workingProject : undefined,
@@ -580,6 +588,7 @@ export function handleSelectPointerUp(options: {
     existingSelection,
     modifiers.shiftKey,
     modifiers.altKey,
+    modifiers.ctrlKey,
   );
 
   return {
@@ -598,12 +607,13 @@ export function handleTransformPointerDown(options: {
   selection: SelectionState | null;
   historyStack: HistoryStack;
   transformMode: ToolSettings["transformMode"];
+  zoom: number;
 }): {
   selection: SelectionState | null;
   selectionDrag: SelectionDragState | null;
   grid?: WritableCanvasSurface;
 } {
-  const { project, grid, point, selection, historyStack, transformMode } = options;
+  const { project, grid, point, selection, historyStack, transformMode, zoom } = options;
 
   if (!selection || isSelectionEmpty(selection)) {
     if (transformMode !== "move") {
@@ -625,7 +635,7 @@ export function handleTransformPointerDown(options: {
     };
   }
 
-  const handle = hitTestTransformHandle(point, selection, 1);
+  const handle = hitTestTransformHandle(point, selection, zoom);
   if (!handle) {
     return { selection, selectionDrag: null };
   }
@@ -633,6 +643,10 @@ export function handleTransformPointerDown(options: {
   pushHistory(historyStack, project, selection);
   const withFloating = ensureFloatingForTransform(grid, selection);
   const initialBounds = getEffectiveBounds(withFloating);
+  const initialAngle =
+    handle === "rotate"
+      ? computeRotationPointerAngle(getTransformCenter(initialBounds), point)
+      : undefined;
 
   return {
     selection: withFloating,
@@ -642,6 +656,7 @@ export function handleTransformPointerDown(options: {
       mode: "transform",
       transformHandle: handle,
       initialBounds,
+      initialAngle,
       initialOffset: withFloating.floating
         ? { ...withFloating.floating.offset }
         : undefined,
@@ -690,23 +705,18 @@ export function handleTransformPointerMove(options: {
   }
 
   if (handle === "rotate") {
-    const angle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
-    const snapped = shiftKey ? Math.round(angle / 15) * 15 : angle;
-    const rotatedPixels = rotateFloatingSelection(
+    const center = getTransformCenter(selectionDrag.initialBounds ?? getEffectiveBounds(selection));
+    const startAngle =
+      selectionDrag.initialAngle ??
+      computeRotationPointerAngle(center, selectionDrag.start);
+    const deltaDeg = computeRotationAngleDelta(center, startAngle, point, shiftKey);
+    const rotated = rotateFloatingSelectionByDelta(
       { ...selection, floating: initialFloating },
-      snapped,
-    ).floating!.pixels;
-    const initialOffset = selectionDrag.initialOffset ?? initialFloating.offset;
+      initialFloating,
+      deltaDeg,
+    );
     return {
-      selection: syncMaskWithFloating({
-        ...selection,
-        floating: {
-          pixels: rotatedPixels,
-          offset: initialOffset,
-          originInLayer: initialFloating.originInLayer,
-          source: initialFloating.source,
-        },
-      }),
+      selection: rotated,
       selectionDrag: { ...selectionDrag, current: point },
     };
   }

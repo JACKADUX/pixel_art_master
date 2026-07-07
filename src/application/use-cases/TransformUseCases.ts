@@ -72,6 +72,29 @@ export function rotateFloatingSelection(
   );
 }
 
+export function rotateFloatingSelectionByDelta(
+  state: SelectionState,
+  initialFloating: FloatingSelection,
+  deltaDeg: number,
+): SelectionState {
+  if (!state.floating) return state;
+
+  const rotated = rotateGrid(initialFloating.pixels, deltaDeg);
+  const oldW = initialFloating.pixels.width;
+  const oldH = initialFloating.pixels.height;
+
+  return syncMaskWithFloating(
+    withFloating(state, {
+      ...initialFloating,
+      pixels: rotated,
+      offset: {
+        x: Math.round(initialFloating.offset.x - (rotated.width - oldW) / 2),
+        y: Math.round(initialFloating.offset.y - (rotated.height - oldH) / 2),
+      },
+    }),
+  );
+}
+
 export function rotateFloatingSelection90(
   state: SelectionState,
   steps: number,

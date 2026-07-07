@@ -2,10 +2,22 @@ import { create } from "zustand";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import { analyzeColorVariationFromEntries } from "@/application/use-cases/AnalyzeColorVariation";
+import { saveColorVariationAnalysisPreferences } from "@/application/use-cases/SaveColorVariationAnalysisPreferences";
 import { fromHex, toHexAlpha, type PixelColor } from "@/domain/canvas/PixelColor";
 import { parseColorListInput } from "@/domain/colorAnalysis/ColorVariationAnalysis";
 import type { ColorVariationSeries } from "@/domain/colorAnalysis/ColorVariationAnalysis";
+import {
+  DEFAULT_COLOR_VARIATION_ANALYSIS_PREFERENCES,
+  extractColorVariationAnalysisPreferences,
+  type ColorVariationAnalysisPreferences,
+} from "@/domain/colorAnalysis/ColorVariationAnalysisPreferences";
+import type { ColorVariationChartSortMode } from "@/domain/colorAnalysis/ColorVariationChartSort";
 import type { ColorEntry } from "@/domain/palette/Palette";
+import { colorVariationAnalysisPreferencesRepository } from "@/infrastructure/storage/FileColorVariationAnalysisPreferencesRepository";
+import {
+  getActiveSoftwareDataPath,
+  isUserDataHydrating,
+} from "@/infrastructure/storage/UserDataPersistenceContext";
 import { useAppStore } from "./appStore";
 
 export type ColorVariationChannel = "l" | "c" | "h";
@@ -22,6 +34,7 @@ interface ColorVariationAnalysisStore {
   series: ColorVariationSeries | null;
   parseError: string | null;
   visibleChannels: VisibleChannels;
+  chartSortMode: ColorVariationChartSortMode;
 
   openPage: () => void;
   closePage: () => void;
@@ -35,9 +48,14 @@ interface ColorVariationAnalysisStore {
   loadFromCurrentPalette: () => void;
   loadFromColorEntries: (entries: readonly ColorEntry[]) => void;
   toggleChannel: (channel: ColorVariationChannel) => void;
+  setChartSortMode: (mode: ColorVariationChartSortMode) => void;
+  hydratePreferences: (prefs: ColorVariationAnalysisPreferences | null) => void;
 }
 
 const defaultVisibleChannels: VisibleChannels = { l: true, c: true, h: true };
+
+let isHydratingPreferences = false;
+let preferencesSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 function toColorEntry(color: PixelColor): ColorEntry {
   return { color, hex: toHexAlpha(color) };
@@ -71,6 +89,7 @@ export const useColorVariationAnalysisStore = create<ColorVariationAnalysisStore
   series: null,
   parseError: null,
   visibleChannels: defaultVisibleChannels,
+  chartSortMode: DEFAULT_COLOR_VARIATION_ANALYSIS_PREFERENCES.chartSortMode,
 
   openPage: () => set({ open: true }),
 
@@ -180,7 +199,41 @@ export const useColorVariationAnalysisStore = create<ColorVariationAnalysisStore
       },
     }));
   },
+
+  setChartSortMode: (mode) => {
+    set({ chartSortMode: mode });
+  },
+
+  hydratePreferences: (prefs) => {
+    isHydratingPreferences = true;
+    const applied = prefs ?? DEFAULT_COLOR_VARIATION_ANALYSIS_PREFERENCES;
+    set({ chartSortMode: applied.chartSortMode });
+    isHydratingPreferences = false;
+  },
 }));
+
+useColorVariationAnalysisStore.subscribe((state, prev) => {
+  if (isHydratingPreferences || isUserDataHydrating()) return;
+  if (state.chartSortMode === prev.chartSortMode) return;
+
+  if (preferencesSaveTimer) {
+    clearTimeout(preferencesSaveTimer);
+  }
+
+  preferencesSaveTimer = setTimeout(() => {
+    const softwareDataPath = getActiveSoftwareDataPath();
+    if (!softwareDataPath) {
+      preferencesSaveTimer = null;
+      return;
+    }
+    void saveColorVariationAnalysisPreferences(
+      colorVariationAnalysisPreferencesRepository,
+      softwareDataPath,
+      extractColorVariationAnalysisPreferences(state),
+    );
+    preferencesSaveTimer = null;
+  }, 300);
+});
 
 export function getDefaultNewVariationColor(entries: readonly ColorEntry[]): PixelColor {
   const last = entries[entries.length - 1];
