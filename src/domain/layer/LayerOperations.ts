@@ -1,9 +1,11 @@
 import type { CanvasSize } from "../canvas/CanvasSize";
+import { createCanvasSize } from "../canvas/CanvasSize";
 import { TRANSPARENT } from "../canvas/PixelColor";
 import { PixelGrid } from "../canvas/PixelGrid";
 import {
   createEmptyDrawingLayer,
   createEmptyReferenceLayer,
+  DEFAULT_DRAWING_LAYER_OPACITY,
   type DrawingLayer,
   type Layer,
   type LayerType,
@@ -14,14 +16,17 @@ import {
 } from "./LayerStack";
 import { isDrawingLayer } from "./LayerTypeGuards";
 
-export function getLayerGrid(layer: Layer, size: CanvasSize): PixelGrid {
-  if (!isDrawingLayer(layer)) {
-    throw new Error("Cannot get pixel grid from reference layer");
-  }
-  return new PixelGrid(size, layer.pixels);
+export function getLayerGrid(layer: DrawingLayer): PixelGrid {
+  return new PixelGrid(
+    createCanvasSize(layer.width, layer.height),
+    layer.pixels,
+  );
 }
 
 export function syncLayerPixels(layer: DrawingLayer, grid: PixelGrid): DrawingLayer {
+  if (grid.width !== layer.width || grid.height !== layer.height) {
+    throw new Error("Grid size does not match layer size");
+  }
   return { ...layer, pixels: grid.toUint32Array() };
 }
 
@@ -87,6 +92,35 @@ export function toggleLayerVisibility(layers: Layer[], layerId: string): Layer[]
   return layers.map((l) =>
     l.id === layerId ? { ...l, visible: !l.visible } : l,
   );
+}
+
+export function clampDrawingLayerOpacity(value: number): number {
+  return Math.max(0, Math.min(DEFAULT_DRAWING_LAYER_OPACITY, Math.round(value)));
+}
+
+export function setDrawingLayerOpacity(
+  layers: Layer[],
+  layerId: string,
+  opacity: number,
+): Layer[] {
+  const clamped = clampDrawingLayerOpacity(opacity);
+  return layers.map((layer) =>
+    layer.id === layerId && isDrawingLayer(layer)
+      ? { ...layer, opacity: clamped }
+      : layer,
+  );
+}
+
+export function toggleDrawingLayerLock(layers: Layer[], layerId: string): Layer[] {
+  return layers.map((layer) =>
+    layer.id === layerId && isDrawingLayer(layer)
+      ? { ...layer, locked: !layer.locked }
+      : layer,
+  );
+}
+
+export function isDrawingLayerEditable(layer: DrawingLayer): boolean {
+  return !layer.locked;
 }
 
 export function renameLayer(

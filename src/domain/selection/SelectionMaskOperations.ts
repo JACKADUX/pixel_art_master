@@ -1,5 +1,7 @@
 import { getAlpha, TRANSPARENT } from "../canvas/PixelColor";
 import { PixelGrid } from "../canvas/PixelGrid";
+import { LayerProjectedSurface } from "../canvas/LayerProjectedSurface";
+import type { WritableCanvasSurface } from "../canvas/MaskedPixelGrid";
 import type { Point } from "../tool/ITool";
 import type { FloatingSelection } from "./FloatingSelection";
 import {
@@ -102,7 +104,7 @@ export function selectAllMask(canvasWidth: number, canvasHeight: number): Select
   return mask;
 }
 
-export function createMaskFromOpaquePixels(grid: PixelGrid): SelectionMask {
+export function createMaskFromOpaquePixels(grid: WritableCanvasSurface): SelectionMask {
   const mask = createEmptyMask(grid.width, grid.height);
   for (let y = 0; y < grid.height; y++) {
     for (let x = 0; x < grid.width; x++) {
@@ -128,12 +130,15 @@ export function shiftMask(mask: SelectionMask, dx: number, dy: number): Selectio
 }
 
 export function extractMaskedPixels(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   mask: SelectionMask,
   clearSource = false,
 ): FloatingSelection | null {
   const bounds = computeBoundsFromMask(mask);
   if (bounds.width <= 0 || bounds.height <= 0) return null;
+
+  const position =
+    grid instanceof LayerProjectedSurface ? grid.layerPosition : { x: 0, y: 0 };
 
   const pixels = PixelGrid.createEmpty(bounds.width, bounds.height);
   for (let y = bounds.y; y < bounds.y + bounds.height; y++) {
@@ -150,13 +155,13 @@ export function extractMaskedPixels(
   return {
     pixels,
     offset: { x: bounds.x, y: bounds.y },
-    originInLayer: { x: bounds.x, y: bounds.y },
+    originInLayer: { x: bounds.x - position.x, y: bounds.y - position.y },
     source: "layer",
   };
 }
 
 export function blitFloatingToGrid(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   floating: FloatingSelection,
   mask: SelectionMask | null,
 ): void {
@@ -173,7 +178,7 @@ export function blitFloatingToGrid(
   }
 }
 
-export function clearMaskedPixels(grid: PixelGrid, mask: SelectionMask): void {
+export function clearMaskedPixels(grid: WritableCanvasSurface, mask: SelectionMask): void {
   for (let y = 0; y < mask.height; y++) {
     for (let x = 0; x < mask.width; x++) {
       if (isMaskSelected(mask, x, y)) {
@@ -184,15 +189,21 @@ export function clearMaskedPixels(grid: PixelGrid, mask: SelectionMask): void {
 }
 
 export function restoreFloatingToOrigin(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   floating: FloatingSelection,
 ): void {
+  const position =
+    grid instanceof LayerProjectedSurface ? grid.layerPosition : { x: 0, y: 0 };
   const { pixels, originInLayer } = floating;
   for (let y = 0; y < pixels.height; y++) {
     for (let x = 0; x < pixels.width; x++) {
       const color = pixels.getPixel(x, y);
       if (getAlpha(color) === 0) continue;
-      grid.setPixel(originInLayer.x + x, originInLayer.y + y, color);
+      grid.setPixel(
+        originInLayer.x + x + position.x,
+        originInLayer.y + y + position.y,
+        color,
+      );
     }
   }
 }
@@ -232,7 +243,7 @@ function cloneMaskData(mask: SelectionMask): SelectionMask {
 }
 
 export function extractMaskedRegionAsGrid(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   mask: SelectionMask,
 ): PixelGrid | null {
   const bounds = computeBoundsFromMask(mask);

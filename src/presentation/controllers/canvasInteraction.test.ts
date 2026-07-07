@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
+import { wrapLayerOnCanvas } from "@/domain/canvas/LayerProjectedSurface";
 import { rgba } from "@/domain/canvas/PixelColor";
 import { HistoryStack } from "@/domain/history/HistoryStack";
 import {
   beginMoveSelection,
   moveFloatingSelection,
 } from "@/application/use-cases/SelectionUseCases";
+import { getActiveLayerProjectedSurfaceFromProject } from "@/application/use-cases/LayerUseCases";
 import { createSelectionFromFloating } from "@/application/use-cases/ClipboardUseCases";
 import { createRectMask } from "@/domain/selection/SelectionMaskOperations";
 import { isMaskSelected } from "@/domain/selection/SelectionMask";
@@ -13,16 +15,26 @@ import { createSelectionState } from "@/domain/selection/SelectionState";
 import { createEmptyProject } from "@/domain/project/Project";
 import { DEFAULT_TOOL_SETTINGS } from "@/domain/tool/ToolType";
 import {
+  handleSelectPointerMove,
   handleSelectPointerUp,
   handleTransformPointerDown,
-  handleTransformPointerMove,
   handleTransformPointerUp,
+  resolveLayerPositionFromDrag,
 } from "@/presentation/controllers/canvasInteraction";
+import { moveDrawingLayerInProject } from "@/application/use-cases/MoveDrawingLayer";
+import { toggleDrawingLayerLockInProject } from "@/application/use-cases/LayerUseCases";
+import { getActiveLayer } from "@/domain/project/Project";
+import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
+
+function canvasSurface(width: number, height: number) {
+  const layerGrid = PixelGrid.createEmpty(width, height);
+  return wrapLayerOnCanvas(layerGrid, { x: 0, y: 0 }, { width, height });
+}
 
 describe("handleSelectPointerUp blank click", () => {
   it("commits floating selection when clicking blank to deselect", () => {
     const project = createEmptyProject("test");
-    const grid = PixelGrid.createEmpty(8, 8);
+    const grid = canvasSurface(8, 8);
     const pixels = PixelGrid.createEmpty(1, 1);
     pixels.setPixel(0, 0, rgba(255, 0, 0));
     const selection = createSelectionFromFloating(
@@ -54,12 +66,14 @@ describe("handleSelectPointerUp blank click", () => {
     });
 
     expect(result.selection).toBeNull();
-    expect(result.grid?.getPixel(2, 2)).toBe(rgba(255, 0, 0));
+    expect(result.project).toBeDefined();
+    const surface = getActiveLayerProjectedSurfaceFromProject(result.project!);
+    expect(surface.getPixel(2, 2)).toBe(rgba(255, 0, 0));
   });
 
   it("commits floating selection when box-selecting a new area", () => {
     const project = createEmptyProject("test");
-    const grid = PixelGrid.createEmpty(8, 8);
+    const grid = canvasSurface(8, 8);
     grid.setPixel(2, 2, rgba(255, 0, 0));
     const mask = createRectMask({ x: 2, y: 2 }, { x: 2, y: 2 }, 8, 8);
     let selection = createSelectionState(mask);
@@ -83,18 +97,95 @@ describe("handleSelectPointerUp blank click", () => {
       grid,
     });
 
-    expect(result.grid?.getPixel(4, 2)).toBe(rgba(255, 0, 0));
-    expect(result.grid?.getPixel(2, 2)).toBe(0);
+    expect(result.project).toBeDefined();
+    const surface = getActiveLayerProjectedSurfaceFromProject(result.project!);
+    expect(surface.getPixel(4, 2)).toBe(rgba(255, 0, 0));
+    expect(surface.getPixel(2, 2)).toBe(0);
     expect(result.selection).not.toBeNull();
     expect(isMaskSelected(result.selection!.mask, 0, 0)).toBe(true);
     expect(result.selection!.floating).toBeNull();
   });
 });
 
-describe("handleTransformPointerDown layer pan", () => {
-  it("starts layer pan without selection in move mode", () => {
+describe("handleSelectPointerMove create offset", () => {
+  it("offsets the in-progress marquee while space is held", () => {
     const project = createEmptyProject("test");
-    const grid = PixelGrid.createEmpty(8, 8);
+    const grid = canvasSurface(16, 16);
+    const historyStack = new HistoryStack();
+    const selectionDrag = {
+      start: { x: 1, y: 1 },
+      current: { x: 4, y: 4 },
+      mode: "create" as const,
+    };
+
+    const withOffset = handleSelectPointerMove({
+      project,
+      point: { x: 4, y: 4 },
+      settings: DEFAULT_TOOL_SETTINGS,
+      selection: null,
+      selectionDrag,
+      lassoPoints: [],
+      grid,
+      modifiers: { shiftKey: false, altKey: false, spaceKey: true },
+      historyStack,
+    });
+
+    expect(withOffset.selectionDrag.createOffset).toEqual({
+      anchor: { x: 4, y: 4 },
+      baseStart: { x: 1, y: 1 },
+      baseCurrent: { x: 4, y: 4 },
+      baseLassoPoints: [],
+    });
+
+    const moved = handleSelectPointerMove({
+      project,
+      point: { x: 6, y: 5 },
+      settings: DEFAULT_TOOL_SETTINGS,
+      selection: null,
+      selectionDrag: withOffset.selectionDrag,
+      lassoPoints: [],
+      grid,
+      modifiers: { shiftKey: false, altKey: false, spaceKey: true },
+      historyStack,
+    });
+
+    expect(moved.selectionDrag.start).toEqual({ x: 3, y: 2 });
+    expect(moved.selectionDrag.current).toEqual({ x: 6, y: 5 });
+    expect(moved.selectionPreviewRect).toEqual({
+      x: 3,
+      y: 2,
+      width: 4,
+      height: 4,
+    });
+
+    const resumed = handleSelectPointerMove({
+      project,
+      point: { x: 7, y: 6 },
+      settings: DEFAULT_TOOL_SETTINGS,
+      selection: null,
+      selectionDrag: moved.selectionDrag,
+      lassoPoints: [],
+      grid,
+      modifiers: { shiftKey: false, altKey: false, spaceKey: false },
+      historyStack,
+    });
+
+    expect(resumed.selectionDrag.createOffset).toBeUndefined();
+    expect(resumed.selectionDrag.start).toEqual({ x: 4, y: 3 });
+    expect(resumed.selectionDrag.current).toEqual({ x: 7, y: 6 });
+    expect(resumed.selectionPreviewRect).toEqual({
+      x: 4,
+      y: 3,
+      width: 4,
+      height: 4,
+    });
+  });
+});
+
+describe("handleTransformPointerDown layer position", () => {
+  it("starts layer position drag without selection in move mode", () => {
+    const project = createEmptyProject("test");
+    const grid = canvasSurface(8, 8);
     grid.setPixel(2, 2, rgba(255, 0, 0));
     const historyStack = new HistoryStack();
 
@@ -107,15 +198,34 @@ describe("handleTransformPointerDown layer pan", () => {
       transformMode: "move",
     });
 
-    expect(down.selectionDrag?.layerPan).toBe(true);
-    expect(down.selectionDrag?.transformHandle).toBe("move");
-    expect(down.selection?.floating).not.toBeNull();
-    expect(grid.getPixel(2, 2)).toBe(0);
+    expect(down.selectionDrag?.mode).toBe("layerPosition");
+    expect(down.selectionDrag?.initialPosition).toEqual({ x: 0, y: 0 });
+    expect(down.selection).toBeNull();
+    expect(grid.getPixel(2, 2)).toBe(rgba(255, 0, 0));
   });
 
-  it("does not start layer pan in scale mode without selection", () => {
+  it("does not start layer position drag when active layer is locked", () => {
+    const base = createEmptyProject("test", { width: 8, height: 8 });
+    const activeLayer = getActiveLayer(base);
+    const project = toggleDrawingLayerLockInProject(base, activeLayer.id);
+    const grid = canvasSurface(8, 8);
+    const historyStack = new HistoryStack();
+
+    const down = handleTransformPointerDown({
+      project,
+      grid,
+      point: { x: 1, y: 1 },
+      selection: null,
+      historyStack,
+      transformMode: "move",
+    });
+
+    expect(down.selectionDrag).toBeNull();
+  });
+
+  it("does not start layer position drag in scale mode without selection", () => {
     const project = createEmptyProject("test");
-    const grid = PixelGrid.createEmpty(8, 8);
+    const grid = canvasSurface(8, 8);
     grid.setPixel(2, 2, rgba(255, 0, 0));
     const historyStack = new HistoryStack();
 
@@ -133,10 +243,9 @@ describe("handleTransformPointerDown layer pan", () => {
     expect(grid.getPixel(2, 2)).toBe(rgba(255, 0, 0));
   });
 
-  it("commits layer pan on pointer up", () => {
-    const project = createEmptyProject("test");
-    const grid = PixelGrid.createEmpty(8, 8);
-    grid.setPixel(2, 2, rgba(255, 0, 0));
+  it("updates layer position from drag delta", () => {
+    const project = createEmptyProject("test", { width: 8, height: 8 });
+    const grid = canvasSurface(8, 8);
     const historyStack = new HistoryStack();
 
     const down = handleTransformPointerDown({
@@ -148,23 +257,36 @@ describe("handleTransformPointerDown layer pan", () => {
       transformMode: "move",
     });
 
-    const moved = handleTransformPointerMove({
-      point: { x: 3, y: 1 },
-      selection: down.selection!,
-      selectionDrag: down.selectionDrag!,
-      grid,
-      shiftKey: false,
-      altKey: false,
-    });
+    const nextPosition = resolveLayerPositionFromDrag(down.selectionDrag!, { x: 3, y: 1 });
+    expect(nextPosition).toEqual({ x: 2, y: 0 });
+
+    const activeLayer = getActiveLayer(project);
+    expect(isDrawingLayer(activeLayer)).toBe(true);
+    const moved = moveDrawingLayerInProject(project, activeLayer.id, nextPosition!);
+    expect(moved).not.toBeNull();
+
+    const movedLayer = getActiveLayer(moved!);
+    expect(isDrawingLayer(movedLayer)).toBe(true);
+    if (isDrawingLayer(movedLayer)) {
+      expect(movedLayer.position).toEqual({ x: 2, y: 0 });
+    }
 
     const up = handleTransformPointerUp({
       grid,
-      selection: moved.selection,
-      selectionDrag: moved.selectionDrag,
+      selection: null,
+      selectionDrag: down.selectionDrag,
     });
 
     expect(up.selection).toBeNull();
-    expect(up.grid?.getPixel(2, 2)).toBe(0);
-    expect(up.grid?.getPixel(4, 2)).toBe(rgba(255, 0, 0));
+    expect(up.selectionDrag).toBeNull();
+  });
+
+  it("does not move locked drawing layer", () => {
+    const base = createEmptyProject("test", { width: 8, height: 8 });
+    const activeLayer = getActiveLayer(base);
+    const project = toggleDrawingLayerLockInProject(base, activeLayer.id);
+
+    const moved = moveDrawingLayerInProject(project, activeLayer.id, { x: 2, y: 0 });
+    expect(moved).toBeNull();
   });
 });

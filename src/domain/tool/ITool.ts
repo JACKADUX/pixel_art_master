@@ -1,4 +1,5 @@
 import type { PixelGrid } from "../canvas/PixelGrid";
+import type { LayerProjectedSurface } from "../canvas/LayerProjectedSurface";
 import type { MaskedPixelGrid } from "../canvas/MaskedPixelGrid";
 import type { SymmetricPixelSurface } from "../canvas/SymmetricPixelSurface";
 import type { TiledPixelSurface } from "../canvas/TiledPixelSurface";
@@ -12,7 +13,12 @@ export interface Point {
   y: number;
 }
 
-export type PixelSurface = PixelGrid | MaskedPixelGrid | SymmetricPixelSurface | TiledPixelSurface;
+export type PixelSurface =
+  | PixelGrid
+  | LayerProjectedSurface
+  | MaskedPixelGrid
+  | SymmetricPixelSurface
+  | TiledPixelSurface;
 
 export interface PatternStampContext {
   source: PixelGrid;

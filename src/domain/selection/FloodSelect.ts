@@ -1,5 +1,5 @@
 import { colorDistance, type PixelColor } from "../canvas/PixelColor";
-import type { PixelGrid } from "../canvas/PixelGrid";
+import type { WritableCanvasSurface } from "../canvas/MaskedPixelGrid";
 import type { Point } from "../tool/ITool";
 import { createEmptyMask, setMaskPixel, type SelectionMask } from "./SelectionMask";
 
@@ -9,7 +9,7 @@ export interface FloodSelectOptions {
 }
 
 export function floodSelectMask(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   seed: Point,
   options: FloodSelectOptions,
 ): SelectionMask {
@@ -20,7 +20,7 @@ export function floodSelectMask(
 }
 
 function collectContiguousSeeds(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   seed: Point,
   targetColor: PixelColor,
   tolerance: number,
@@ -46,7 +46,7 @@ function collectContiguousSeeds(
 }
 
 export function floodSelectMaskByTargetColor(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   seed: Point,
   targetColor: PixelColor,
   options: FloodSelectOptions,

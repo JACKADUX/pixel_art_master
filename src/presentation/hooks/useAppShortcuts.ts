@@ -135,12 +135,14 @@ export function useAppShortcuts() {
       }
 
       if (ctrl && (event.key === "c" || event.key === "C")) {
+        if (!hasSelection) return;
         event.preventDefault();
         void store.copySelection();
         return;
       }
 
       if (ctrl && (event.key === "x" || event.key === "X")) {
+        if (!hasSelection) return;
         event.preventDefault();
         void store.cutSelection();
         return;
@@ -173,7 +175,7 @@ export function useAppShortcuts() {
 
       if (ctrl && (event.key === "t" || event.key === "T")) {
         event.preventDefault();
-        store.setActiveTool("transform");
+        store.activateTransformTool();
         return;
       }
 

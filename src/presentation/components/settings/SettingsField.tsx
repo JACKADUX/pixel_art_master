@@ -50,6 +50,7 @@ export function SettingsNumberInput({
   max,
   step,
   suffix,
+  disabled,
   onChange,
   className,
 }: {
@@ -58,6 +59,7 @@ export function SettingsNumberInput({
   max?: number;
   step?: number;
   suffix?: string;
+  disabled?: boolean;
   onChange: (value: number) => void;
   className?: string;
 }) {
@@ -69,6 +71,7 @@ export function SettingsNumberInput({
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
         className={className ?? settingsInputClassName}
       />

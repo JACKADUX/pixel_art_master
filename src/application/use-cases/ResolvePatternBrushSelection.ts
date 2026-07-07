@@ -15,13 +15,11 @@ import {
   createSelectionFromLasso,
 } from "./SelectionUseCases";
 
+import type { SelectionDragState } from "@/presentation/controllers/canvasInteraction";
+
 export interface PatternBrushSelectionContext {
   selection: SelectionState | null;
-  selectionDrag: {
-    start: Point;
-    current: Point;
-    mode: "create" | "move" | "transform";
-  } | null;
+  selectionDrag: Pick<SelectionDragState, "start" | "current" | "mode"> | null;
   lassoPoints: Point[];
   toolSettings: Pick<ToolSettings, "selectionMode">;
   canvasWidth: number;

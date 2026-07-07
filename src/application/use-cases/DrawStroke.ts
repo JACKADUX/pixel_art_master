@@ -1,5 +1,5 @@
-import type { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { wrapWithMask } from "@/domain/canvas/MaskedPixelGrid";
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 import { wrapWithSymmetry } from "@/domain/canvas/SymmetricPixelSurface";
 import { wrapWithTile } from "@/domain/canvas/TiledPixelSurface";
 import type { SelectionRect } from "@/domain/selection/SelectionRect";
@@ -18,7 +18,7 @@ export interface DrawToolOptions {
 }
 
 function createToolContext(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   color: PixelColor,
   settings: ToolSettings,
   selectionMask?: SelectionMask | null,
@@ -41,7 +41,7 @@ function createToolContext(
 }
 
 export function applyToolPointerDown(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   toolType: DrawingToolType,
   color: PixelColor,
   settings: ToolSettings,
@@ -56,7 +56,7 @@ export function applyToolPointerDown(
 }
 
 export function applyToolPointerMove(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   toolType: DrawingToolType,
   color: PixelColor,
   settings: ToolSettings,
@@ -72,7 +72,7 @@ export function applyToolPointerMove(
 }
 
 export function applyToolPointerUp(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   toolType: DrawingToolType,
   color: PixelColor,
   settings: ToolSettings,
@@ -88,7 +88,7 @@ export function applyToolPointerUp(
 }
 
 export function applyBrushStraightLine(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   color: PixelColor,
   settings: ToolSettings,
   from: Point,

@@ -4,6 +4,7 @@ import { mergeCellColors } from "./GridMergeOperations";
 import { rgba } from "@/domain/canvas/PixelColor";
 import {
   applyGridRestoreToGrid,
+  collectCellColors,
   computeGridLayout,
   computeGridOverlayLineIndices,
   intersectCellWithImage,
@@ -81,6 +82,46 @@ describe("GridRestoreOperations", () => {
     expect(() =>
       validateGridRestore(imageSize, { x: 0, y: 0, width: 0, height: 10 }),
     ).toThrow(/Invalid grid seed/);
+  });
+
+  it("uses center priority to ignore edge noise when merging", () => {
+    const width = 5;
+    const height = 5;
+    const data = new Uint8ClampedArray(width * height * 4);
+    const centerColor = rgba(0, 128, 255, 255);
+    const edgeColor = rgba(255, 0, 0, 255);
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const isCenter = x === 2 && y === 2;
+        const color = isCenter ? centerColor : edgeColor;
+        const offset = (y * width + x) * 4;
+        data[offset] = color & 0xff;
+        data[offset + 1] = (color >> 8) & 0xff;
+        data[offset + 2] = (color >> 16) & 0xff;
+        data[offset + 3] = (color >> 24) & 0xff;
+      }
+    }
+
+    const cell = { x: 0, y: 0, width: 5, height: 5, column: 0, row: 0 };
+    const allColors = collectCellColors(data, width, cell);
+    expect(mergeCellColors(allColors, "median")).toBe(edgeColor);
+
+    const centerColors = collectCellColors(data, width, cell, {
+      enabled: true,
+      excludeRingCount: 2,
+    });
+    expect(centerColors).toHaveLength(1);
+    expect(mergeCellColors(centerColors, "median")).toBe(centerColor);
+
+    const { grid } = applyGridRestoreToGrid(
+      data,
+      { width, height },
+      { x: 0, y: 0, width: 5, height: 5 },
+      "median",
+      { enabled: true, excludeRingCount: 2 },
+    );
+    expect(grid.getPixel(0, 0)).toBe(centerColor);
   });
 });
 

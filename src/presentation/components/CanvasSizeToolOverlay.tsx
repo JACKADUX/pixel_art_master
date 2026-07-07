@@ -8,6 +8,7 @@ import {
 } from "@/domain/canvas/CanvasEdgeResizeOperations";
 import type { CanvasSize } from "@/domain/canvas/CanvasSize";
 import { formatPixelDimensions } from "@/domain/viewport/OverlayLabelLayout";
+import { CANVAS_TOOL_OVERLAY_Z_INDEX } from "@/domain/viewport/FloatingPanelStack";
 
 import { focusCanvasKeyboard } from "../utils/canvasKeyboardFocus";
 import { useAppStore } from "../stores/appStore";
@@ -162,7 +163,7 @@ export function CanvasSizeToolOverlay({
         top: canvasTop,
         width: displayWidth,
         height: displayHeight,
-        zIndex: 5000,
+        zIndex: CANVAS_TOOL_OVERLAY_Z_INDEX,
       }}
     >
       <div

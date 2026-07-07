@@ -1,3 +1,4 @@
+import { forEachFilledEllipsePixel, forEachOutlineEllipsePixel } from "../geometry/EllipseFill";
 import { forEachContinuousLinePixel } from "./LineRasterization";
 import type { ITool, Point, ToolContext } from "./ITool";
 
@@ -34,29 +35,11 @@ function drawRect(ctx: ToolContext, x0: number, y0: number, x1: number, y1: numb
 }
 
 function drawEllipse(ctx: ToolContext, x0: number, y0: number, x1: number, y1: number, filled: boolean): void {
-  const cx = Math.round((x0 + x1) / 2);
-  const cy = Math.round((y0 + y1) / 2);
-  const rx = Math.abs(x1 - x0) / 2;
-  const ry = Math.abs(y1 - y0) / 2;
-  if (rx === 0 && ry === 0) {
-    setPixel(ctx, cx, cy);
-    return;
-  }
-
-  const minX = Math.min(x0, x1);
-  const maxX = Math.max(x0, x1);
-  const minY = Math.min(y0, y1);
-  const maxY = Math.max(y0, y1);
-
-  for (let y = minY; y <= maxY; y++) {
-    for (let x = minX; x <= maxX; x++) {
-      const nx = rx === 0 ? 0 : (x - cx) / rx;
-      const ny = ry === 0 ? 0 : (y - cy) / ry;
-      const inside = nx * nx + ny * ny <= 1;
-      if (filled ? inside : Math.abs(nx * nx + ny * ny - 1) < 0.15 / Math.min(rx || 1, ry || 1)) {
-        setPixel(ctx, x, y);
-      }
-    }
+  const callback = (x: number, y: number) => setPixel(ctx, x, y);
+  if (filled) {
+    forEachFilledEllipsePixel(x0, y0, x1, y1, 0, 0, callback);
+  } else {
+    forEachOutlineEllipsePixel(x0, y0, x1, y1, 0, 0, callback);
   }
 }
 

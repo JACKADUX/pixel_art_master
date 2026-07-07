@@ -14,14 +14,17 @@ import {
 } from "@/application/use-cases/HistoryUseCases";
 
 import {
+  beginMoveSelection,
+  cancelFloatingSelectionInProject,
   clearSelectionPixels,
+  commitFloatingSelectionInProject,
   createFloatingFromCut,
   deselectSelection,
   getEffectiveSelectionMask,
   invertSelection,
   nudgeSelection,
   selectAll,
-  beginMoveSelection,
+  resolveSelectionForTransform,
 } from "@/application/use-cases/SelectionUseCases";
 
 import {
@@ -51,8 +54,6 @@ import { cloneImageData } from "@/domain/image/ImageDataOperations";
 import { clipboardService } from "@/infrastructure/clipboard/createClipboardService";
 
 import {
-  cancelActiveFloating,
-  commitActiveFloating,
   handleSelectPointerDown,
   handleSelectPointerMove,
   handleSelectPointerUp,
@@ -62,11 +63,15 @@ import {
   flipFloatingHorizontal,
   flipFloatingVertical,
   rotateFloatingSelection90,
+  resolveLayerPositionFromDrag,
   type SelectionDragState,
 } from "@/presentation/controllers/canvasInteraction";
 
+import { extractSelectionColorsForAnalysis } from "@/application/use-cases/ExtractSelectionColorsForAnalysis";
+import { buildColorEntriesInScanOrder } from "@/domain/selection/SelectionColorExtraction";
 import { usePixelRestoreStore } from "@/presentation/stores/pixelRestoreStore";
 import { useColorEditStore } from "@/presentation/stores/colorEditStore";
+import { useColorVariationAnalysisStore } from "@/presentation/stores/colorVariationAnalysisStore";
 import { useComfyUiStore } from "@/presentation/stores/comfyUiStore";
 import { useWorldStore } from "@/presentation/stores/worldStore";
 import type { ToolPageId } from "@/presentation/config/toolPagesConfig";
@@ -101,6 +106,16 @@ import {
 
   getActiveLayerGridFromProject,
 
+  getActiveLayerProjectedSurfaceFromProject,
+
+  ensureActiveLayerContainsCanvasPointsInProject,
+
+  ensureActiveLayerCoversCanvasInProject,
+
+  ensureActiveLayerContainsFloatingSelectionInProject,
+
+  moveDrawingLayer as moveDrawingLayerInProjectUseCase,
+
   moveReferenceLayer as moveReferenceLayerInProject,
 
   removeLayerFromProject,
@@ -114,7 +129,11 @@ import {
 
   setReferenceCrop as setReferenceCropInProject,
 
+  setDrawingLayerOpacityInProject,
+
   syncActiveLayerPixels,
+
+  toggleDrawingLayerLockInProject,
 
   toggleLayerVisibilityInProject,
 
@@ -191,12 +210,14 @@ import { snapSymmetryOrigin } from "@/domain/symmetry/SymmetryMirror";
 
 import { findAssetById, ROOT_FOLDER_ID } from "@/domain/asset/AssetLibrary";
 import { getAssetRelativeFilePath, isImageAsset } from "@/domain/asset/AssetRecord";
+import { isReferenceLayer, isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
+import { LayerProjectedSurface } from "@/domain/canvas/LayerProjectedSurface";
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
+import { MaskedPixelGrid } from "@/domain/canvas/MaskedPixelGrid";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { loadAssetImageAsImageData } from "@/infrastructure/storage/AssetImageLoader";
 import { revealAssetFileInFolder } from "@/infrastructure/storage/AssetFileReveal";
 import { toast } from "@/presentation/stores/toastStore";
-
-import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 import { referenceLayerCropKey } from "@/domain/layer/ReferenceLayerPalette";
 
 import {
@@ -211,9 +232,14 @@ import {
 
   withProjectFilePath,
 
+  withOrthographicView,
+
   type Project,
 
 } from "@/domain/project/Project";
+import {
+  clampCameraAngle,
+} from "@/domain/viewport/OrthographicView";
 
 import type { CropRect, LayerPosition, ReferenceLayer } from "@/domain/layer/Layer";
 
@@ -585,6 +611,10 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   toggleGrid: () => void;
 
+  setOrthographicViewEnabled: (enabled: boolean) => void;
+
+  setOrthographicCameraAngle: (angle: number) => void;
+
   toggleNavigator: () => void;
 
   toggleMousePositionOverlay: () => void;
@@ -699,6 +729,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   selectAllCanvas: () => void;
 
+  activateTransformTool: () => void;
+
   deselectCanvas: () => void;
 
   invertCanvasSelection: () => void;
@@ -771,6 +803,10 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   toggleLayerVisibility: (layerId: string) => void;
 
+  setDrawingLayerOpacity: (layerId: string, opacityPercent: number) => void;
+
+  toggleDrawingLayerLock: (layerId: string) => void;
+
   renameLayer: (layerId: string, name: string) => void;
 
   addDrawingLayer: () => void;
@@ -806,6 +842,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   openColorEditPage: () => void;
 
+  openColorVariationPage: () => void;
+
   openWorldPage: () => void;
 
   openComfyUiPage: () => void;
@@ -817,6 +855,8 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   revealAssetInFolder: (assetId: string) => Promise<void>;
 
   sendPixelRestoreResultToColorEdit: (imageData: ImageData) => void;
+
+  sendSelectionColorsToColorVariationAnalysis: () => void;
 
   exportRestoredImageToAssetLibrary: (imageData: ImageData) => Promise<void>;
 
@@ -853,7 +893,7 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
 
   getActiveLayerGrid: () => PixelGrid | null;
 
-  syncActiveLayer: (grid: PixelGrid) => void;
+  syncActiveLayer: (grid: WritableCanvasSurface) => void;
 
   getRecentProjects: () => string[];
 
@@ -936,10 +976,62 @@ function isPatternBrushActive(state: Pick<AppState, "activeTool" | "toolSettings
   return state.activeTool === "brush" && state.toolSettings.brushShape === "pattern";
 }
 
+function resolveLayerLocalGrid(surface: WritableCanvasSurface): PixelGrid {
+  if (surface instanceof LayerProjectedSurface) return surface.underlyingGrid;
+  if (surface instanceof MaskedPixelGrid) return surface.getUnderlyingGrid();
+  return surface;
+}
+
+function prepareActiveLayerProjectForDrawing(
+  project: Project,
+  activeTool: ToolType,
+  toolSettings: ToolSettings,
+  ...canvasPoints: Point[]
+): Project {
+  if (activeTool === "fill") {
+    return ensureActiveLayerCoversCanvasInProject(project);
+  }
+  if (!isDrawingToolType(activeTool) || canvasPoints.length === 0) return project;
+
+  let expandPoints = canvasPoints;
+  if (activeTool === "brush" || activeTool === "eraser") {
+    const half = Math.floor(toolSettings.brushSize / 2);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const p of canvasPoints) {
+      minX = Math.min(minX, p.x - half);
+      minY = Math.min(minY, p.y - half);
+      maxX = Math.max(maxX, p.x + half);
+      maxY = Math.max(maxY, p.y + half);
+    }
+    expandPoints = [
+      { x: minX, y: minY },
+      { x: maxX, y: maxY },
+    ];
+  } else if (activeTool === "shape" && canvasPoints.length >= 2) {
+    const [a, b] = canvasPoints;
+    expandPoints = [
+      { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) },
+      { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y) },
+    ];
+  }
+
+  return ensureActiveLayerContainsCanvasPointsInProject(project, expandPoints);
+}
+
+function withFloatingSelectionLayerExpand(
+  project: Project,
+  selection: SelectionState | null,
+): Project {
+  return ensureActiveLayerContainsFloatingSelectionInProject(project, selection);
+}
+
 function resolveTileDrawParams(
   tileSession: TileSessionState,
   activeTool: ToolType,
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   point?: Point,
 ): {
   selectionMask: SelectionMask;
@@ -970,6 +1062,7 @@ function mergeDrawOptions(
 type ActiveToolPage =
   | "pixelRestore"
   | "colorEdit"
+  | "colorVariation"
   | "world"
   | "comfyui";
 
@@ -979,6 +1072,9 @@ function closeOtherToolPages(except?: ActiveToolPage): void {
   }
   if (except !== "colorEdit") {
     useColorEditStore.getState().closePage();
+  }
+  if (except !== "colorVariation") {
+    useColorVariationAnalysisStore.getState().closePage();
   }
   if (except !== "world") {
     useWorldStore.getState().closePage();
@@ -1600,7 +1696,7 @@ export const useAppStore = create<AppState>((set, get) => {
       state.selectionDrag?.mode === "create" &&
       state.project
     ) {
-      const grid = getActiveLayerGridFromProject(state.project);
+      const grid = getActiveLayerProjectedSurfaceFromProject(state.project);
       if (grid) {
         const result = handleSelectPointerUp({
           project: state.project,
@@ -1641,13 +1737,9 @@ export const useAppStore = create<AppState>((set, get) => {
 
     const { selection, project } = get();
     if (selection?.floating && project) {
-      const grid = getActiveLayerGridFromProject(project);
-      if (grid) {
-        const { grid: committedGrid, selection: committedSelection } =
-          commitActiveFloating({ grid, selection });
-        get().syncActiveLayer(committedGrid);
-        set({ selection: committedSelection });
-      }
+      const { project: committedProject, selection: committedSelection } =
+        commitFloatingSelectionInProject(project, selection);
+      set({ project: committedProject, selection: committedSelection });
     }
     set({ activeTool: tool, brushLineAnchor: tool === "brush" ? get().brushLineAnchor : null });
   },
@@ -1672,7 +1764,7 @@ export const useAppStore = create<AppState>((set, get) => {
     const { project, tileSession, historyStack, selection } = get();
     if (!project || tileSession.phase !== "drawing") return;
 
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
 
     pushHistory(historyStack, project, selection);
@@ -1787,7 +1879,17 @@ export const useAppStore = create<AppState>((set, get) => {
 
     })),
 
+  setOrthographicViewEnabled: (enabled) =>
+    set((s) => ({
+      project: s.project ? withOrthographicView(s.project, { enabled }) : null,
+    })),
 
+  setOrthographicCameraAngle: (angle) =>
+    set((s) => ({
+      project: s.project
+        ? withOrthographicView(s.project, { cameraAngle: clampCameraAngle(angle) })
+        : null,
+    })),
 
   toggleMousePositionOverlay: () =>
     set((s) => ({ mousePositionOverlayVisible: !s.mousePositionOverlayVisible })),
@@ -2716,7 +2818,7 @@ export const useAppStore = create<AppState>((set, get) => {
     const activeLayer = getActiveLayer(project);
     if (isReferenceLayer(activeLayer)) return;
 
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
 
     if (activeTool === "select") {
@@ -2730,8 +2832,13 @@ export const useAppStore = create<AppState>((set, get) => {
         historyStack,
         getReferencePixelCache: getReferenceLayerPixelCache,
       });
+      let nextProject = project;
+      if (result.selectionDrag?.mode === "move" && result.selection?.floating) {
+        nextProject = withFloatingSelectionLayerExpand(project, result.selection);
+      }
       if (result.grid) get().syncActiveLayer(result.grid);
       set({
+        ...(nextProject !== project ? { project: nextProject } : {}),
         selection: result.selection,
         selectionDrag: result.selectionDrag,
         lassoPoints: result.lassoPoints,
@@ -2802,10 +2909,20 @@ export const useAppStore = create<AppState>((set, get) => {
       modifiers.shiftKey &&
       brushLineAnchor
     ) {
+      const drawProject = prepareActiveLayerProjectForDrawing(
+        project,
+        activeTool,
+        toolSettings,
+        brushLineAnchor,
+        point,
+      );
+      if (drawProject !== project) set({ project: drawProject });
+      const drawGrid = getActiveLayerProjectedSurfaceFromProject(drawProject);
+
       pushHistory(historyStack, project, selection);
       const selectedColor = button === "primary" ? foregroundColor : backgroundColor;
       applyBrushStraightLine(
-        grid,
+        drawGrid,
         selectedColor,
         toolSettings,
         brushLineAnchor,
@@ -2814,7 +2931,7 @@ export const useAppStore = create<AppState>((set, get) => {
         activeSymmetry,
         mergeDrawOptions(undefined, tileDraw?.tileRegion),
       );
-      get().syncActiveLayer(grid);
+      get().syncActiveLayer(drawGrid);
       set({ brushLineAnchor: point });
       return;
     }
@@ -2837,13 +2954,22 @@ export const useAppStore = create<AppState>((set, get) => {
       }
     }
 
+    const drawProject = prepareActiveLayerProjectForDrawing(
+      project,
+      activeTool,
+      toolSettings,
+      point,
+    );
+    if (drawProject !== project) set({ project: drawProject });
+    const drawGrid = getActiveLayerProjectedSurfaceFromProject(drawProject);
+
     const drawOptions = mergeDrawOptions(
       buildPatternDrawOptions(get(), button),
       tileDraw?.tileRegion,
     );
 
     applyToolPointerDown(
-      grid,
+      drawGrid,
       activeTool,
       color,
       toolSettings,
@@ -2853,7 +2979,7 @@ export const useAppStore = create<AppState>((set, get) => {
       drawOptions,
     );
 
-    get().syncActiveLayer(grid);
+    get().syncActiveLayer(drawGrid);
 
     set({
       isDrawing: true,
@@ -2874,6 +3000,7 @@ export const useAppStore = create<AppState>((set, get) => {
       activeTool,
       toolSettings,
       isDrawing,
+      drawStart,
       lastPoint,
       drawingButton,
       drawingColor,
@@ -2887,12 +3014,16 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (isReferenceLayer(getActiveLayer(project))) return;
 
-    const grid = getActiveLayerGridFromProject(project);
-    if (!grid) return;
-
     if (activeTool === "select" && selectionDrag) {
+      let workingProject = project;
+      if (selectionDrag.mode === "move" && selection?.floating) {
+        workingProject = withFloatingSelectionLayerExpand(project, selection);
+      }
+      const grid = getActiveLayerProjectedSurfaceFromProject(workingProject);
+      if (!grid) return;
+
       const result = handleSelectPointerMove({
-        project,
+        project: workingProject,
         point,
         settings: toolSettings,
         selection,
@@ -2903,7 +3034,12 @@ export const useAppStore = create<AppState>((set, get) => {
         historyStack: get().historyStack,
       });
       if (result.grid) get().syncActiveLayer(result.grid);
+      const expandedProject =
+        result.selection?.floating && selectionDrag.mode === "move"
+          ? withFloatingSelectionLayerExpand(workingProject, result.selection)
+          : workingProject;
       set({
+        ...(expandedProject !== project ? { project: expandedProject } : {}),
         selection: result.selection,
         selectionDrag: result.selectionDrag,
         lassoPoints: result.lassoPoints,
@@ -2913,7 +3049,33 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
-    if (activeTool === "transform" && selectionDrag && selection) {
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
+    if (!grid) return;
+
+    if (activeTool === "transform" && selectionDrag) {
+      if (selectionDrag.mode === "layerPosition") {
+        const activeLayer = getActiveLayer(project);
+        if (isDrawingLayer(activeLayer)) {
+          const nextPosition = resolveLayerPositionFromDrag(selectionDrag, point);
+          if (nextPosition) {
+            const updated = moveDrawingLayerInProjectUseCase(
+              project,
+              activeLayer.id,
+              nextPosition,
+            );
+            if (updated) {
+              set({
+                project: updated,
+                selectionDrag: { ...selectionDrag, current: point },
+                lastPoint: point,
+              });
+            }
+          }
+        }
+        return;
+      }
+
+      if (selection) {
       const result = handleTransformPointerMove({
         point,
         selection,
@@ -2922,10 +3084,15 @@ export const useAppStore = create<AppState>((set, get) => {
         shiftKey: modifiers.shiftKey,
         altKey: modifiers.altKey,
       });
+      const expandedProject = result.selection.floating
+        ? withFloatingSelectionLayerExpand(project, result.selection)
+        : project;
       set({
+        ...(expandedProject !== project ? { project: expandedProject } : {}),
         selection: result.selection,
         selectionDrag: result.selectionDrag,
       });
+      }
       return;
     }
 
@@ -2961,13 +3128,24 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!isDrawingToolType(activeTool)) return;
 
+    const layerExpandStart = activeTool === "shape" && drawStart ? drawStart : lastPoint;
+    const drawProject = prepareActiveLayerProjectForDrawing(
+      project,
+      activeTool,
+      toolSettings,
+      layerExpandStart,
+      point,
+    );
+    if (drawProject !== project) set({ project: drawProject });
+    const drawGrid = getActiveLayerProjectedSurfaceFromProject(drawProject);
+
     const drawOptions = mergeDrawOptions(
       buildPatternDrawOptions(get(), drawingButton),
       tileDraw?.tileRegion,
     );
 
     applyToolPointerMove(
-      grid,
+      drawGrid,
       activeTool,
       drawingColor,
       toolSettings,
@@ -2978,7 +3156,7 @@ export const useAppStore = create<AppState>((set, get) => {
       drawOptions,
     );
 
-    get().syncActiveLayer(grid);
+    get().syncActiveLayer(drawGrid);
 
     set({ lastPoint: point });
 
@@ -3008,7 +3186,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (isReferenceLayer(getActiveLayer(project))) return;
 
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
 
     if (activeTool === "select" && selectionDrag) {
@@ -3023,7 +3201,11 @@ export const useAppStore = create<AppState>((set, get) => {
         historyStack,
         grid,
       });
-      if (result.grid) get().syncActiveLayer(result.grid);
+      if (result.project) {
+        set({ project: result.project });
+      } else if (result.grid) {
+        get().syncActiveLayer(result.grid);
+      }
       set({
         selection: result.selection,
         selectionDrag: result.selectionDrag,
@@ -3092,8 +3274,18 @@ export const useAppStore = create<AppState>((set, get) => {
       }
 
       if (isDrawingToolType(activeTool)) {
+        const drawProject = prepareActiveLayerProjectForDrawing(
+          project,
+          activeTool,
+          toolSettings,
+          drawStart,
+          point,
+        );
+        if (drawProject !== project) set({ project: drawProject });
+        const drawGrid = getActiveLayerProjectedSurfaceFromProject(drawProject);
+
         applyToolPointerUp(
-          grid,
+          drawGrid,
           activeTool,
           drawingColor,
           toolSettings,
@@ -3103,9 +3295,9 @@ export const useAppStore = create<AppState>((set, get) => {
           activeSymmetry,
           drawOptions,
         );
-      }
 
-      get().syncActiveLayer(grid);
+        get().syncActiveLayer(drawGrid);
+      }
     }
 
     set({
@@ -3189,14 +3381,30 @@ export const useAppStore = create<AppState>((set, get) => {
     });
   },
 
+  activateTransformTool: () => {
+    const { project, selection } = get();
+    if (!project) return;
+
+    const resolved = resolveSelectionForTransform(project, selection);
+    if (resolved !== selection) {
+      set({
+        selection: resolved,
+        selectionDrag: null,
+        lassoPoints: [],
+        selectionPreviewRect: null,
+      });
+    }
+    get().setActiveTool("transform");
+  },
+
   deselectCanvas: () => {
     const { project, selection } = get();
     if (selection?.floating && project) {
-      const grid = getActiveLayerGridFromProject(project);
-      if (grid) {
-        const { grid: committedGrid } = commitActiveFloating({ grid, selection });
-        get().syncActiveLayer(committedGrid);
-      }
+      const { project: committedProject } = commitFloatingSelectionInProject(
+        project,
+        selection,
+      );
+      set({ project: committedProject });
     }
     set({
       selection: deselectSelection(),
@@ -3214,33 +3422,31 @@ export const useAppStore = create<AppState>((set, get) => {
   },
 
   copySelection: async () => {
-    const { project, selection, internalClipboard } = get();
+    const { project, selection } = get();
     if (!project || !selection || isSelectionEmpty(selection)) return;
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
-    const copied = await copySelectionToClipboard(
-      clipboardService,
-      grid,
-      selection,
-      internalClipboard,
-    );
-    if (copied) set({ internalClipboard: copied });
+    const copied = await copySelectionToClipboard(clipboardService, grid, selection);
+    if (!copied) {
+      toast.error("无法复制选区");
+      return;
+    }
+    set({ internalClipboard: copied });
+    toast.info("已复制到剪贴板");
   },
 
   cutSelection: async () => {
     const { project, selection, historyStack, internalClipboard } = get();
     if (!project || !selection || isSelectionEmpty(selection)) return;
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
     pushHistory(historyStack, project, selection);
-    const copied = await copySelectionToClipboard(
-      clipboardService,
-      grid,
-      selection,
-      internalClipboard,
-    );
+    const copied = await copySelectionToClipboard(clipboardService, grid, selection);
     const floated = createFloatingFromCut(grid, selection);
-    if (!floated) return;
+    if (!floated) {
+      toast.error("无法剪切选区");
+      return;
+    }
     get().syncActiveLayer(floated.grid);
     set({
       internalClipboard: copied ?? internalClipboard,
@@ -3250,6 +3456,7 @@ export const useAppStore = create<AppState>((set, get) => {
       selectionPreviewRect: null,
       activeTool: "select",
     });
+    toast.info("已剪切到剪贴板");
   },
 
   pasteSelection: async () => {
@@ -3257,13 +3464,9 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!project) return;
     pushHistory(historyStack, project, selection);
     if (selection?.floating) {
-      const grid = getActiveLayerGridFromProject(project);
-      if (grid) {
-        const { grid: committedGrid, selection: committedSelection } =
-          commitActiveFloating({ grid, selection });
-        get().syncActiveLayer(committedGrid);
-        set({ selection: committedSelection });
-      }
+      const { project: committedProject, selection: committedSelection } =
+        commitFloatingSelectionInProject(project, selection);
+      set({ project: committedProject, selection: committedSelection });
     }
     const pasted = await pasteFromClipboard(
       clipboardService,
@@ -3272,7 +3475,10 @@ export const useAppStore = create<AppState>((set, get) => {
       internalClipboard,
     );
     if (!pasted) return;
+    const currentProject = get().project ?? project;
+    const expandedProject = withFloatingSelectionLayerExpand(currentProject, pasted);
     set({
+      project: expandedProject,
       selection: pasted,
       selectionDrag: null,
       lassoPoints: [],
@@ -3284,7 +3490,7 @@ export const useAppStore = create<AppState>((set, get) => {
   clearSelectionContent: () => {
     const { project, selection, historyStack } = get();
     if (!project || !selection || isSelectionEmpty(selection)) return;
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
     pushHistory(historyStack, project, selection);
     clearSelectionPixels(grid, selection);
@@ -3294,12 +3500,9 @@ export const useAppStore = create<AppState>((set, get) => {
   commitSelection: () => {
     const { project, selection } = get();
     if (!project || !selection?.floating) return;
-    const grid = getActiveLayerGridFromProject(project);
-    if (!grid) return;
-    const { grid: committedGrid, selection: committedSelection } =
-      commitActiveFloating({ grid, selection });
-    get().syncActiveLayer(committedGrid);
-    set({ selection: committedSelection, selectionDrag: null });
+    const { project: committedProject, selection: committedSelection } =
+      commitFloatingSelectionInProject(project, selection);
+    set({ project: committedProject, selection: committedSelection, selectionDrag: null });
   },
 
   cancelSelection: () => {
@@ -3308,36 +3511,39 @@ export const useAppStore = create<AppState>((set, get) => {
       get().deselectCanvas();
       return;
     }
-    const grid = getActiveLayerGridFromProject(project);
-    if (!grid) return;
     const source = selection.floating.source;
-    const { grid: restoredGrid, selection: restoredSelection } =
-      cancelActiveFloating({ grid, selection });
-    get().syncActiveLayer(restoredGrid);
+    const { project: restoredProject, selection: restoredSelection } =
+      cancelFloatingSelectionInProject(project, selection);
     if (source === "paste") {
-      set({ selection: null, selectionDrag: null });
+      set({ project: restoredProject, selection: null, selectionDrag: null });
     } else {
-      set({ selection: restoredSelection, selectionDrag: null });
+      set({ project: restoredProject, selection: restoredSelection, selectionDrag: null });
     }
   },
 
   nudgeSelectionBy: (dx, dy) => {
     const { project, selection, historyStack } = get();
     if (!project || !selection || isSelectionEmpty(selection)) return;
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
     if (!selection.floating) {
       pushHistory(historyStack, project, selection);
     }
     const result = nudgeSelection(grid, selection, dx, dy);
-    get().syncActiveLayer(result.grid);
-    set({ selection: result.selection });
+    const expandedProject = withFloatingSelectionLayerExpand(project, result.selection);
+    if (result.grid !== grid) {
+      get().syncActiveLayer(result.grid);
+    }
+    set({
+      ...(expandedProject !== project ? { project: expandedProject } : {}),
+      selection: result.selection,
+    });
   },
 
   rotateSelection90: (steps) => {
     const { project, selection, historyStack } = get();
     if (!project || !selection || isSelectionEmpty(selection)) return;
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
     pushHistory(historyStack, project, selection);
     let state = selection;
@@ -3346,13 +3552,17 @@ export const useAppStore = create<AppState>((set, get) => {
       get().syncActiveLayer(grid);
     }
     const rotated = rotateFloatingSelection90(state, steps);
-    set({ selection: rotated });
+    const expandedProject = withFloatingSelectionLayerExpand(project, rotated);
+    set({
+      ...(expandedProject !== project ? { project: expandedProject } : {}),
+      selection: rotated,
+    });
   },
 
   flipSelectionHorizontal: () => {
     const { project, selection, historyStack } = get();
     if (!project || !selection || isSelectionEmpty(selection)) return;
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
     pushHistory(historyStack, project, selection);
     let state = selection;
@@ -3360,13 +3570,18 @@ export const useAppStore = create<AppState>((set, get) => {
       state = beginMoveSelection(grid, state);
       get().syncActiveLayer(grid);
     }
-    set({ selection: flipFloatingHorizontal(state) });
+    const flipped = flipFloatingHorizontal(state);
+    const expandedProject = withFloatingSelectionLayerExpand(project, flipped);
+    set({
+      ...(expandedProject !== project ? { project: expandedProject } : {}),
+      selection: flipped,
+    });
   },
 
   flipSelectionVertical: () => {
     const { project, selection, historyStack } = get();
     if (!project || !selection || isSelectionEmpty(selection)) return;
-    const grid = getActiveLayerGridFromProject(project);
+    const grid = getActiveLayerProjectedSurfaceFromProject(project);
     if (!grid) return;
     pushHistory(historyStack, project, selection);
     let state = selection;
@@ -3374,7 +3589,12 @@ export const useAppStore = create<AppState>((set, get) => {
       state = beginMoveSelection(grid, state);
       get().syncActiveLayer(grid);
     }
-    set({ selection: flipFloatingVertical(state) });
+    const flipped = flipFloatingVertical(state);
+    const expandedProject = withFloatingSelectionLayerExpand(project, flipped);
+    set({
+      ...(expandedProject !== project ? { project: expandedProject } : {}),
+      selection: flipped,
+    });
   },
 
 
@@ -3698,11 +3918,8 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!project) return;
 
-    get().historyStack.clear();
-
     set({
       project: setActiveLayer(project, layerId),
-      selection: null,
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
@@ -3732,6 +3949,32 @@ export const useAppStore = create<AppState>((set, get) => {
     if (!project) return;
 
     set({ project: toggleLayerVisibilityInProject(project, layerId) });
+
+  },
+
+
+
+  setDrawingLayerOpacity: (layerId, opacityPercent) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    const opacity = Math.round((opacityPercent / 100) * 255);
+
+    set({ project: setDrawingLayerOpacityInProject(project, layerId, opacity) });
+
+  },
+
+
+
+  toggleDrawingLayerLock: (layerId) => {
+
+    const { project } = get();
+
+    if (!project) return;
+
+    set({ project: toggleDrawingLayerLockInProject(project, layerId) });
 
   },
 
@@ -4069,6 +4312,11 @@ export const useAppStore = create<AppState>((set, get) => {
     useColorEditStore.getState().openPage();
   },
 
+  openColorVariationPage: () => {
+    closeOtherToolPages("colorVariation");
+    useColorVariationAnalysisStore.getState().openPage();
+  },
+
   openWorldPage: () => {
     closeOtherToolPages("world");
     useWorldStore.getState().openPage();
@@ -4112,6 +4360,19 @@ export const useAppStore = create<AppState>((set, get) => {
       return;
     }
 
+    if (toolPageId === "colorVariation") {
+      const grid = PixelGrid.fromRgba(imageData.width, imageData.height, imageData.data);
+      const entries = buildColorEntriesInScanOrder(grid.toUint32Array());
+      if (entries.length === 0) {
+        toast.info("图像中没有可分析的颜色");
+        return;
+      }
+      closeOtherToolPages("colorVariation");
+      useColorVariationAnalysisStore.getState().openPageWithColorEntries(entries);
+      toast.info(`已发送 ${entries.length} 个颜色到颜色变化分析`);
+      return;
+    }
+
     closeOtherToolPages("colorEdit");
     const store = useColorEditStore.getState();
     store.reset();
@@ -4147,6 +4408,31 @@ export const useAppStore = create<AppState>((set, get) => {
     colorEdit.openPage();
     colorEdit.importFromImageData(cloneImageData(imageData));
     toast.info("已发送到颜色编辑");
+  },
+
+  sendSelectionColorsToColorVariationAnalysis: () => {
+    const { project, selection } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+    if (!selection || isSelectionEmpty(selection)) {
+      toast.info("请先创建选区");
+      return;
+    }
+
+    const entries = extractSelectionColorsForAnalysis(project, selection);
+    if (entries.length === 0) {
+      toast.info("选区内没有可分析的颜色");
+      return;
+    }
+
+    closeOtherToolPages("colorVariation");
+    useColorVariationAnalysisStore.getState().openPageWithColorEntries(entries);
+    if (selection.floating) {
+      get().commitSelection();
+    }
+    toast.info(`已发送 ${entries.length} 个颜色到颜色变化分析`);
   },
 
 
@@ -4298,7 +4584,7 @@ export const useAppStore = create<AppState>((set, get) => {
 
     if (!project) return;
 
-    const updated = syncActiveLayerPixels(project, grid);
+    const updated = syncActiveLayerPixels(project, resolveLayerLocalGrid(grid));
 
     set({ project: updated });
 

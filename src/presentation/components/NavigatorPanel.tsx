@@ -18,6 +18,10 @@ import {
   type NavigatorResizeStart,
 } from "@/domain/viewport/NavigatorPanelResize";
 import { computeFloatingPanelZIndex } from "@/domain/viewport/FloatingPanelStack";
+import {
+  computeForeshortenedSpan,
+  resolveOrthographicAngle,
+} from "@/domain/viewport/OrthographicView";
 import { renderTransparencyCheckerboard } from "@/infrastructure/canvas/CanvasBackgroundRenderer";
 import { renderPixelGrid1x } from "@/infrastructure/canvas/PixelGridCanvasRenderer";
 import { useAppStore } from "../stores/appStore";
@@ -142,6 +146,11 @@ export function NavigatorPanel() {
 
     const backgroundCtx = backgroundCanvas.getContext("2d");
     if (!backgroundCtx) return;
+    const orthographicAngle = resolveOrthographicAngle(project.orthographicView);
+    const checkerboardTileHeight = computeForeshortenedSpan(
+      appSettings.checkerboardTileSize,
+      orthographicAngle,
+    );
     renderTransparencyCheckerboard(
       backgroundCtx,
       composite.width,
@@ -149,6 +158,7 @@ export function NavigatorPanel() {
       effectiveZoom,
       {
         tileSize: appSettings.checkerboardTileSize,
+        tileHeight: checkerboardTileHeight,
         lightColor: appSettings.checkerboardLightHex,
         darkColor: appSettings.checkerboardDarkHex,
       },

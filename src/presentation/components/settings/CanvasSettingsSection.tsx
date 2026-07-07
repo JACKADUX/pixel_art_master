@@ -9,6 +9,11 @@ import {
   MIN_SYMMETRY_AXIS_LINE_WIDTH,
   symmetryAxisColorRgba,
 } from "@/domain/appSettings/AppSettings";
+import {
+  MAX_CAMERA_ANGLE,
+  MIN_CAMERA_ANGLE,
+  DEFAULT_CAMERA_ANGLE,
+} from "@/domain/viewport/OrthographicView";
 import { useAppStore } from "../../stores/appStore";
 import {
   CheckerboardPreview,
@@ -50,9 +55,38 @@ export function CanvasSettingsSection() {
   const setSymmetryAxisLineWidth = useAppStore((s) => s.setSymmetryAxisLineWidth);
   const setSymmetryAxisOutlineEnabled = useAppStore((s) => s.setSymmetryAxisOutlineEnabled);
   const toggleGrid = useAppStore((s) => s.toggleGrid);
+  const orthographicViewEnabled = project?.orthographicView.enabled ?? false;
+  const orthographicCameraAngle = project?.orthographicView.cameraAngle ?? DEFAULT_CAMERA_ANGLE;
+  const setOrthographicViewEnabled = useAppStore((s) => s.setOrthographicViewEnabled);
+  const setOrthographicCameraAngle = useAppStore((s) => s.setOrthographicCameraAngle);
 
   return (
     <div className="flex flex-col gap-5">
+      <SettingsGroup
+        title="正交视图（项目）"
+        description="仅影响当前项目的网格与棋盘格显示，不改变画布像素尺寸与绘制坐标。"
+      >
+        <SettingsToggle
+          label="启用正交视图模式"
+          checked={orthographicViewEnabled}
+          onChange={setOrthographicViewEnabled}
+        />
+        <SettingsRow
+          label="摄像机角度"
+          hint={`${MIN_CAMERA_ANGLE}–${MAX_CAMERA_ANGLE}°，90° 等价于顶视`}
+        >
+          <SettingsNumberInput
+            value={orthographicCameraAngle}
+            min={MIN_CAMERA_ANGLE}
+            max={MAX_CAMERA_ANGLE}
+            step={0.1}
+            suffix="°"
+            disabled={!orthographicViewEnabled}
+            onChange={setOrthographicCameraAngle}
+          />
+        </SettingsRow>
+      </SettingsGroup>
+
       <SettingsGroup
         title="网格"
         description="主网格与子网格尺寸会同步到当前项目；新建项目时作为默认值。"

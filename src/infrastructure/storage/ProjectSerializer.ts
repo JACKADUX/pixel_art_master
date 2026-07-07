@@ -7,14 +7,31 @@ import type {
   ReferenceGridConfig,
   ReferenceLayer,
 } from "@/domain/layer/Layer";
-import { createEmptyReferenceLayer } from "@/domain/layer/Layer";
+import { createEmptyReferenceLayer, DEFAULT_DRAWING_LAYER_OPACITY } from "@/domain/layer/Layer";
 import { Palette } from "@/domain/palette/Palette";
 import type { GridConfig, Project } from "@/domain/project/Project";
 import { DEFAULT_GRID } from "@/domain/project/Project";
+import {
+  DEFAULT_ORTHOGRAPHIC_VIEW,
+  type OrthographicViewConfig,
+} from "@/domain/viewport/OrthographicView";
 import { normalizeLayerStack } from "@/domain/layer/LayerStack";
 import { pixelsToPngBase64 } from "@/infrastructure/image/ImageDataCodec";
 
-interface SerializedDrawingLayer {
+interface SerializedDrawingLayerV4 {
+  id: string;
+  name: string;
+  type: "drawing";
+  visible: boolean;
+  opacity?: number;
+  locked?: boolean;
+  width: number;
+  height: number;
+  position: LayerPosition;
+  pixels: string;
+}
+
+interface SerializedDrawingLayerV3 {
   id: string;
   name: string;
   type: "drawing";
@@ -36,7 +53,8 @@ interface SerializedReferenceLayer {
   paletteVisible?: boolean;
 }
 
-type SerializedLayerV3 = SerializedDrawingLayer | SerializedReferenceLayer;
+type SerializedLayerV4 = SerializedDrawingLayerV4 | SerializedReferenceLayer;
+type SerializedLayerV3 = SerializedDrawingLayerV3 | SerializedReferenceLayer;
 
 interface SerializedLayerV2 {
   id: string;
@@ -44,6 +62,28 @@ interface SerializedLayerV2 {
   type: "reference" | "drawing";
   visible: boolean;
   pixels: string;
+}
+
+interface SerializedCanvasV4 {
+  width: number;
+  height: number;
+  scaleFactor: number;
+  activeLayerId: string;
+  activeReferenceLayerId?: string | null;
+  layers: SerializedLayerV4[];
+}
+
+interface SerializedProjectV4 {
+  version: 4;
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  canvas: SerializedCanvasV4;
+  palette: { color: number; hex: string }[];
+  notes: Note[];
+  grid: GridConfig;
+  orthographicView?: OrthographicViewConfig;
 }
 
 interface SerializedCanvasV3 {
@@ -129,17 +169,18 @@ function decodePixels(base64: string, expectedLength: number): Uint32Array {
   return arr;
 }
 
-function serializeLayerV3(layer: Layer, canvasWidth: number, canvasHeight: number): SerializedLayerV3 {
+function serializeLayerV4(layer: Layer): SerializedLayerV4 {
   if (layer.type === "drawing") {
-    const pixelCount = canvasWidth * canvasHeight;
-    if (layer.pixels.length !== pixelCount) {
-      throw new Error(`Invalid layer size for layer ${layer.name}`);
-    }
     return {
       id: layer.id,
       name: layer.name,
       type: "drawing",
       visible: layer.visible,
+      opacity: layer.opacity !== DEFAULT_DRAWING_LAYER_OPACITY ? layer.opacity : undefined,
+      locked: layer.locked ? true : undefined,
+      width: layer.width,
+      height: layer.height,
+      position: layer.position,
       pixels: encodePixels(layer.pixels),
     };
   }
@@ -156,6 +197,42 @@ function serializeLayerV3(layer: Layer, canvasWidth: number, canvasHeight: numbe
     grid: layer.grid,
     scale: layer.scale,
     paletteVisible: layer.paletteVisible,
+  };
+}
+
+function deserializeDrawingLayerV4(sl: SerializedDrawingLayerV4): DrawingLayer {
+  const pixelCount = sl.width * sl.height;
+  return {
+    id: sl.id,
+    name: sl.name,
+    type: "drawing",
+    visible: sl.visible,
+    opacity: sl.opacity ?? DEFAULT_DRAWING_LAYER_OPACITY,
+    locked: sl.locked ?? false,
+    width: sl.width,
+    height: sl.height,
+    position: sl.position,
+    pixels: decodePixels(sl.pixels, pixelCount),
+  };
+}
+
+function migrateV3DrawingLayer(
+  sl: SerializedDrawingLayerV3,
+  canvasWidth: number,
+  canvasHeight: number,
+): DrawingLayer {
+  const pixelCount = canvasWidth * canvasHeight;
+  return {
+    id: sl.id,
+    name: sl.name,
+    type: "drawing",
+    visible: sl.visible,
+    opacity: DEFAULT_DRAWING_LAYER_OPACITY,
+    locked: false,
+    width: canvasWidth,
+    height: canvasHeight,
+    position: { x: 0, y: 0 },
+    pixels: decodePixels(sl.pixels, pixelCount),
   };
 }
 
@@ -201,6 +278,11 @@ function migrateV2Layers(
       name: sl.name,
       type: "drawing",
       visible: sl.visible,
+      opacity: DEFAULT_DRAWING_LAYER_OPACITY,
+      locked: false,
+      width: canvasWidth,
+      height: canvasHeight,
+      position: { x: 0, y: 0 },
       pixels,
     };
     return drawing;
@@ -264,6 +346,7 @@ function buildProjectFromLayers(
     palette: Palette;
     notes: Note[];
     grid: GridConfig;
+    orthographicView: OrthographicViewConfig;
   },
   layers: Layer[],
 ): Project {
@@ -289,12 +372,13 @@ function buildProjectFromLayers(
     palette: meta.palette,
     notes: meta.notes,
     grid: meta.grid,
+    orthographicView: meta.orthographicView,
   };
 }
 
 export function serializeProject(project: Project): string {
-  const data: SerializedProjectV3 = {
-    version: 3,
+  const data: SerializedProjectV4 = {
+    version: 4,
     id: project.id,
     name: project.name,
     createdAt: project.createdAt,
@@ -305,69 +389,111 @@ export function serializeProject(project: Project): string {
       scaleFactor: project.canvas.scaleFactor,
       activeLayerId: project.canvas.activeLayerId,
       activeReferenceLayerId: project.canvas.activeReferenceLayerId,
-      layers: project.canvas.layers.map((l) =>
-        serializeLayerV3(l, project.canvas.width, project.canvas.height),
-      ),
+      layers: project.canvas.layers.map((l) => serializeLayerV4(l)),
     },
     palette: project.palette.toJSON(),
     notes: project.notes,
     grid: project.grid,
+    orthographicView: project.orthographicView,
   };
 
   return JSON.stringify(data, null, 2);
 }
 
+function deserializeV3Project(v3: SerializedProjectV3, filePath: string, grid: GridConfig): Project {
+  const layers: Layer[] = v3.canvas.layers.map((sl) => {
+    if (sl.type === "drawing") {
+      return migrateV3DrawingLayer(sl, v3.canvas.width, v3.canvas.height);
+    }
+    const base = createEmptyReferenceLayer(sl.name);
+    return {
+      ...base,
+      id: sl.id,
+      name: sl.name,
+      visible: sl.visible,
+      imageData: sl.imageData,
+      imageSize: sl.imageSize,
+      crop: sl.crop,
+      position: sl.position,
+      grid: sl.grid,
+      scale: sl.scale ?? 1,
+      paletteVisible: sl.paletteVisible ?? true,
+    };
+  });
+
+  return buildProjectFromLayers(
+    {
+      id: v3.id,
+      name: v3.name,
+      filePath,
+      createdAt: v3.createdAt,
+      updatedAt: v3.updatedAt,
+      canvasWidth: v3.canvas.width,
+      canvasHeight: v3.canvas.height,
+      scaleFactor: v3.canvas.scaleFactor,
+      activeLayerId: v3.canvas.activeLayerId,
+      activeReferenceLayerId: v3.canvas.activeReferenceLayerId,
+      palette: Palette.fromJSON(v3.palette),
+      notes: v3.notes ?? [],
+      grid,
+      orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
+    },
+    layers,
+  );
+}
+
+function deserializeV4Project(v4: SerializedProjectV4, filePath: string, grid: GridConfig): Project {
+  const layers: Layer[] = v4.canvas.layers.map((sl) => {
+    if (sl.type === "drawing") {
+      return deserializeDrawingLayerV4(sl);
+    }
+    const base = createEmptyReferenceLayer(sl.name);
+    return {
+      ...base,
+      id: sl.id,
+      name: sl.name,
+      visible: sl.visible,
+      imageData: sl.imageData,
+      imageSize: sl.imageSize,
+      crop: sl.crop,
+      position: sl.position,
+      grid: sl.grid,
+      scale: sl.scale ?? 1,
+      paletteVisible: sl.paletteVisible ?? true,
+    };
+  });
+
+  return buildProjectFromLayers(
+    {
+      id: v4.id,
+      name: v4.name,
+      filePath,
+      createdAt: v4.createdAt,
+      updatedAt: v4.updatedAt,
+      canvasWidth: v4.canvas.width,
+      canvasHeight: v4.canvas.height,
+      scaleFactor: v4.canvas.scaleFactor,
+      activeLayerId: v4.canvas.activeLayerId,
+      activeReferenceLayerId: v4.canvas.activeReferenceLayerId,
+      palette: Palette.fromJSON(v4.palette),
+      notes: v4.notes ?? [],
+      grid,
+      orthographicView: v4.orthographicView ?? { ...DEFAULT_ORTHOGRAPHIC_VIEW },
+    },
+    layers,
+  );
+}
+
 export function deserializeProject(json: string, filePath: string): Project {
   const data = JSON.parse(json) as { version?: number };
-  const grid = (data as SerializedProjectV3).grid ?? { ...DEFAULT_GRID };
+  const grid = (data as SerializedProjectV4).grid ?? { ...DEFAULT_GRID };
+
+  if (data.version === 4) {
+    return deserializeV4Project(data as SerializedProjectV4, filePath, grid);
+  }
 
   if (data.version === 3) {
-    const v3 = data as SerializedProjectV3;
-    const pixelCount = v3.canvas.width * v3.canvas.height;
-    const layers: Layer[] = v3.canvas.layers.map((sl) => {
-      if (sl.type === "drawing") {
-        return {
-          id: sl.id,
-          name: sl.name,
-          type: "drawing",
-          visible: sl.visible,
-          pixels: decodePixels(sl.pixels, pixelCount),
-        };
-      }
-      const base = createEmptyReferenceLayer(sl.name);
-      return {
-        ...base,
-        id: sl.id,
-        name: sl.name,
-        visible: sl.visible,
-        imageData: sl.imageData,
-        imageSize: sl.imageSize,
-        crop: sl.crop,
-        position: sl.position,
-        grid: sl.grid,
-        scale: sl.scale ?? 1,
-        paletteVisible: sl.paletteVisible ?? true,
-      };
-    });
-
-    return buildProjectFromLayers(
-      {
-        id: v3.id,
-        name: v3.name,
-        filePath,
-        createdAt: v3.createdAt,
-        updatedAt: v3.updatedAt,
-        canvasWidth: v3.canvas.width,
-        canvasHeight: v3.canvas.height,
-        scaleFactor: v3.canvas.scaleFactor,
-        activeLayerId: v3.canvas.activeLayerId,
-        activeReferenceLayerId: v3.canvas.activeReferenceLayerId,
-        palette: Palette.fromJSON(v3.palette),
-        notes: v3.notes ?? [],
-        grid: grid,
-      },
-      layers,
-    );
+    return deserializeV3Project(data as SerializedProjectV3, filePath, grid);
   }
 
   let v2Canvas: SerializedCanvasV2;
@@ -401,6 +527,7 @@ export function deserializeProject(json: string, filePath: string): Project {
       palette: Palette.fromJSON(v1.palette),
       notes: v1.notes ?? [],
       grid: v1.grid ?? { ...DEFAULT_GRID },
+      orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
     };
   } else if (data.version === 2) {
     const v2 = data as SerializedProjectV2;
@@ -418,6 +545,7 @@ export function deserializeProject(json: string, filePath: string): Project {
       palette: Palette.fromJSON(v2.palette),
       notes: v2.notes ?? [],
       grid: v2.grid ?? { ...DEFAULT_GRID },
+      orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
     };
   } else {
     throw new Error(`Unsupported project version: ${data.version}`);

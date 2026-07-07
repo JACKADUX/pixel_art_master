@@ -1,6 +1,7 @@
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import type { CropRect, ImageSize } from "@/domain/layer/Layer";
 import type { GridMergeAlgorithm } from "./GridMergeAlgorithm";
+import type { GridMergeCenterPriority } from "./GridMergeCenterPriority";
 import { collectCellColors, intersectCellWithImage } from "./GridRestoreOperations";
 import { mergeCellColors } from "./GridMergeOperations";
 
@@ -158,6 +159,7 @@ export function applyRegionGridRestoreToGrid(
   columns: number,
   rows: number,
   algorithm: GridMergeAlgorithm,
+  centerPriority?: GridMergeCenterPriority,
 ): { grid: PixelGrid; layout: RegionGridLayout } {
   const layout = validateRegionGridRestore(innerRegion, columns, rows);
   const grid = PixelGrid.createEmpty(layout.outputWidth, layout.outputHeight);
@@ -170,7 +172,7 @@ export function applyRegionGridRestoreToGrid(
       );
       if (!cell) continue;
 
-      const colors = collectCellColors(data, imageSize.width, cell);
+      const colors = collectCellColors(data, imageSize.width, cell, centerPriority);
       if (colors.length === 0) continue;
       grid.setPixel(col, row, mergeCellColors(colors, algorithm));
     }

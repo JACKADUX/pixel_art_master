@@ -1,12 +1,7 @@
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import { createDrawingLayer } from "@/domain/layer/Layer";
 import { extractUniqueColorsFromPixels } from "@/domain/layer/ReferenceLayerPalette";
-import { touchProject, type Project } from "@/domain/project/Project";
-import {
-  addDrawingLayer,
-  getActiveLayerGridFromProject,
-  syncActiveLayerPixels,
-} from "./LayerUseCases";
-import {
+import { touchProject, type Project } from "@/domain/project/Project";import {
   importImageDataToReferenceLayer,
   type ImportToReferenceLayerResult,
 } from "./ImportToReferenceLayer";
@@ -16,10 +11,16 @@ export function importAssetGridToNewDrawingLayer(
   assetGrid: PixelGrid,
   layerName?: string,
 ): Project {
-  let updated = addDrawingLayer(project, layerName);
-  const canvasGrid = getActiveLayerGridFromProject(updated);
-  canvasGrid.blitOnto(assetGrid, 0, 0);
-  return syncActiveLayerPixels(updated, canvasGrid);
+  const drawingLayer = createDrawingLayer(assetGrid, layerName);
+  const layers = [...project.canvas.layers, drawingLayer];
+  return touchProject({
+    ...project,
+    canvas: {
+      ...project.canvas,
+      layers,
+      activeLayerId: drawingLayer.id,
+    },
+  });
 }
 
 export function importAssetImageDataToNewReferenceLayer(

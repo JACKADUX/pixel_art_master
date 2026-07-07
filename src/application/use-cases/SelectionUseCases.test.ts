@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { rgba, TRANSPARENT } from "@/domain/canvas/PixelColor";
+import { createEmptyReferenceLayer } from "@/domain/layer/Layer";
+import { createEmptyProject, withLayers } from "@/domain/project/Project";
+import { setActiveReferenceLayer } from "@/application/use-cases/LayerUseCases";
 import { createSelectionFromFloating } from "@/application/use-cases/ClipboardUseCases";
 import {
   beginMoveSelection,
@@ -9,10 +12,64 @@ import {
   invertSelection,
   moveFloatingSelection,
   commitFloatingSelection,
+  resolveSelectionForTransform,
 } from "@/application/use-cases/SelectionUseCases";
 import { createRectMask } from "@/domain/selection/SelectionMaskOperations";
 import { isMaskSelected } from "@/domain/selection/SelectionMask";
 import { createSelectionState } from "@/domain/selection/SelectionState";
+
+function setDrawingPixel(
+  project: ReturnType<typeof createEmptyProject>,
+  x: number,
+  y: number,
+  color: number,
+) {
+  const drawing = project.canvas.layers.find((layer) => layer.type === "drawing");
+  if (!drawing || drawing.type !== "drawing") return;
+  drawing.pixels[y * project.canvas.width + x] = color;
+}
+
+describe("resolveSelectionForTransform", () => {
+  it("returns existing selection when one is already active", () => {
+    const project = createEmptyProject("test", { width: 8, height: 8 });
+    const mask = createRectMask({ x: 1, y: 1 }, { x: 3, y: 3 }, 8, 8);
+    const selection = createSelectionState(mask);
+
+    expect(resolveSelectionForTransform(project, selection)).toBe(selection);
+  });
+
+  it("selects opaque pixels on the active drawing layer when selection is empty", () => {
+    const project = createEmptyProject("test", { width: 8, height: 8 });
+    setDrawingPixel(project, 2, 2, rgba(255, 0, 0));
+    setDrawingPixel(project, 4, 3, rgba(0, 255, 0));
+
+    const resolved = resolveSelectionForTransform(project, null);
+
+    expect(resolved).not.toBeNull();
+    expect(resolved!.bounds).toEqual({ x: 2, y: 2, width: 3, height: 2 });
+    expect(isMaskSelected(resolved!.mask, 2, 2)).toBe(true);
+    expect(isMaskSelected(resolved!.mask, 4, 3)).toBe(true);
+    expect(isMaskSelected(resolved!.mask, 0, 0)).toBe(false);
+  });
+
+  it("returns null when the active drawing layer has no opaque pixels", () => {
+    const project = createEmptyProject("test", { width: 8, height: 8 });
+
+    expect(resolveSelectionForTransform(project, null)).toBeNull();
+  });
+
+  it("returns null when a reference layer is active", () => {
+    const reference = createEmptyReferenceLayer("ref");
+    const baseProject = createEmptyProject("test", { width: 8, height: 8 });
+    const project = setActiveReferenceLayer(
+      withLayers(baseProject, [...baseProject.canvas.layers, reference]),
+      reference.id,
+    );
+    setDrawingPixel(project, 2, 2, rgba(255, 0, 0));
+
+    expect(resolveSelectionForTransform(project, null)).toBeNull();
+  });
+});
 
 describe("SelectionUseCases floating model", () => {
   it("invert then cancel restores lifted pixels after nudge", () => {

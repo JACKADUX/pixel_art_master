@@ -1,4 +1,4 @@
-import type { Layer } from "../layer/Layer";
+import type { Layer, LayerPosition } from "../layer/Layer";
 import { cloneLayers } from "../layer/Layer";
 import type { SelectionState } from "../selection/SelectionState";
 import { cloneSelectionState } from "../selection/SelectionState";
@@ -9,6 +9,9 @@ export type SnapshotKind = "pixels" | "structure";
 export interface PixelSnapshot {
   kind: "pixels";
   layerId: string;
+  width: number;
+  height: number;
+  position: LayerPosition;
   pixels: Uint32Array;
   selection: SelectionState | null;
 }
@@ -46,6 +49,9 @@ export function cloneEditorSnapshot(snapshot: EditorSnapshot): EditorSnapshot {
   return {
     kind: "pixels",
     layerId: snapshot.layerId,
+    width: snapshot.width,
+    height: snapshot.height,
+    position: { ...snapshot.position },
     pixels: new Uint32Array(snapshot.pixels),
     selection: snapshot.selection ? cloneSelectionState(snapshot.selection) : null,
   };
@@ -100,16 +106,28 @@ export class HistoryStack {
     return this.redoStack.length > 0;
   }
 
+  /** 下一个待撤销条目，调用方据此采集匹配条目所指向图层的当前状态。 */
+  get nextUndoEntry(): HistoryEntry | null {
+    return this.undoStack.length > 0
+      ? this.undoStack[this.undoStack.length - 1]
+      : null;
+  }
+
+  /** 下一个待重做条目，调用方据此采集匹配条目所指向图层的当前状态。 */
+  get nextRedoEntry(): HistoryEntry | null {
+    return this.redoStack.length > 0
+      ? this.redoStack[this.redoStack.length - 1]
+      : null;
+  }
+
   /** 下一个待撤销条目的类型，调用方据此采集匹配类型的当前状态。 */
   get nextUndoKind(): SnapshotKind | null {
-    const entry = this.undoStack[this.undoStack.length - 1];
-    return entry ? entry.kind : null;
+    return this.nextUndoEntry?.kind ?? null;
   }
 
   /** 下一个待重做条目的类型，调用方据此采集匹配类型的当前状态。 */
   get nextRedoKind(): SnapshotKind | null {
-    const entry = this.redoStack[this.redoStack.length - 1];
-    return entry ? entry.kind : null;
+    return this.nextRedoEntry?.kind ?? null;
   }
 
   get undoDepth(): number {

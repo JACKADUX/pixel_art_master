@@ -10,6 +10,11 @@ import { PaletteGridView } from "./PaletteGridView";
 import { PaletteMoreMenu } from "./PaletteMoreMenu";
 import { PaletteOklchMapView } from "./PaletteOklchMapView";
 import { PalettePresetManagerModal } from "./PalettePresetManagerModal";
+import {
+  handlePaletteBlankAreaClick,
+  handlePaletteBlankAreaContextMenu,
+  PALETTE_BLANK_AREA_TOOLTIP,
+} from "./paletteBlankAreaHandlers";
 
 function buildSwatchBackground(hex: string): string {
   return `
@@ -119,7 +124,18 @@ export function PalettePanel() {
       )}
 
       {colors.length === 0 ? (
-        <p className="text-xs text-zinc-500">点击添加将当前前景色加入色板</p>
+        <div
+          className={`min-h-0 flex-1 rounded border border-dashed border-zinc-700 ${
+            removeMode ? "" : "cursor-pointer"
+          }`}
+          title={removeMode ? undefined : PALETTE_BLANK_AREA_TOOLTIP}
+          onClick={(event) => handlePaletteBlankAreaClick(event, removeMode, setColorSlot)}
+          onContextMenu={(event) =>
+            handlePaletteBlankAreaContextMenu(event, removeMode, setColorSlot)
+          }
+        >
+          <p className="p-2 text-xs text-zinc-500">点击添加将当前前景色加入色板</p>
+        </div>
       ) : paletteViewMode === "grid" ? (
         <PaletteGridView colors={colors} {...sharedViewProps} />
       ) : (

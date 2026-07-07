@@ -1,10 +1,11 @@
 import type { PixelGrid } from "./PixelGrid";
 import type { MaskedPixelGrid } from "./MaskedPixelGrid";
+import { LayerProjectedSurface } from "./LayerProjectedSurface";
 import { forEachSymmetricPoint } from "../symmetry/SymmetryMirror";
 import type { SymmetryConfig } from "../symmetry/SymmetryConfig";
 import { isSymmetryActive } from "../symmetry/SymmetryConfig";
 
-export type SymmetricPixelSurfaceUnderlying = PixelGrid | MaskedPixelGrid;
+export type SymmetricPixelSurfaceUnderlying = PixelGrid | MaskedPixelGrid | LayerProjectedSurface;
 
 export class SymmetricPixelSurface {
   readonly width: number;

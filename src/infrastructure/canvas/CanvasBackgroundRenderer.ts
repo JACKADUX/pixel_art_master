@@ -1,5 +1,6 @@
 export interface CheckerboardOptions {
   tileSize: number;
+  tileHeight?: number;
   lightColor: string;
   darkColor: string;
 }
@@ -12,20 +13,21 @@ export function renderTransparencyCheckerboard(
   options: CheckerboardOptions,
 ): void {
   const { tileSize, lightColor, darkColor } = options;
+  const tileHeight = options.tileHeight ?? tileSize;
   const displayWidth = logicalWidth * zoom;
   const displayHeight = logicalHeight * zoom;
 
   const tileCanvas = document.createElement("canvas");
   tileCanvas.width = tileSize * 2;
-  tileCanvas.height = tileSize * 2;
+  tileCanvas.height = tileHeight * 2;
   const tileCtx = tileCanvas.getContext("2d");
   if (!tileCtx) return;
 
   tileCtx.fillStyle = lightColor;
   tileCtx.fillRect(0, 0, tileCanvas.width, tileCanvas.height);
   tileCtx.fillStyle = darkColor;
-  tileCtx.fillRect(0, 0, tileSize, tileSize);
-  tileCtx.fillRect(tileSize, tileSize, tileSize, tileSize);
+  tileCtx.fillRect(0, 0, tileSize, tileHeight);
+  tileCtx.fillRect(tileSize, tileHeight, tileSize, tileHeight);
 
   const logicalCanvas = document.createElement("canvas");
   logicalCanvas.width = logicalWidth;

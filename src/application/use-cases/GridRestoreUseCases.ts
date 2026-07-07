@@ -1,5 +1,6 @@
 import type { CropRect, ImageSize } from "@/domain/layer/Layer";
 import type { GridMergeAlgorithm } from "@/domain/pixelRestore/GridMergeAlgorithm";
+import type { GridMergeCenterPriority } from "@/domain/pixelRestore/GridMergeCenterPriority";
 import {
   applyGridRestoreToGrid,
   validateGridRestore,
@@ -37,6 +38,7 @@ export function applyGridRestore(
   imageData: ImageData,
   seedCell: CropRect,
   algorithm: GridMergeAlgorithm,
+  centerPriority?: GridMergeCenterPriority,
 ): GridRestoreResult {
   const imageSize = { width: imageData.width, height: imageData.height };
   const { grid, layout } = applyGridRestoreToGrid(
@@ -44,6 +46,7 @@ export function applyGridRestore(
     imageSize,
     seedCell,
     algorithm,
+    centerPriority,
   );
   const resultImageData = pixelGridToImageData(grid);
   return {
@@ -59,6 +62,7 @@ export function applyRegionGridRestore(
   columns: number,
   rows: number,
   algorithm: GridMergeAlgorithm,
+  centerPriority?: GridMergeCenterPriority,
 ): GridRestoreResult {
   const imageSize = { width: imageData.width, height: imageData.height };
   const { grid, layout } = applyRegionGridRestoreToGrid(
@@ -68,6 +72,7 @@ export function applyRegionGridRestore(
     columns,
     rows,
     algorithm,
+    centerPriority,
   );
   const resultImageData = pixelGridToImageData(grid);
   return {

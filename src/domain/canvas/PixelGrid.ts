@@ -107,38 +107,63 @@ export class PixelGrid {
       throw new Error("Cannot composite grids of different sizes");
     }
     const result = base.clone();
-    for (let i = 0; i < this.pixels.length; i++) {
-      const source = this.pixels[i];
-      const sourceAlpha = (source >>> 24) & 0xff;
-      if (sourceAlpha === 0) continue;
-      if (sourceAlpha === 255) {
-        result.pixels[i] = source;
-        continue;
-      }
-
-      const destination = result.pixels[i];
-      const destinationAlpha = (destination >>> 24) & 0xff;
-      const sourceWeight = sourceAlpha / 255;
-      const destinationWeight = (destinationAlpha / 255) * (1 - sourceWeight);
-      const outputAlpha = sourceWeight + destinationWeight;
-      if (outputAlpha <= 0) continue;
-
-      const sourceComponents = toRgbaComponents(source);
-      const destinationComponents = toRgbaComponents(destination);
-      const r = Math.round(
-        (sourceComponents.r * sourceWeight + destinationComponents.r * destinationWeight) /
-          outputAlpha,
-      );
-      const g = Math.round(
-        (sourceComponents.g * sourceWeight + destinationComponents.g * destinationWeight) /
-          outputAlpha,
-      );
-      const b = Math.round(
-        (sourceComponents.b * sourceWeight + destinationComponents.b * destinationWeight) /
-          outputAlpha,
-      );
-      result.pixels[i] = rgba(r, g, b, Math.round(outputAlpha * 255));
-    }
+    this.compositeOverOnto(result, 0, 0);
     return result;
+  }
+
+  /** Alpha-composites this grid onto target at the given canvas offset. Out-of-bounds pixels are clipped. */
+  compositeOverOnto(
+    target: PixelGrid,
+    offsetX: number,
+    offsetY: number,
+    layerOpacity = 255,
+  ): void {
+    for (let y = 0; y < this.height; y++) {
+      for (let x = 0; x < this.width; x++) {
+        const canvasX = offsetX + x;
+        const canvasY = offsetY + y;
+        if (!target.inBounds(canvasX, canvasY)) continue;
+
+        const source = this.pixels[y * this.width + x];
+        const pixelAlpha = (source >>> 24) & 0xff;
+        if (pixelAlpha === 0) continue;
+
+        const sourceAlpha =
+          layerOpacity === 255
+            ? pixelAlpha
+            : Math.round((pixelAlpha * layerOpacity) / 255);
+        if (sourceAlpha === 0) continue;
+
+        const destinationIndex = canvasY * target.width + canvasX;
+        const destination = target.pixels[destinationIndex];
+
+        if (sourceAlpha === 255) {
+          target.pixels[destinationIndex] = (source & 0x00ffffff) | 0xff000000;
+          continue;
+        }
+
+        const destinationAlpha = (destination >>> 24) & 0xff;
+        const sourceWeight = sourceAlpha / 255;
+        const destinationWeight = (destinationAlpha / 255) * (1 - sourceWeight);
+        const outputAlpha = sourceWeight + destinationWeight;
+        if (outputAlpha <= 0) continue;
+
+        const sourceComponents = toRgbaComponents(source);
+        const destinationComponents = toRgbaComponents(destination);
+        const r = Math.round(
+          (sourceComponents.r * sourceWeight + destinationComponents.r * destinationWeight) /
+            outputAlpha,
+        );
+        const g = Math.round(
+          (sourceComponents.g * sourceWeight + destinationComponents.g * destinationWeight) /
+            outputAlpha,
+        );
+        const b = Math.round(
+          (sourceComponents.b * sourceWeight + destinationComponents.b * destinationWeight) /
+            outputAlpha,
+        );
+        target.pixels[destinationIndex] = rgba(r, g, b, Math.round(outputAlpha * 255));
+      }
+    }
   }
 }

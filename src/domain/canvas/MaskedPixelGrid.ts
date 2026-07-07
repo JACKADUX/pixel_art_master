@@ -1,13 +1,26 @@
+import type { PixelColor } from "./PixelColor";
 import { PixelGrid } from "./PixelGrid";
+import { LayerProjectedSurface } from "./LayerProjectedSurface";
 import { isMaskSelected, type SelectionMask } from "../selection/SelectionMask";
+
+/** Surface addressed in canvas coordinates (full canvas or projected layer). */
+export interface CanvasPixelSurface {
+  readonly width: number;
+  readonly height: number;
+  getPixel(x: number, y: number): PixelColor;
+  setPixel(x: number, y: number, color: PixelColor): void;
+  inBounds(x: number, y: number): boolean;
+}
+
+export type WritableCanvasSurface = PixelGrid | LayerProjectedSurface;
 
 export class MaskedPixelGrid {
   readonly width: number;
   readonly height: number;
-  private readonly grid: PixelGrid;
+  private readonly grid: WritableCanvasSurface;
   private readonly mask: SelectionMask | null;
 
-  constructor(grid: PixelGrid, mask: SelectionMask | null) {
+  constructor(grid: WritableCanvasSurface, mask: SelectionMask | null) {
     this.grid = grid;
     this.mask = mask;
     this.width = grid.width;
@@ -28,22 +41,28 @@ export class MaskedPixelGrid {
   }
 
   clone(): PixelGrid {
-    return this.grid.clone();
+    return this.getUnderlyingGrid().clone();
   }
 
   toUint32Array(): Uint32Array {
-    return this.grid.toUint32Array();
+    return this.getUnderlyingGrid().toUint32Array();
   }
 
   restoreFrom(data: Uint32Array): void {
-    this.grid.restoreFrom(data);
+    this.getUnderlyingGrid().restoreFrom(data);
   }
 
   getUnderlyingGrid(): PixelGrid {
+    if (this.grid instanceof LayerProjectedSurface) {
+      return this.grid.underlyingGrid;
+    }
     return this.grid;
   }
 }
 
-export function wrapWithMask(grid: PixelGrid, mask: SelectionMask | null): MaskedPixelGrid {
+export function wrapWithMask(
+  grid: WritableCanvasSurface,
+  mask: SelectionMask | null,
+): MaskedPixelGrid {
   return new MaskedPixelGrid(grid, mask);
 }

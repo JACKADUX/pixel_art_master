@@ -1,4 +1,4 @@
-import type { PixelGrid } from "../canvas/PixelGrid";
+import type { WritableCanvasSurface } from "../canvas/MaskedPixelGrid";
 import type { SelectionRect } from "../selection/SelectionRect";
 import { EMPTY_RECT } from "../selection/SelectionRect";
 
@@ -18,12 +18,18 @@ export function createIdleTileSession(): TileSessionState {
   };
 }
 
-export function captureCanvasSnapshot(grid: PixelGrid): Uint32Array {
-  return grid.toUint32Array();
+export function captureCanvasSnapshot(grid: WritableCanvasSurface): Uint32Array {
+  const snapshot = new Uint32Array(grid.width * grid.height);
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      snapshot[y * grid.width + x] = grid.getPixel(x, y);
+    }
+  }
+  return snapshot;
 }
 
 export function finalizeTileSession(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   region: SelectionRect,
   snapshot: Uint32Array,
 ): void {
@@ -34,7 +40,11 @@ export function finalizeTileSession(
     }
   }
 
-  grid.restoreFrom(snapshot);
+  for (let y = 0; y < grid.height; y++) {
+    for (let x = 0; x < grid.width; x++) {
+      grid.setPixel(x, y, snapshot[y * grid.width + x]!);
+    }
+  }
 
   let index = 0;
   for (let y = 0; y < region.height; y++) {

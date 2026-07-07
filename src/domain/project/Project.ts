@@ -6,10 +6,12 @@ import {
   type Layer,
 } from "../layer/Layer";
 import {
+  expandDrawingLayersForCanvasGrow,
+} from "../layer/DrawingLayerOperations";
+import {
   addDrawingLayer as addDrawingLayerOp,
   addReferenceLayer as addReferenceLayerOp,
   getLayerGrid,
-  resizeAllLayers,
 } from "../layer/LayerOperations";
 import { createCanvasSize, type CanvasSize } from "../canvas/CanvasSize";
 import { DEFAULT_CANVAS_SIZE } from "../canvas/CanvasSizePreset";
@@ -20,6 +22,10 @@ import {
 } from "../layer/ReferenceLayerOperations";
 import type { Note } from "../note/Note";
 import { Palette } from "../palette/Palette";
+import {
+  DEFAULT_ORTHOGRAPHIC_VIEW,
+  type OrthographicViewConfig,
+} from "../viewport/OrthographicView";
 
 export interface GridConfig {
   primary: number;
@@ -46,6 +52,7 @@ export interface Project {
   palette: Palette;
   notes: Note[];
   grid: GridConfig;
+  orthographicView: OrthographicViewConfig;
 }
 
 export const DEFAULT_GRID: GridConfig = {
@@ -98,6 +105,7 @@ export function createEmptyProject(name?: string, size?: CanvasSize): Project {
     palette: Palette.empty(),
     notes: [],
     grid: { ...DEFAULT_GRID },
+    orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
   };
 }
 
@@ -150,6 +158,7 @@ export function createProjectFromImage(
     palette,
     notes: [],
     grid: { ...DEFAULT_GRID },
+    orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
   };
 }
 
@@ -184,6 +193,7 @@ export function createProjectFromPixelGrid(
     palette,
     notes: [],
     grid: { ...DEFAULT_GRID },
+    orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
   };
 }
 
@@ -215,7 +225,7 @@ export function getActiveLayerGrid(project: Project): PixelGrid {
   if (!isDrawingLayer(layer)) {
     throw new Error("Active layer is not a drawing layer");
   }
-  return getLayerGrid(layer, getCanvasSize(project));
+  return getLayerGrid(layer);
 }
 
 export function getCompositeGrid(project: Project): PixelGrid {
@@ -267,7 +277,13 @@ export function resizeProjectCanvas(
   if (oldSize.width === newSize.width && oldSize.height === newSize.height) {
     return project;
   }
-  const layers = resizeAllLayers(project.canvas.layers, oldSize, newSize);
+
+  const isGrowing =
+    newSize.width > oldSize.width || newSize.height > oldSize.height;
+  const layers = isGrowing
+    ? expandDrawingLayersForCanvasGrow(project.canvas.layers, oldSize, newSize)
+    : project.canvas.layers;
+
   return touchProject({
     ...project,
     canvas: {
@@ -314,6 +330,16 @@ export function touchProject(project: Project): Project {
     ...project,
     updatedAt: new Date().toISOString(),
   };
+}
+
+export function withOrthographicView(
+  project: Project,
+  patch: Partial<OrthographicViewConfig>,
+): Project {
+  return touchProject({
+    ...project,
+    orthographicView: { ...project.orthographicView, ...patch },
+  });
 }
 
 export function withProjectFilePath(project: Project, filePath: string | null): Project {

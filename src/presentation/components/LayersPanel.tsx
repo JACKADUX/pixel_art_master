@@ -7,7 +7,11 @@ import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
 
 import { useAppStore } from "../stores/appStore";
 
-import { EyeIcon, EyeOffIcon, TrashIcon } from "./LayerPanelIcons";
+import { EyeIcon, EyeOffIcon, LockClosedIcon, LockOpenIcon, TrashIcon } from "./LayerPanelIcons";
+
+function opacityToPercent(opacity: number): number {
+  return Math.round((opacity / 255) * 100);
+}
 
 function computeDropDisplayIndex(
   clientY: number,
@@ -27,6 +31,8 @@ export function LayersPanel() {
   const project = useAppStore((s) => s.project);
   const setActiveLayer = useAppStore((s) => s.setActiveLayer);
   const toggleLayerVisibility = useAppStore((s) => s.toggleLayerVisibility);
+  const toggleDrawingLayerLock = useAppStore((s) => s.toggleDrawingLayerLock);
+  const setDrawingLayerOpacity = useAppStore((s) => s.setDrawingLayerOpacity);
   const renameLayer = useAppStore((s) => s.renameLayer);
   const addDrawingLayer = useAppStore((s) => s.addDrawingLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
@@ -167,7 +173,7 @@ export function LayersPanel() {
                     isActive
                       ? "border-blue-500 bg-blue-500/10"
                       : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
-                  }`}
+                  } ${layer.locked ? "opacity-80" : ""}`}
                 >
                   <button
                     type="button"
@@ -185,6 +191,17 @@ export function LayersPanel() {
                     className="shrink-0 text-zinc-400 hover:text-zinc-200"
                   >
                     {layer.visible ? <EyeIcon /> : <EyeOffIcon />}
+                  </button>
+
+                  <button
+                    type="button"
+                    title={layer.locked ? "解锁图层" : "锁定图层"}
+                    onClick={() => toggleDrawingLayerLock(layer.id)}
+                    className={`shrink-0 hover:text-zinc-200 ${
+                      layer.locked ? "text-amber-400" : "text-zinc-400"
+                    }`}
+                  >
+                    {layer.locked ? <LockClosedIcon /> : <LockOpenIcon />}
                   </button>
 
                   <button
@@ -232,6 +249,25 @@ export function LayersPanel() {
                     </button>
                   )}
                 </div>
+                {isActive && (
+                  <div className="mt-1 flex items-center gap-2 px-2 py-1">
+                    <span className="shrink-0 text-[10px] text-zinc-500">不透明度</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={opacityToPercent(layer.opacity)}
+                      onChange={(e) =>
+                        setDrawingLayerOpacity(layer.id, Number.parseInt(e.target.value, 10))
+                      }
+                      className="min-w-0 flex-1 accent-blue-500"
+                    />
+                    <span className="w-8 shrink-0 text-right text-[10px] font-medium text-zinc-300">
+                      {opacityToPercent(layer.opacity)}%
+                    </span>
+                  </div>
+                )}
               </li>
             );
           })}

@@ -6,6 +6,11 @@ import type { ColorEntry } from "@/domain/palette/Palette";
 import { formatPaletteColorTooltip } from "@/domain/palette/PaletteColorTooltip";
 import { computePaletteOklchLayout } from "@/domain/palette/PaletteOklchLayout";
 import type { ColorSlot } from "../stores/appStore";
+import {
+  handlePaletteBlankAreaClick,
+  handlePaletteBlankAreaContextMenu,
+  PALETTE_BLANK_AREA_TOOLTIP,
+} from "./paletteBlankAreaHandlers";
 import { PaletteSaturationRing } from "./PaletteSaturationRing";
 
 interface PaletteOklchMapViewProps {
@@ -82,7 +87,21 @@ export function PaletteOklchMapView({
         <span>L</span>
         <span className="self-end">H</span>
       </div>
-      <div ref={containerRef} className="absolute inset-0">
+      <div
+        ref={containerRef}
+        className={`absolute inset-0 ${!readOnly && !removeMode ? "cursor-pointer" : ""}`}
+        title={!readOnly && !removeMode ? PALETTE_BLANK_AREA_TOOLTIP : undefined}
+        onClick={
+          readOnly
+            ? undefined
+            : (event) => handlePaletteBlankAreaClick(event, removeMode, onSelect)
+        }
+        onContextMenu={
+          readOnly
+            ? undefined
+            : (event) => handlePaletteBlankAreaContextMenu(event, removeMode, onSelect)
+        }
+      >
         {layout.map((circle) => {
           const entry = colorByHex.get(circle.id);
           if (!entry) return null;

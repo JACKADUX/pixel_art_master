@@ -3,6 +3,7 @@ import {
   GRID_MERGE_ALGORITHMS,
   type GridMergeAlgorithm,
 } from "@/domain/pixelRestore/GridMergeAlgorithm";
+import { MAX_EXCLUDE_RING, MIN_EXCLUDE_RING } from "@/domain/pixelRestore/GridMergeCenterPriority";
 import {
   GRID_SCALE_TYPE_LABELS,
   GRID_SCALE_TYPES,
@@ -30,9 +31,13 @@ export function GridScaleControls({
   const gridColumnCount = usePixelRestoreStore((s) => s.gridColumnCount);
   const gridRowCount = usePixelRestoreStore((s) => s.gridRowCount);
   const mergeAlgorithm = usePixelRestoreStore((s) => s.mergeAlgorithm);
+  const centerPriorityEnabled = usePixelRestoreStore((s) => s.centerPriorityEnabled);
+  const excludeRingCount = usePixelRestoreStore((s) => s.excludeRingCount);
   const error = usePixelRestoreStore((s) => s.error);
   const setGridScaleType = usePixelRestoreStore((s) => s.setGridScaleType);
   const setMergeAlgorithm = usePixelRestoreStore((s) => s.setMergeAlgorithm);
+  const setCenterPriorityEnabled = usePixelRestoreStore((s) => s.setCenterPriorityEnabled);
+  const setExcludeRingCount = usePixelRestoreStore((s) => s.setExcludeRingCount);
   const setGridColumnCount = usePixelRestoreStore((s) => s.setGridColumnCount);
   const setGridRowCount = usePixelRestoreStore((s) => s.setGridRowCount);
   const applyGridRestoreResult = usePixelRestoreStore((s) => s.applyGridRestoreResult);
@@ -56,6 +61,17 @@ export function GridScaleControls({
     if (Number.isNaN(parsed)) return;
     setGridRowCount(parsed);
   };
+
+  const handleExcludeRingInput = (value: string) => {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed)) return;
+    setExcludeRingCount(parsed);
+  };
+
+  const excludeRingOptions = Array.from(
+    { length: MAX_EXCLUDE_RING - MIN_EXCLUDE_RING + 1 },
+    (_, index) => MIN_EXCLUDE_RING + index,
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -154,6 +170,39 @@ export function GridScaleControls({
             </option>
           ))}
         </select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-xs text-zinc-300">
+          <input
+            type="checkbox"
+            checked={centerPriorityEnabled}
+            onChange={(event) => setCenterPriorityEnabled(event.target.checked)}
+            className="rounded border-zinc-600 bg-zinc-900"
+          />
+          中心优先
+        </label>
+        <div>
+          <label className="mb-1.5 block text-[11px] text-zinc-500" htmlFor="exclude-ring-count">
+            剔除圈数
+          </label>
+          <select
+            id="exclude-ring-count"
+            value={excludeRingCount}
+            disabled={!centerPriorityEnabled}
+            onChange={(event) => handleExcludeRingInput(event.target.value)}
+            className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {excludeRingOptions.map((ring) => (
+              <option key={ring} value={ring}>
+                {ring}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="text-[10px] text-zinc-600">
+          剔除外围像素后再合并，减少相邻模糊像素影响
+        </p>
       </div>
 
       {gridScaleType === "singleCell" && gridSeedCell && (

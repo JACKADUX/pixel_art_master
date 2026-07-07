@@ -1,5 +1,5 @@
 import type { PixelColor } from "@/domain/canvas/PixelColor";
-import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 import {
   findTopReferenceLayerAtCanvasPoint,
   isReferenceLayerPixelCacheValid,
@@ -13,7 +13,7 @@ import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceL
 
 export function resolveMagicWandTargetColor(
   project: Project,
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   point: Point,
   getPixelCache: (layerId: string, cropKey: string) => ReferenceLayerPixelData | null,
 ): PixelColor {

@@ -3,6 +3,7 @@ import { createEmptyDrawingLayer, createEmptyReferenceLayer } from "@/domain/lay
 import { isReferenceLayer } from "@/domain/layer/LayerTypeGuards";
 import { Palette } from "@/domain/palette/Palette";
 import { DEFAULT_GRID, type Project } from "@/domain/project/Project";
+import { DEFAULT_ORTHOGRAPHIC_VIEW } from "@/domain/viewport/OrthographicView";
 import { deserializeProject, serializeProject } from "./ProjectSerializer";
 
 function buildProject(scale: number, paletteVisible = true): Project {
@@ -34,6 +35,7 @@ function buildProject(scale: number, paletteVisible = true): Project {
     palette: Palette.empty(),
     notes: [],
     grid: { ...DEFAULT_GRID },
+    orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
   };
 }
 
@@ -42,6 +44,100 @@ function findReference(project: Project) {
   if (!layer) throw new Error("reference layer missing");
   return layer;
 }
+
+describe("ProjectSerializer drawing layer v4", () => {
+  it("round-trips drawing layer width height and position", () => {
+    const drawing = {
+      ...createEmptyDrawingLayer({ width: 4, height: 4 }),
+      position: { x: 3, y: -1 },
+    };
+    const project: Project = {
+      ...buildProject(1),
+      canvas: {
+        ...buildProject(1).canvas,
+        layers: [drawing],
+        activeLayerId: drawing.id,
+        activeReferenceLayerId: null,
+      },
+    };
+
+    const json = serializeProject(project);
+    const parsed = JSON.parse(json);
+    expect(parsed.version).toBe(4);
+
+    const restored = deserializeProject(json, "test.json");
+    const layer = restored.canvas.layers.find((entry) => entry.type === "drawing");
+    expect(layer?.type).toBe("drawing");
+    if (layer?.type === "drawing") {
+      expect(layer.width).toBe(4);
+      expect(layer.height).toBe(4);
+      expect(layer.position).toEqual({ x: 3, y: -1 });
+    }
+  });
+
+  it("round-trips drawing layer opacity and locked", () => {
+    const drawing = {
+      ...createEmptyDrawingLayer({ width: 4, height: 4 }),
+      opacity: 128,
+      locked: true,
+    };
+    const project: Project = {
+      ...buildProject(1),
+      canvas: {
+        ...buildProject(1).canvas,
+        layers: [drawing],
+        activeLayerId: drawing.id,
+        activeReferenceLayerId: null,
+      },
+    };
+
+    const restored = deserializeProject(serializeProject(project), "test.json");
+    const layer = restored.canvas.layers.find((entry) => entry.type === "drawing");
+    if (layer?.type === "drawing") {
+      expect(layer.opacity).toBe(128);
+      expect(layer.locked).toBe(true);
+    }
+  });
+
+  it("defaults missing opacity and locked for backward compatibility", () => {
+    const json = serializeProject(buildProject(1));
+    const parsed = JSON.parse(json);
+    for (const layer of parsed.canvas.layers) {
+      if (layer.type === "drawing") {
+        delete layer.opacity;
+        delete layer.locked;
+      }
+    }
+
+    const restored = deserializeProject(JSON.stringify(parsed), "test.json");
+    const layer = restored.canvas.layers.find((entry) => entry.type === "drawing");
+    if (layer?.type === "drawing") {
+      expect(layer.opacity).toBe(255);
+      expect(layer.locked).toBe(false);
+    }
+  });
+
+  it("migrates v3 drawing layers to v4 with canvas-aligned defaults", () => {
+    const json = serializeProject(buildProject(1));
+    const parsed = JSON.parse(json);
+    parsed.version = 3;
+    for (const layer of parsed.canvas.layers) {
+      if (layer.type === "drawing") {
+        delete layer.width;
+        delete layer.height;
+        delete layer.position;
+      }
+    }
+
+    const restored = deserializeProject(JSON.stringify(parsed), "test.json");
+    const layer = restored.canvas.layers.find((entry) => entry.type === "drawing");
+    if (layer?.type === "drawing") {
+      expect(layer.width).toBe(4);
+      expect(layer.height).toBe(4);
+      expect(layer.position).toEqual({ x: 0, y: 0 });
+    }
+  });
+});
 
 describe("ProjectSerializer reference scale", () => {
   it("round-trips the reference scale", () => {
@@ -74,5 +170,24 @@ describe("ProjectSerializer reference scale", () => {
     }
     const restored = deserializeProject(JSON.stringify(parsed), "test.json");
     expect(findReference(restored).paletteVisible).toBe(true);
+  });
+});
+
+describe("ProjectSerializer orthographic view", () => {
+  it("round-trips orthographic view settings", () => {
+    const project = {
+      ...buildProject(1),
+      orthographicView: { enabled: true, cameraAngle: 63.5 },
+    };
+    const restored = deserializeProject(serializeProject(project), "test.json");
+    expect(restored.orthographicView).toEqual({ enabled: true, cameraAngle: 63.5 });
+  });
+
+  it("defaults missing orthographic view for backward compatibility", () => {
+    const json = serializeProject(buildProject(1));
+    const parsed = JSON.parse(json);
+    delete parsed.orthographicView;
+    const restored = deserializeProject(JSON.stringify(parsed), "test.json");
+    expect(restored.orthographicView).toEqual(DEFAULT_ORTHOGRAPHIC_VIEW);
   });
 });

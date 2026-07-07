@@ -2,6 +2,11 @@ import { colorsEqual, type PixelColor } from "@/domain/canvas/PixelColor";
 import type { ColorEntry } from "@/domain/palette/Palette";
 import { formatPaletteColorTooltip } from "@/domain/palette/PaletteColorTooltip";
 import type { ColorSlot } from "../stores/appStore";
+import {
+  handlePaletteBlankAreaClick,
+  handlePaletteBlankAreaContextMenu,
+  PALETTE_BLANK_AREA_TOOLTIP,
+} from "./paletteBlankAreaHandlers";
 
 interface PaletteGridViewProps {
   colors: readonly ColorEntry[];
@@ -30,7 +35,12 @@ export function PaletteGridView({
   onToggleRemoveSelect,
 }: PaletteGridViewProps) {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+    <div
+      className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${removeMode ? "" : "cursor-pointer"}`}
+      title={removeMode ? undefined : PALETTE_BLANK_AREA_TOOLTIP}
+      onClick={(event) => handlePaletteBlankAreaClick(event, removeMode, onSelect)}
+      onContextMenu={(event) => handlePaletteBlankAreaContextMenu(event, removeMode, onSelect)}
+    >
       <div className="grid w-full grid-cols-[repeat(auto-fill,minmax(1.375rem,1fr))] gap-1">
         {colors.map((entry) => {
           const isSelectedForRemoval = removeMode && selectedHexes?.has(entry.hex);

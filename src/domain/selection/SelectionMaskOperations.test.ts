@@ -14,6 +14,7 @@ describe("SelectionMaskOperations", () => {
     const mask = createRectMask({ x: 1, y: 1 }, { x: 3, y: 3 }, 8, 8);
     expect(isMaskSelected(mask, 1, 1)).toBe(true);
     expect(isMaskSelected(mask, 2, 2)).toBe(true);
+    expect(isMaskSelected(mask, 3, 3)).toBe(true);
     expect(isMaskSelected(mask, 0, 0)).toBe(false);
   });
 

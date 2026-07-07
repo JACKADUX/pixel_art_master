@@ -26,11 +26,19 @@ export interface ReferenceGridConfig {
   visible: boolean;
 }
 
+export const DEFAULT_DRAWING_LAYER_OPACITY = 255;
+
 export interface DrawingLayer {
   id: string;
   name: string;
   type: "drawing";
   visible: boolean;
+  /** Layer opacity 0–255, applied at composite time (not baked into pixels). */
+  opacity: number;
+  locked: boolean;
+  width: number;
+  height: number;
+  position: LayerPosition;
   pixels: Uint32Array;
 }
 
@@ -55,7 +63,11 @@ export type Layer = DrawingLayer | ReferenceLayer;
 /** 深拷贝单个图层，保证可变的像素缓冲与嵌套对象与原图层互不影响。 */
 export function cloneLayer(layer: Layer): Layer {
   if (layer.type === "drawing") {
-    return { ...layer, pixels: new Uint32Array(layer.pixels) };
+    return {
+      ...layer,
+      position: { ...layer.position },
+      pixels: new Uint32Array(layer.pixels),
+    };
   }
   return {
     ...layer,
@@ -73,12 +85,18 @@ export function cloneLayers(layers: Layer[]): Layer[] {
 export function createDrawingLayer(
   grid: PixelGrid,
   name?: string,
+  position: LayerPosition = { x: 0, y: 0 },
 ): DrawingLayer {
   return {
     id: crypto.randomUUID(),
     name: name ?? "绘制层",
     type: "drawing",
     visible: true,
+    opacity: DEFAULT_DRAWING_LAYER_OPACITY,
+    locked: false,
+    width: grid.width,
+    height: grid.height,
+    position: { ...position },
     pixels: grid.toUint32Array(),
   };
 }
@@ -86,6 +104,7 @@ export function createDrawingLayer(
 export function createEmptyDrawingLayer(
   size: CanvasSize,
   name?: string,
+  position: LayerPosition = { x: 0, y: 0 },
 ): DrawingLayer {
   const pixelCount = size.width * size.height;
   return {
@@ -93,6 +112,11 @@ export function createEmptyDrawingLayer(
     name: name ?? "绘制层",
     type: "drawing",
     visible: true,
+    opacity: DEFAULT_DRAWING_LAYER_OPACITY,
+    locked: false,
+    width: size.width,
+    height: size.height,
+    position: { ...position },
     pixels: new Uint32Array(pixelCount),
   };
 }

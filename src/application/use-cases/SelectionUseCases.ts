@@ -1,4 +1,4 @@
-import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 
 import type { Point } from "@/domain/tool/ITool";
 
@@ -8,6 +8,14 @@ import { floodSelectMaskByTargetColor } from "@/domain/selection/FloodSelect";
 import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 import { resolveMagicWandTargetColor } from "./ResolveMagicWandTargetColor";
 import type { Project } from "@/domain/project/Project";
+import { getActiveLayer, getActiveReferenceLayer } from "@/domain/project/Project";
+import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
+import {
+  ensureActiveLayerContainsFloatingRestoreInProject,
+  ensureActiveLayerContainsFloatingSelectionInProject,
+  getActiveLayerProjectedSurfaceFromProject,
+  syncActiveLayerPixels,
+} from "./LayerUseCases";
 
 import { createLassoMask } from "@/domain/selection/LassoRasterize";
 
@@ -50,6 +58,8 @@ import {
   cloneSelectionState,
 
   createSelectionState,
+
+  getEffectiveBounds,
 
   isSelectionEmpty,
 
@@ -133,7 +143,7 @@ export function createSelectionFromLasso(
 
 export function createSelectionFromMagicWand(
 
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
 
   seed: Point,
 
@@ -184,7 +194,9 @@ export function selectAll(canvasWidth: number, canvasHeight: number): SelectionS
 
 
 
-export function createSelectionFromLayerContent(grid: PixelGrid): SelectionState | null {
+export function createSelectionFromLayerContent(
+  grid: WritableCanvasSurface,
+): SelectionState | null {
 
   const mask = createMaskFromOpaquePixels(grid);
 
@@ -194,7 +206,17 @@ export function createSelectionFromLayerContent(grid: PixelGrid): SelectionState
 
 }
 
-
+export function resolveSelectionForTransform(
+  project: Project,
+  selection: SelectionState | null,
+): SelectionState | null {
+  if (!isSelectionEmpty(selection)) return selection;
+  if (getActiveReferenceLayer(project)) return null;
+  const activeLayer = getActiveLayer(project);
+  if (!isDrawingLayer(activeLayer)) return null;
+  const grid = getActiveLayerProjectedSurfaceFromProject(project);
+  return createSelectionFromLayerContent(grid);
+}
 
 export function deselectSelection(): null {
 
@@ -222,15 +244,21 @@ export function isPointInSelection(state: SelectionState | null, point: Point): 
 
   if (state.floating) {
 
-    const { offset, pixels } = state.floating;
+    const bounds = getEffectiveBounds(state);
 
-    const lx = point.x - offset.x;
+    if (bounds.width <= 0 || bounds.height <= 0) return false;
 
-    const ly = point.y - offset.y;
+    return (
 
-    if (lx < 0 || ly < 0 || lx >= pixels.width || ly >= pixels.height) return false;
+      point.x >= bounds.x &&
 
-    return pixels.getPixel(lx, ly) !== 0;
+      point.y >= bounds.y &&
+
+      point.x < bounds.x + bounds.width &&
+
+      point.y < bounds.y + bounds.height
+
+    );
 
   }
 
@@ -242,7 +270,7 @@ export function isPointInSelection(state: SelectionState | null, point: Point): 
 
 export function beginMoveSelection(
 
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
 
   state: SelectionState,
 
@@ -300,11 +328,11 @@ export function moveFloatingSelection(
 
 export function commitFloatingSelection(
 
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
 
   state: SelectionState,
 
-): { grid: PixelGrid; selection: SelectionState } {
+): { grid: WritableCanvasSurface; selection: SelectionState } {
 
   return commitFloating(grid, state);
 
@@ -314,11 +342,11 @@ export function commitFloatingSelection(
 
 export function cancelFloatingSelection(
 
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
 
   state: SelectionState,
 
-): { grid: PixelGrid; selection: SelectionState } {
+): { grid: WritableCanvasSurface; selection: SelectionState } {
 
   return cancelFloating(grid, state);
 
@@ -326,13 +354,77 @@ export function cancelFloatingSelection(
 
 
 
-export function clearSelectionPixels(
+export function commitFloatingSelectionInProject(
 
-  grid: PixelGrid,
+  project: Project,
 
   state: SelectionState,
 
-): PixelGrid {
+): { project: Project; selection: SelectionState } {
+
+  if (!state.floating) {
+
+    return { project, selection: state };
+
+  }
+
+
+
+  const prepared = ensureActiveLayerContainsFloatingSelectionInProject(project, state);
+
+  const surface = getActiveLayerProjectedSurfaceFromProject(prepared);
+
+  const { selection: committed } = commitFloatingSelection(surface, state);
+
+  const updatedProject = syncActiveLayerPixels(prepared, surface.underlyingGrid);
+
+
+
+  return { project: updatedProject, selection: committed };
+
+}
+
+
+
+export function cancelFloatingSelectionInProject(
+
+  project: Project,
+
+  state: SelectionState,
+
+): { project: Project; selection: SelectionState } {
+
+  if (!state.floating) {
+
+    return { project, selection: state };
+
+  }
+
+
+
+  const prepared = ensureActiveLayerContainsFloatingRestoreInProject(project, state);
+
+  const surface = getActiveLayerProjectedSurfaceFromProject(prepared);
+
+  const { selection: cancelled } = cancelFloatingSelection(surface, state);
+
+  const updatedProject = syncActiveLayerPixels(prepared, surface.underlyingGrid);
+
+
+
+  return { project: updatedProject, selection: cancelled };
+
+}
+
+
+
+export function clearSelectionPixels(
+
+  grid: WritableCanvasSurface,
+
+  state: SelectionState,
+
+): WritableCanvasSurface {
 
   if (state.floating) {
 
@@ -360,7 +452,7 @@ export function clearSelectionPixels(
 
 export function nudgeSelection(
 
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
 
   state: SelectionState,
 
@@ -368,7 +460,7 @@ export function nudgeSelection(
 
   dy: number,
 
-): { grid: PixelGrid; selection: SelectionState } {
+): { grid: WritableCanvasSurface; selection: SelectionState } {
 
   if (state.floating) {
 
@@ -434,7 +526,10 @@ export function updateSelectionBounds(state: SelectionState): SelectionState {
 
 
 
-export function extractSelectionForClipboard(state: SelectionState, grid: PixelGrid) {
+export function extractSelectionForClipboard(
+  state: SelectionState,
+  grid: WritableCanvasSurface,
+) {
 
   if (state.floating) {
 
@@ -450,11 +545,11 @@ export function extractSelectionForClipboard(state: SelectionState, grid: PixelG
 
 export function createFloatingFromCut(
 
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
 
   state: SelectionState,
 
-): { grid: PixelGrid; selection: SelectionState } | null {
+): { grid: WritableCanvasSurface; selection: SelectionState } | null {
 
   const floating = extractMaskedPixels(grid, state.mask, true);
 

@@ -30,6 +30,7 @@ export function TopBar() {
   const pasteSelection = useAppStore((s) => s.pasteSelection);
   const openPixelRestorePage = useAppStore((s) => s.openPixelRestorePage);
   const openColorEditPage = useAppStore((s) => s.openColorEditPage);
+  const openColorVariationPage = useAppStore((s) => s.openColorVariationPage);
   const openWorldPage = useAppStore((s) => s.openWorldPage);
   const openComfyUiPage = useAppStore((s) => s.openComfyUiPage);
   const openAssetLibraryModal = useAppStore((s) => s.openAssetLibraryModal);
@@ -72,6 +73,7 @@ export function TopBar() {
         pasteSelection: () => void pasteSelection(),
         openPixelRestorePage,
         openColorEditPage,
+        openColorVariationPage,
         openWorldPage,
         openComfyUiPage,
         comfyApps: comfyApps.map((app) => ({ id: app.id, name: app.name })),
@@ -105,6 +107,7 @@ export function TopBar() {
       pasteSelection,
       openPixelRestorePage,
       openColorEditPage,
+      openColorVariationPage,
       openWorldPage,
       openComfyUiPage,
       comfyApps,

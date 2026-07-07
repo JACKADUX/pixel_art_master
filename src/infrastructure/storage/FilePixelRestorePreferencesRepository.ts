@@ -19,7 +19,7 @@ export class FilePixelRestorePreferencesRepository implements IPixelRestorePrefe
     if (typeof parsed !== "object" || parsed === null) return null;
 
     const version = (parsed as SerializedPixelRestorePreferences).version;
-    if (version !== 1 && version !== PIXEL_RESTORE_PREFERENCES_VERSION) {
+    if (version !== 1 && version !== 2 && version !== PIXEL_RESTORE_PREFERENCES_VERSION) {
       return null;
     }
 

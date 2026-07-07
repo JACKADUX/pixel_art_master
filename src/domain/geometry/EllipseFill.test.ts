@@ -1,6 +1,41 @@
 import { describe, expect, it } from "vitest";
-import { collectCircleStampOffsets } from "@/domain/geometry/EllipseFill";
+import {
+  collectCircleStampOffsets,
+  forEachFilledEllipsePixel,
+  forEachOutlineEllipsePixel,
+} from "@/domain/geometry/EllipseFill";
 import { forEachStampPixel } from "@/domain/tool/BrushStamp";
+
+const NEIGHBORS_8: ReadonlyArray<readonly [number, number]> = [
+  [-1, -1], [0, -1], [1, -1],
+  [-1, 0], [1, 0],
+  [-1, 1], [0, 1], [1, 1],
+];
+
+function collectOutlinePixels(x0: number, y0: number, x1: number, y1: number): Set<string> {
+  const pixels = new Set<string>();
+  forEachOutlineEllipsePixel(x0, y0, x1, y1, 0, 0, (x, y) => {
+    pixels.add(`${x},${y}`);
+  });
+  return pixels;
+}
+
+function collectFilledEllipsePixels(x0: number, y0: number, x1: number, y1: number): Set<string> {
+  const pixels = new Set<string>();
+  forEachFilledEllipsePixel(x0, y0, x1, y1, 0, 0, (x, y) => {
+    pixels.add(`${x},${y}`);
+  });
+  return pixels;
+}
+
+function assert8Connected(pixels: Set<string>): void {
+  if (pixels.size <= 1) return;
+  for (const key of pixels) {
+    const [x, y] = key.split(",").map(Number);
+    const hasNeighbor = NEIGHBORS_8.some(([dx, dy]) => pixels.has(`${x + dx},${y + dy}`));
+    expect(hasNeighbor).toBe(true);
+  }
+}
 
 function sortPixels(pixels: string[]): string[] {
   return pixels.sort((a, b) => {
@@ -154,5 +189,50 @@ describe("EllipseFill", () => {
       "-1,0", "0,0", "1,0",
       "-1,1", "0,1", "1,1",
     ]);
+  });
+});
+
+describe("forEachOutlineEllipsePixel", () => {
+  it("keeps circle outlines 8-connected for sizes 2 through 24", () => {
+    for (let size = 2; size <= 24; size++) {
+      assert8Connected(collectOutlinePixels(0, 0, size - 1, size - 1));
+    }
+  });
+
+  it("keeps circle outlines symmetric in bitmap space for sizes 2 through 24", () => {
+    for (let size = 2; size <= 24; size++) {
+      assertBitmapSymmetric(collectOutlinePixels(0, 0, size - 1, size - 1), size);
+    }
+  });
+
+  it("grows circle outline monotonically for sizes 2 through 24", () => {
+    let previousCount = 0;
+    for (let size = 2; size <= 24; size++) {
+      const count = collectOutlinePixels(0, 0, size - 1, size - 1).size;
+      expect(count).toBeGreaterThanOrEqual(previousCount);
+      previousCount = count;
+    }
+  });
+
+  it("keeps ellipse outlines 8-connected for varied aspect ratios", () => {
+    const cases: ReadonlyArray<readonly [number, number, number, number]> = [
+      [0, 0, 7, 3],
+      [2, 1, 10, 8],
+      [0, 0, 15, 5],
+      [3, 3, 3, 10],
+    ];
+    for (const [x0, y0, x1, y1] of cases) {
+      assert8Connected(collectOutlinePixels(x0, y0, x1, y1));
+    }
+  });
+});
+
+describe("forEachFilledEllipsePixel shape tool parity", () => {
+  it("matches circle brush stamp pixels for sizes 1 through 16", () => {
+    for (let size = 1; size <= 16; size++) {
+      const filled = collectFilledEllipsePixels(0, 0, size - 1, size - 1);
+      const brush = new Set(collectAbsoluteCirclePixels(size));
+      expect(filled).toEqual(brush);
+    }
   });
 });

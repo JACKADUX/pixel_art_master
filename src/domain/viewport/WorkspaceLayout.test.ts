@@ -75,6 +75,7 @@ describe("computeReferenceAwareStageSize pan range", () => {
       displayWidth,
       displayHeight,
       [],
+      [],
       1,
     );
 
@@ -94,6 +95,7 @@ describe("computeReferenceAwareStageSize pan range", () => {
       containerHeight,
       displayWidth,
       displayHeight,
+      [],
       [],
       1,
     );

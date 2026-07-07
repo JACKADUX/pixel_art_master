@@ -127,6 +127,86 @@ export function forEachFilledEllipsePixel(
   }
 }
 
+export function forEachOutlineEllipsePixel(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  hPixels: number,
+  vPixels: number,
+  callback: (x: number, y: number) => void,
+): void {
+  const bounds = adjustEllipseArgs(x0, y0, x1, y1, hPixels, vPixels);
+  let ex0 = bounds.x0;
+  let ey0 = bounds.y0;
+  let ex1 = bounds.x1;
+  let ey1 = bounds.y1;
+  const hPx = bounds.hPixels;
+  const vPx = bounds.vPixels;
+  const h = bounds.h;
+
+  let a = Math.abs(ex1 - ex0);
+  let b = Math.abs(ey1 - ey0);
+  let b1 = b & 1;
+  let dx = 4 * (1.0 - a) * b * b;
+  let dy = 4 * (b1 + 1) * a * a;
+  let err = dx + dy + b1 * a * a;
+
+  ey0 += ((b + 1) / 2) | 0;
+  ey1 = ey0 - b1;
+  a = 8 * a * a;
+  b1 = 8 * b * b;
+
+  const initialY0 = ey0;
+  const initialY1 = ey1;
+  const initialX0 = ex0;
+  const initialX1 = ex1 + hPx;
+
+  do {
+    callback(ex1 + hPx, ey0 + vPx);
+    callback(ex0, ey0 + vPx);
+    callback(ex0, ey1);
+    callback(ex1 + hPx, ey1);
+
+    const e2 = 2 * err;
+    if (e2 <= dy) {
+      ey0++;
+      ey1--;
+      dy += a;
+      err += dy;
+    }
+    if (e2 >= dx || 2 * err > dy) {
+      ex0++;
+      ex1--;
+      dx += b1;
+      err += dx;
+    }
+  } while (ex0 <= ex1);
+
+  while (ey0 + vPx - ey1 + 1 <= h) {
+    callback(ex0 - 1, ey0 + vPx);
+    callback(ex1 + 1 + hPx, ey0 + vPx);
+    ey0++;
+    callback(ex0 - 1, ey1);
+    callback(ex1 + 1 + hPx, ey1);
+    ey1--;
+  }
+
+  if (hPx > 0) {
+    for (let i = ex0; i <= ex1 + hPx; i++) {
+      callback(i, ey1 + 1);
+      callback(i, ey0 + vPx - 1);
+    }
+  }
+
+  if (vPx > 0) {
+    for (let i = initialY1 + 1; i < initialY0 + vPx; i++) {
+      callback(initialX0, i);
+      callback(initialX1, i);
+    }
+  }
+}
+
 export function collectCircleStampOffsets(size: number): ReadonlyArray<readonly [number, number]> {
   if (size === 1) return [[0, 0]];
 

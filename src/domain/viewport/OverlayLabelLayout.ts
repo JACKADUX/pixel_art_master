@@ -34,13 +34,30 @@ export function computeSecondaryGridCellScreenBounds(
   cellSize: number,
   zoom: number,
 ): { left: number; top: number; width: number; height: number } {
-  const displayCellSize = Math.max(1, cellSize);
-  const local = computeGridRelativeLabelPosition(cellOrigin, displayCellSize, zoom);
+  return computeSecondaryGridCellScreenBoundsWithSpans(
+    canvasRect,
+    cellOrigin,
+    cellSize,
+    cellSize,
+    zoom,
+  );
+}
+
+export function computeSecondaryGridCellScreenBoundsWithSpans(
+  canvasRect: { left: number; top: number },
+  cellOrigin: { x: number; y: number },
+  spanX: number,
+  spanY: number,
+  zoom: number,
+): { left: number; top: number; width: number; height: number } {
+  const displaySpanX = Math.max(1, spanX);
+  const displaySpanY = Math.max(1, spanY);
+  const local = computeGridRelativeLabelPosition(cellOrigin, displaySpanX, zoom);
   return {
     left: canvasRect.left + local.left,
-    top: canvasRect.top + local.top,
-    width: displayCellSize * zoom,
-    height: displayCellSize * zoom,
+    top: canvasRect.top + cellOrigin.y * zoom,
+    width: displaySpanX * zoom,
+    height: displaySpanY * zoom,
   };
 }
 

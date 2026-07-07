@@ -10,6 +10,9 @@ export const FLOATING_PANEL_Z_BASE = 31;
 /** 悬浮窗口层级上限：始终低于弹窗/模态，避免遮挡激活的对话框 */
 export const FLOATING_PANEL_Z_MAX = 49;
 
+/** 画布内工具 overlay（如尺寸调整手柄），高于图层 overlay，低于悬浮面板与弹窗 */
+export const CANVAS_TOOL_OVERLAY_Z_INDEX = FLOATING_PANEL_Z_BASE - 1;
+
 /** 把指定窗口移动到栈顶（最近激活者在数组末尾，即最上层） */
 export function bringPanelToFront(
   stack: FloatingPanelId[],

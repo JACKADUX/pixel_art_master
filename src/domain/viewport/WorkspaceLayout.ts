@@ -1,4 +1,5 @@
-import type { ReferenceLayer } from "@/domain/layer/Layer";
+import type { DrawingLayer, ReferenceLayer } from "@/domain/layer/Layer";
+import { getDrawingLayerCanvasBounds } from "@/domain/layer/DrawingLayerOperations";
 import { getReferenceBounds } from "@/domain/layer/ReferenceLayerOperations";
 
 export const WORKSPACE_MARGIN_MIN = 800;
@@ -35,6 +36,7 @@ export function computeReferenceAwareStageSize(
   canvasDisplayWidth: number,
   canvasDisplayHeight: number,
   referenceLayers: ReferenceLayer[],
+  drawingLayers: DrawingLayer[],
   zoom: number,
 ): WorkspaceStageLayout {
   const marginX = computePanMargin(containerWidth);
@@ -52,6 +54,18 @@ export function computeReferenceAwareStageSize(
     minY = Math.min(minY, bounds.top);
     maxX = Math.max(maxX, bounds.left + bounds.width);
     maxY = Math.max(maxY, bounds.top + bounds.height);
+  }
+
+  for (const layer of drawingLayers) {
+    const bounds = getDrawingLayerCanvasBounds(layer);
+    const left = bounds.x * zoom;
+    const top = bounds.y * zoom;
+    const width = bounds.width * zoom;
+    const height = bounds.height * zoom;
+    minX = Math.min(minX, left);
+    minY = Math.min(minY, top);
+    maxX = Math.max(maxX, left + width);
+    maxY = Math.max(maxY, top + height);
   }
 
   const contentWidth = maxX - minX;

@@ -9,16 +9,32 @@ function pixelSnapshot(
   layerId: string,
   pixels: number[],
   selection: PixelSnapshot["selection"] = null,
+  width = 2,
+  height = 2,
+  position: PixelSnapshot["position"] = { x: 0, y: 0 },
 ): PixelSnapshot {
-  return { kind: "pixels", layerId, pixels: new Uint32Array(pixels), selection };
+  return {
+    kind: "pixels",
+    layerId,
+    width,
+    height,
+    position,
+    pixels: new Uint32Array(pixels),
+    selection,
+  };
 }
 
-function drawingLayer(id: string, pixels: number[]): DrawingLayer {
+function drawingLayer(id: string, pixels: number[], width = 2, height = 2): DrawingLayer {
   return {
     id,
     name: id,
     type: "drawing",
     visible: true,
+    opacity: 255,
+    locked: false,
+    width,
+    height,
+    position: { x: 0, y: 0 },
     pixels: new Uint32Array(pixels),
   };
 }
@@ -75,10 +91,13 @@ describe("HistoryStack", () => {
     stack.push(structureSnapshot([drawingLayer("a", [1])], "a"));
 
     expect(stack.nextUndoKind).toBe("structure");
+    expect(stack.nextUndoEntry?.kind).toBe("structure");
 
     stack.undo(structureSnapshot([drawingLayer("a", [1]), drawingLayer("b", [2])], "a"));
     expect(stack.nextUndoKind).toBe("pixels");
+    expect(stack.nextUndoEntry?.kind).toBe("pixels");
     expect(stack.nextRedoKind).toBe("structure");
+    expect(stack.nextRedoEntry?.kind).toBe("structure");
   });
 
   it("round-trips a structure snapshot for layer deletion", () => {

@@ -8,6 +8,7 @@ export {
   ChatBubbleLeftRightIcon,
   CommandLineIcon,
   ComputerDesktopIcon,
+  ChartBarSquareIcon,
   Cog6ToothIcon,
   DocumentDuplicateIcon,
   DocumentPlusIcon,

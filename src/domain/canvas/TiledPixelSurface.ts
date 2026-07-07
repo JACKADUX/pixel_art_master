@@ -1,10 +1,11 @@
 import type { PixelGrid } from "./PixelGrid";
 import type { MaskedPixelGrid } from "./MaskedPixelGrid";
+import { LayerProjectedSurface } from "./LayerProjectedSurface";
 import { findTileCellAt } from "../tile/TileRegion";
 import { forEachTileReplicatedPoint } from "../tile/TileReplication";
 import type { SelectionRect } from "../selection/SelectionRect";
 
-export type TiledPixelSurfaceUnderlying = PixelGrid | MaskedPixelGrid;
+export type TiledPixelSurfaceUnderlying = PixelGrid | MaskedPixelGrid | LayerProjectedSurface;
 
 export class TiledPixelSurface {
   readonly width: number;

@@ -2,6 +2,11 @@ import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import type { PixelColor } from "@/domain/canvas/PixelColor";
 import type { CropRect, ImageSize } from "@/domain/layer/Layer";
 import type { GridMergeAlgorithm } from "./GridMergeAlgorithm";
+import {
+  getCenterPriorityInnerBounds,
+  shouldApplyCenterPriority,
+  type GridMergeCenterPriority,
+} from "./GridMergeCenterPriority";
 import { mergeCellColors } from "./GridMergeOperations";
 
 export interface GridLayout {
@@ -122,10 +127,28 @@ export function collectCellColors(
   data: Uint8ClampedArray,
   imageWidth: number,
   cell: GridCellRect,
+  centerPriority?: GridMergeCenterPriority,
 ): PixelColor[] {
   const colors: PixelColor[] = [];
-  for (let y = cell.y; y < cell.y + cell.height; y++) {
-    for (let x = cell.x; x < cell.x + cell.width; x++) {
+  let startX = cell.x;
+  let startY = cell.y;
+  let endX = cell.x + cell.width;
+  let endY = cell.y + cell.height;
+
+  if (shouldApplyCenterPriority(centerPriority)) {
+    const bounds = getCenterPriorityInnerBounds(
+      cell.width,
+      cell.height,
+      centerPriority!.excludeRingCount,
+    );
+    startX += bounds.insetLeft;
+    startY += bounds.insetTop;
+    endX = startX + bounds.innerWidth;
+    endY = startY + bounds.innerHeight;
+  }
+
+  for (let y = startY; y < endY; y++) {
+    for (let x = startX; x < endX; x++) {
       colors.push(readPixelColor(data, imageWidth, x, y));
     }
   }
@@ -137,6 +160,7 @@ export function applyGridRestoreToGrid(
   imageSize: ImageSize,
   seedCell: CropRect,
   algorithm: GridMergeAlgorithm,
+  centerPriority?: GridMergeCenterPriority,
 ): { grid: PixelGrid; layout: GridLayout } {
   const layout = validateGridRestore(imageSize, seedCell);
   const grid = PixelGrid.createEmpty(layout.outputWidth, layout.outputHeight);
@@ -146,7 +170,7 @@ export function applyGridRestoreToGrid(
       const cell = intersectCellWithImage(getGridCellRect(layout, col, row), imageSize);
       if (!cell) continue;
 
-      const colors = collectCellColors(data, imageSize.width, cell);
+      const colors = collectCellColors(data, imageSize.width, cell, centerPriority);
       if (colors.length === 0) continue;
 
       grid.setPixel(

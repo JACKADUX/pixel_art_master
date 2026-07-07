@@ -1,11 +1,12 @@
 import type { IClipboardService } from "@/application/ports/IClipboardService";
-import type { PixelGrid } from "@/domain/canvas/PixelGrid";
-import { PixelGrid as PG } from "@/domain/canvas/PixelGrid";
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
+import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import type { FloatingSelection } from "@/domain/selection/FloatingSelection";
 import { cloneFloatingSelection } from "@/domain/selection/FloatingSelection";
 import type { SelectionState } from "@/domain/selection/SelectionState";
 import { createSelectionState, withFloating } from "@/domain/selection/SelectionState";
 import { createEmptyMask } from "@/domain/selection/SelectionMask";
+import { syncMaskWithFloating } from "@/domain/selection/FloatingSelectionLifecycle";
 import { extractMaskedRegionAsGrid } from "@/domain/selection/SelectionMaskOperations";
 
 const PASTE_NUDGE = 8;
@@ -45,16 +46,15 @@ export async function copyFloatingToClipboard(
 
 export async function copySelectionToClipboard(
   clipboard: IClipboardService,
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   state: SelectionState,
-  internalClipboard: FloatingSelection | null,
 ): Promise<FloatingSelection | null> {
   if (state.floating) {
     return copyFloatingToClipboard(clipboard, state.floating);
   }
 
   const region = extractMaskedRegionAsGrid(grid, state.mask);
-  if (!region) return internalClipboard;
+  if (!region) return null;
 
   const bounds = state.bounds;
   const floating: FloatingSelection = {
@@ -72,25 +72,16 @@ export function createSelectionFromFloating(
   canvasWidth: number,
   canvasHeight: number,
 ): SelectionState {
-  const mask = createEmptyMask(canvasWidth, canvasHeight);
-  const { offset, pixels } = floating;
-
-  for (let y = 0; y < pixels.height; y++) {
-    for (let x = 0; x < pixels.width; x++) {
-      if (pixels.getPixel(x, y) === 0) continue;
-      const cx = offset.x + x;
-      const cy = offset.y + y;
-      if (cx >= 0 && cy >= 0 && cx < canvasWidth && cy < canvasHeight) {
-        mask.data[cy * canvasWidth + cx] = 255;
-      }
-    }
-  }
-
-  return withFloating(createSelectionState(mask), cloneFloatingSelection(floating));
+  const cloned = cloneFloatingSelection(floating);
+  const base = withFloating(
+    createSelectionState(createEmptyMask(canvasWidth, canvasHeight)),
+    cloned,
+  );
+  return syncMaskWithFloating(base);
 }
 
 export function imageDataToPixelGrid(imageData: ImageData): PixelGrid {
-  return PG.fromRgba(imageData.width, imageData.height, imageData.data);
+  return PixelGrid.fromRgba(imageData.width, imageData.height, imageData.data);
 }
 
 function nudgePasteOffset(

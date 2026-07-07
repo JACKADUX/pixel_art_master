@@ -1,4 +1,4 @@
-import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 import { normalizeRect, type SelectionRect } from "@/domain/selection/SelectionRect";
 import {
   captureCanvasSnapshot,
@@ -17,7 +17,7 @@ export function updateTileRegionPreview(start: Point, current: Point): Selection
 }
 
 export function confirmTileRegion(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   rect: SelectionRect,
 ): TileSessionState {
   if (rect.width <= 0 || rect.height <= 0) {
@@ -35,7 +35,10 @@ export function cancelTileRegionCreate(): TileSessionState {
   return createIdleTileSession();
 }
 
-export function closeTileSession(grid: PixelGrid, session: TileSessionState): TileSessionState {
+export function closeTileSession(
+  grid: WritableCanvasSurface,
+  session: TileSessionState,
+): TileSessionState {
   if (session.phase !== "drawing" || !session.peripheralSnapshot) {
     return createIdleTileSession();
   }
@@ -65,7 +68,7 @@ export function handleTileCreatePointerMove(
 }
 
 export function handleTileCreatePointerUp(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   drag: TileCreateDragState,
   point: Point,
 ): { session: TileSessionState; previewRect: SelectionRect | null } {

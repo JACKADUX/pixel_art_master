@@ -13,10 +13,14 @@ export function normalizeRect(
   toX: number,
   toY: number,
 ): SelectionRect {
-  const x = Math.min(Math.floor(fromX), Math.floor(toX));
-  const y = Math.min(Math.floor(fromY), Math.floor(toY));
-  const width = Math.max(1, Math.abs(Math.floor(toX) - Math.floor(fromX)));
-  const height = Math.max(1, Math.abs(Math.floor(toY) - Math.floor(fromY)));
+  const startX = Math.floor(fromX);
+  const startY = Math.floor(fromY);
+  const endX = Math.floor(toX);
+  const endY = Math.floor(toY);
+  const x = Math.min(startX, endX);
+  const y = Math.min(startY, endY);
+  const width = Math.abs(endX - startX) + 1;
+  const height = Math.abs(endY - startY) + 1;
   return { x, y, width, height };
 }
 

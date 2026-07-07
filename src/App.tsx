@@ -11,6 +11,7 @@ import { CanvasSizeModal } from "./presentation/components/CanvasSizeModal";
 import { ExportImageModal } from "./presentation/components/ExportImageModal";
 import { PixelRestorePage } from "./presentation/components/pixelRestore/PixelRestorePage";
 import { ColorEditPage } from "./presentation/components/colorEdit/ColorEditPage";
+import { ColorVariationAnalysisPage } from "./presentation/components/colorVariationAnalysis/ColorVariationAnalysisPage";
 import { WorldCreatorPage } from "./presentation/components/world/WorldCreatorPage";
 import { ComfyUiPage } from "./presentation/components/comfyui/ComfyUiPage";
 import { SettingsModal } from "./presentation/components/settings/SettingsModal";
@@ -53,6 +54,7 @@ function App() {
       <SettingsModal />
       <PixelRestorePage />
       <ColorEditPage />
+      <ColorVariationAnalysisPage />
       <WorldCreatorPage />
       <ComfyUiPage />
       <AiTextFieldHost />

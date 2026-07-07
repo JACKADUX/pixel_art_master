@@ -8,6 +8,10 @@ import {
   GRID_SCALE_TYPES,
   type GridScaleType,
 } from "./GridScaleType";
+import {
+  clampExcludeRingCount,
+  DEFAULT_GRID_MERGE_CENTER_PRIORITY,
+} from "./GridMergeCenterPriority";
 import { MAX_RESTORE_SCALE, MIN_RESTORE_SCALE } from "./RestoreScale";
 
 export type PixelRestoreMode = "fixedScale" | "gridScale";
@@ -19,9 +23,11 @@ export interface PixelRestorePreferences {
   gridScaleType: GridScaleType;
   gridColumnCount: number;
   gridRowCount: number;
+  centerPriorityEnabled: boolean;
+  excludeRingCount: number;
 }
 
-export const PIXEL_RESTORE_PREFERENCES_VERSION = 2;
+export const PIXEL_RESTORE_PREFERENCES_VERSION = 3;
 
 export const DEFAULT_PIXEL_RESTORE_PREFERENCES: PixelRestorePreferences = {
   restoreMode: "fixedScale",
@@ -30,6 +36,8 @@ export const DEFAULT_PIXEL_RESTORE_PREFERENCES: PixelRestorePreferences = {
   gridScaleType: DEFAULT_GRID_SCALE_TYPE,
   gridColumnCount: 1,
   gridRowCount: 1,
+  centerPriorityEnabled: DEFAULT_GRID_MERGE_CENTER_PRIORITY.enabled,
+  excludeRingCount: DEFAULT_GRID_MERGE_CENTER_PRIORITY.excludeRingCount,
 };
 
 const RESTORE_MODES: PixelRestoreMode[] = ["fixedScale", "gridScale"];
@@ -43,6 +51,8 @@ export interface PixelRestorePreferencesSource {
   gridScaleType: GridScaleType;
   gridColumnCount: number;
   gridRowCount: number;
+  centerPriorityEnabled: boolean;
+  excludeRingCount: number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -93,6 +103,11 @@ export function parsePixelRestorePreferences(raw: unknown): PixelRestorePreferen
       MAX_GRID_COUNT,
       defaults.gridRowCount,
     ),
+    centerPriorityEnabled:
+      typeof raw.centerPriorityEnabled === "boolean"
+        ? raw.centerPriorityEnabled
+        : defaults.centerPriorityEnabled,
+    excludeRingCount: clampExcludeRingCount(raw.excludeRingCount, defaults.excludeRingCount),
   };
 }
 
@@ -128,5 +143,10 @@ export function extractPixelRestorePreferences(
       MAX_GRID_COUNT,
       defaults.gridRowCount,
     ),
+    centerPriorityEnabled:
+      typeof source.centerPriorityEnabled === "boolean"
+        ? source.centerPriorityEnabled
+        : defaults.centerPriorityEnabled,
+    excludeRingCount: clampExcludeRingCount(source.excludeRingCount, defaults.excludeRingCount),
   };
 }

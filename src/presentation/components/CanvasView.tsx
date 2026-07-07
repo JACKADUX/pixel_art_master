@@ -42,9 +42,9 @@ import {
   forEachSymmetricTransform,
   hitTestSymmetryAxis,
 } from "@/domain/symmetry/SymmetryMirror";
-import { isDrawingToolType } from "@/domain/tool/ToolRegistry";
+import { isDrawingToolType, toolReservesCanvasRightClick } from "@/domain/tool/ToolRegistry";
 import { clampStampSize } from "@/domain/tool/ToolType";
-import type { ReferenceLayer } from "@/domain/layer/Layer";
+import type { DrawingLayer, ReferenceLayer } from "@/domain/layer/Layer";
 import { findTopReferenceLayerAtCanvasPoint } from "@/domain/layer/ReferenceLayerPalette";
 import {
   getOverlayPixelCoordinates,
@@ -54,9 +54,20 @@ import { countReferenceLayers, getReferenceStackIndex } from "@/domain/layer/Lay
 import {
   computeGridRelativeLabelScreenPosition,
   computeSecondaryGridCellScreenBounds,
+  computeSecondaryGridCellScreenBoundsWithSpans,
   normalizeDragRect,
 } from "@/domain/viewport/OverlayLabelLayout";
+import {
+  computeForeshortenedSecondarySpan,
+  computeForeshortenedSpan,
+  resolveOrthographicAngle,
+} from "@/domain/viewport/OrthographicView";
+import {
+  computeOrthographicSecondaryGridCellOrigin,
+} from "@/domain/grid/GridRelativePosition";
 import { buildReferenceLayerContextMenuItems } from "../config/referenceLayerContextMenu";
+import { buildSelectionContextMenuItems } from "../config/selectionContextMenu";
+import { isSelectionEmpty } from "@/domain/selection/SelectionState";
 import { useAppStore, type ColorSlot, type DrawingButton } from "../stores/appStore";
 import { useAltKeyHeld } from "../hooks/useAltKeyHeld";
 import { useBrushSizeHint } from "../hooks/useBrushSizeHint";
@@ -188,12 +199,28 @@ export function CanvasView() {
   const toggleReferenceGrid = useAppStore((s) => s.toggleReferenceGrid);
   const importImageToReferenceLayer = useAppStore((s) => s.importImageToReferenceLayer);
   const importReferenceLayerColors = useAppStore((s) => s.importReferenceLayerColors);
+  const selectAllCanvas = useAppStore((s) => s.selectAllCanvas);
+  const deselectCanvas = useAppStore((s) => s.deselectCanvas);
+  const invertCanvasSelection = useAppStore((s) => s.invertCanvasSelection);
+  const copySelection = useAppStore((s) => s.copySelection);
+  const cutSelection = useAppStore((s) => s.cutSelection);
+  const pasteSelection = useAppStore((s) => s.pasteSelection);
+  const clearSelectionContent = useAppStore((s) => s.clearSelectionContent);
+  const commitSelection = useAppStore((s) => s.commitSelection);
+  const cancelSelection = useAppStore((s) => s.cancelSelection);
+  const sendSelectionColorsToColorVariationAnalysis = useAppStore(
+    (s) => s.sendSelectionColorsToColorVariationAnalysis,
+  );
   const symmetry = useAppStore((s) => s.symmetry);
   const symmetryAxisDrag = useAppStore((s) => s.symmetryAxisDrag);
   const beginSymmetryAxisDrag = useAppStore((s) => s.beginSymmetryAxisDrag);
   const endSymmetryAxisDrag = useAppStore((s) => s.endSymmetryAxisDrag);
   const setSymmetryOrigin = useAppStore((s) => s.setSymmetryOrigin);
-  const getActivePatternBrushGrid = useAppStore((s) => s.getActivePatternBrushGrid);
+  const activePatternBrushGrid = useAppStore((s) =>
+    s.activePatternBrushId
+      ? (s.patternBrushPixelsCache[s.activePatternBrushId] ?? null)
+      : null,
+  );
   const patternBrushAnchorForegroundColor = useAppStore(
     (s) => s.patternBrushAnchorForegroundColor,
   );
@@ -206,6 +233,10 @@ export function CanvasView() {
   const [hoverPoint, setHoverPoint] = useState<CanvasPoint | null>(null);
   const [referenceContextMenu, setReferenceContextMenu] = useState<{
     layerId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [selectionContextMenu, setSelectionContextMenu] = useState<{
     x: number;
     y: number;
   } | null>(null);
@@ -312,16 +343,36 @@ export function CanvasView() {
     );
   }, [project]);
 
+  const drawingLayers = useMemo(() => {
+    if (!project) return [];
+    return project.canvas.layers.filter(
+      (l): l is DrawingLayer => l.type === "drawing",
+    );
+  }, [project]);
+
   const closeReferenceContextMenu = useCallback(() => {
     setReferenceContextMenu(null);
   }, []);
 
+  const closeSelectionContextMenu = useCallback(() => {
+    setSelectionContextMenu(null);
+  }, []);
+
   const openReferenceContextMenu = useCallback(
     (layerId: string, clientX: number, clientY: number) => {
+      closeSelectionContextMenu();
       setActiveReferenceLayer(layerId);
       setReferenceContextMenu({ layerId, x: clientX, y: clientY });
     },
-    [setActiveReferenceLayer],
+    [closeSelectionContextMenu, setActiveReferenceLayer],
+  );
+
+  const openSelectionContextMenu = useCallback(
+    (clientX: number, clientY: number) => {
+      closeReferenceContextMenu();
+      setSelectionContextMenu({ x: clientX, y: clientY });
+    },
+    [closeReferenceContextMenu],
   );
 
   const referenceContextMenuLayer = useMemo(() => {
@@ -352,6 +403,46 @@ export function CanvasView() {
     importReferenceLayerColors,
   ]);
 
+  const hasCanvasSelection =
+    selection !== null && !isSelectionEmpty(selection);
+  const hasFloatingSelection = selection?.floating != null;
+
+  const selectionContextMenuItems = useMemo(() => {
+    if (!project) return [];
+    return buildSelectionContextMenuItems(
+      {
+        hasSelection: hasCanvasSelection,
+        hasFloatingSelection,
+      },
+      {
+        selectAll: selectAllCanvas,
+        deselect: deselectCanvas,
+        invertSelection: invertCanvasSelection,
+        copySelection: () => void copySelection(),
+        cutSelection: () => void cutSelection(),
+        pasteSelection: () => void pasteSelection(),
+        clearSelectionContent,
+        commitSelection,
+        cancelSelection,
+        sendSelectionColorsToAnalysis: sendSelectionColorsToColorVariationAnalysis,
+      },
+    );
+  }, [
+    project,
+    hasCanvasSelection,
+    hasFloatingSelection,
+    selectAllCanvas,
+    deselectCanvas,
+    invertCanvasSelection,
+    copySelection,
+    cutSelection,
+    pasteSelection,
+    clearSelectionContent,
+    commitSelection,
+    cancelSelection,
+    sendSelectionColorsToColorVariationAnalysis,
+  ]);
+
   const overlayZIndex = 2;
 
   const stageLayout = useMemo(() => {
@@ -365,6 +456,7 @@ export function CanvasView() {
       displayWidth,
       displayHeight,
       referenceLayers,
+      drawingLayers,
       zoom,
     );
   }, [
@@ -373,6 +465,7 @@ export function CanvasView() {
     displayWidth,
     displayHeight,
     referenceLayers,
+    drawingLayers,
     zoom,
   ]);
 
@@ -392,8 +485,21 @@ export function CanvasView() {
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
 
+    const orthographicAngle = resolveOrthographicAngle(project.orthographicView);
+    const primarySpanY = computeForeshortenedSpan(project.grid.primary, orthographicAngle);
+    const secondarySpanY = computeForeshortenedSecondarySpan(
+      project.grid.primary,
+      project.grid.secondary,
+      orthographicAngle,
+    );
+    const checkerboardTileHeight = computeForeshortenedSpan(
+      appSettings.checkerboardTileSize,
+      orthographicAngle,
+    );
+
     renderTransparencyCheckerboard(ctx, composite.width, composite.height, zoom, {
       tileSize: appSettings.checkerboardTileSize,
+      tileHeight: checkerboardTileHeight,
       lightColor: appSettings.checkerboardLightHex,
       darkColor: appSettings.checkerboardDarkHex,
     });
@@ -481,6 +587,8 @@ export function CanvasView() {
           {
             primary,
             secondary,
+            primarySpanY,
+            secondarySpanY,
             colorRgb: gridColorRgbString(appSettings.gridColorHex),
             lineWidth: appSettings.gridLineWidth,
             subGridEnabled: appSettings.subGridEnabled,
@@ -511,10 +619,7 @@ export function CanvasView() {
     };
   }, [activeTool, toolSettings]);
 
-  const patternBrushGrid = useMemo(() => {
-    if (!brushPreview?.isPattern) return null;
-    return getActivePatternBrushGrid();
-  }, [brushPreview?.isPattern, getActivePatternBrushGrid]);
+  const patternBrushGrid = brushPreview?.isPattern ? activePatternBrushGrid : null;
 
   const renderOverlay = useCallback(() => {
     const previewCanvas = previewRef.current;
@@ -553,7 +658,10 @@ export function CanvasView() {
       (isRepeatTileCreating && tileCreatePreviewRect !== null);
 
     renderSelectionOverlay(ctx, {
-      selection: capturePreviewRect || showTileRegionOverlay ? null : selectionDrag?.layerPan ? null : selection,
+      selection:
+        capturePreviewRect || showTileRegionOverlay || selectionDrag?.mode === "layerPosition"
+          ? null
+          : selection,
       previewRect: capturePreviewRect ?? (showTileRegionOverlay ? null : selectionPreviewRect),
       lassoPoints,
       phase: marchPhase,
@@ -570,7 +678,7 @@ export function CanvasView() {
       );
     }
 
-    if (activeTool === "transform" && selection && !selectionDrag?.layerPan) {
+    if (activeTool === "transform" && selection && selectionDrag?.mode !== "layerPosition") {
       renderTransformHandles(ctx, { selection, zoom, phase: marchPhase });
     }
 
@@ -791,7 +899,7 @@ export function CanvasView() {
         activeTool: tool,
         drawingButton: button,
       } = useAppStore.getState();
-      if (tool !== "select" || !drag?.deferredCreate || button === null) {
+      if (tool !== "select" || !drag?.createOffset || button === null) {
         return;
       }
 
@@ -1088,15 +1196,25 @@ export function CanvasView() {
   const handleCanvasContextMenu = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault();
-      if (e.altKey || !project) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const point = clientToPixel(e.clientX, e.clientY, canvas, zoom);
-      const refLayer = findTopReferenceLayerAtCanvasPoint(project.canvas.layers, point);
-      if (!refLayer) return;
-      openReferenceContextMenu(refLayer.id, e.clientX, e.clientY);
+      if (!project) return;
+      if (toolReservesCanvasRightClick(activeTool)) return;
+      if (!e.altKey) {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const point = clientToPixel(e.clientX, e.clientY, canvas, zoom);
+          const refLayer = findTopReferenceLayerAtCanvasPoint(
+            project.canvas.layers,
+            point,
+          );
+          if (refLayer) {
+            openReferenceContextMenu(refLayer.id, e.clientX, e.clientY);
+            return;
+          }
+        }
+      }
+      openSelectionContextMenu(e.clientX, e.clientY);
     },
-    [project, zoom, openReferenceContextMenu],
+    [project, zoom, activeTool, openReferenceContextMenu, openSelectionContextMenu],
   );
 
   const updateHoverFromClient = useCallback(
@@ -1144,6 +1262,13 @@ export function CanvasView() {
     }
 
     const secondarySize = project.grid.secondary;
+    const orthographicAngle = resolveOrthographicAngle(project.orthographicView);
+    const primarySpanY = computeForeshortenedSpan(project.grid.primary, orthographicAngle);
+    const secondarySpanY = computeForeshortenedSecondarySpan(
+      project.grid.primary,
+      secondarySize,
+      orthographicAngle,
+    );
 
     const handleMove = (e: MouseEvent) => {
       if (isPanningRef.current || mousePositionOverlaySuppressedRef.current) return;
@@ -1167,18 +1292,37 @@ export function CanvasView() {
       }
 
       const canvasRect = canvas.getBoundingClientRect();
+      const useOrthographicHighlight =
+        project.orthographicView.enabled && target.kind === "canvas";
+      const highlightCellOrigin = useOrthographicHighlight
+        ? computeOrthographicSecondaryGridCellOrigin(
+            point.x,
+            point.y,
+            secondarySize,
+            primarySpanY,
+            secondarySpanY,
+          )
+        : target.canvasCellOrigin;
       const labelPosition = computeGridRelativeLabelScreenPosition(
         canvasRect,
-        target.canvasCellOrigin,
+        highlightCellOrigin,
         target.secondarySize,
         zoom,
       );
-      const cellBounds = computeSecondaryGridCellScreenBounds(
-        canvasRect,
-        target.canvasCellOrigin,
-        target.secondarySize,
-        zoom,
-      );
+      const cellBounds = useOrthographicHighlight
+        ? computeSecondaryGridCellScreenBoundsWithSpans(
+            canvasRect,
+            highlightCellOrigin,
+            secondarySize,
+            secondarySpanY,
+            zoom,
+          )
+        : computeSecondaryGridCellScreenBounds(
+            canvasRect,
+            target.canvasCellOrigin,
+            target.secondarySize,
+            zoom,
+          );
       const pixelCoords = getOverlayPixelCoordinates(target);
 
       updateMousePositionOverlay(
@@ -1741,6 +1885,13 @@ export function CanvasView() {
           position={{ x: referenceContextMenu.x, y: referenceContextMenu.y }}
           items={referenceContextMenuItems}
           onClose={closeReferenceContextMenu}
+        />
+      )}
+      {selectionContextMenu && selectionContextMenuItems.length > 0 && (
+        <ContextMenu
+          position={{ x: selectionContextMenu.x, y: selectionContextMenu.y }}
+          items={selectionContextMenuItems}
+          onClose={closeSelectionContextMenu}
         />
       )}
     </div>

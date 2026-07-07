@@ -1,5 +1,5 @@
 import type { Project } from "@/domain/project/Project";
-import { getActiveLayer, getCanvasSize } from "@/domain/project/Project";
+import { getActiveLayer, getCanvasSize, getLayerById } from "@/domain/project/Project";
 import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
 import { syncLayerPixels, getLayerGrid } from "@/domain/layer/LayerOperations";
 import { cloneLayers } from "@/domain/layer/Layer";
@@ -7,7 +7,6 @@ import { touchProject } from "@/domain/project/Project";
 import {
   type EditorSnapshot,
   type HistoryStack,
-  type SnapshotKind,
   cloneEditorSnapshot,
 } from "@/domain/history/HistoryStack";
 import {
@@ -22,19 +21,32 @@ export interface HistoryApplyResult {
   structural: boolean;
 }
 
+export function captureLayerSnapshot(
+  project: Project,
+  layerId: string,
+  selection: SelectionState | null,
+): EditorSnapshot | null {
+  const layer = getLayerById(project, layerId);
+  if (!layer || !isDrawingLayer(layer)) return null;
+
+  return {
+    kind: "pixels",
+    layerId: layer.id,
+    width: layer.width,
+    height: layer.height,
+    position: { ...layer.position },
+    pixels: new Uint32Array(layer.pixels),
+    selection: selection ? cloneSelectionState(selection) : null,
+  };
+}
+
 export function captureEditorSnapshot(
   project: Project,
   selection: SelectionState | null,
 ): EditorSnapshot | null {
   const layer = getActiveLayer(project);
   if (!isDrawingLayer(layer)) return null;
-
-  return {
-    kind: "pixels",
-    layerId: layer.id,
-    pixels: new Uint32Array(layer.pixels),
-    selection: selection ? cloneSelectionState(selection) : null,
-  };
+  return captureLayerSnapshot(project, layer.id, selection);
 }
 
 /** 采集整个图层结构的快照，用于撤销/重做增删图层等操作。 */
@@ -54,14 +66,14 @@ export function captureStructureSnapshot(
   };
 }
 
-function captureSnapshotByKind(
+function captureCurrentForEntry(
   project: Project,
   selection: SelectionState | null,
-  kind: SnapshotKind,
+  entry: EditorSnapshot,
 ): EditorSnapshot | null {
-  return kind === "structure"
+  return entry.kind === "structure"
     ? captureStructureSnapshot(project, selection)
-    : captureEditorSnapshot(project, selection);
+    : captureLayerSnapshot(project, entry.layerId, selection);
 }
 
 export function pushHistory(
@@ -99,6 +111,9 @@ export function applyEditorSnapshot(
 
   const updatedLayer = {
     ...layer,
+    width: snapshot.width,
+    height: snapshot.height,
+    position: { ...snapshot.position },
     pixels: new Uint32Array(snapshot.pixels),
   };
 
@@ -138,10 +153,10 @@ export function undoHistory(
   project: Project,
   selection: SelectionState | null,
 ): HistoryApplyResult | null {
-  const kind = historyStack.nextUndoKind;
-  if (!kind) return null;
+  const entry = historyStack.nextUndoEntry;
+  if (!entry) return null;
 
-  const current = captureSnapshotByKind(project, selection, kind);
+  const current = captureCurrentForEntry(project, selection, entry);
   if (!current) return null;
 
   const restored = historyStack.undo(current);
@@ -159,10 +174,10 @@ export function redoHistory(
   project: Project,
   selection: SelectionState | null,
 ): HistoryApplyResult | null {
-  const kind = historyStack.nextRedoKind;
-  if (!kind) return null;
+  const entry = historyStack.nextRedoEntry;
+  if (!entry) return null;
 
-  const current = captureSnapshotByKind(project, selection, kind);
+  const current = captureCurrentForEntry(project, selection, entry);
   if (!current) return null;
 
   const restored = historyStack.redo(current);
@@ -186,8 +201,7 @@ export function restoreLayerPixelsFromSnapshot(
   const layer = project.canvas.layers[layerIndex];
   if (!isDrawingLayer(layer)) return project;
 
-  const size = getCanvasSize(project);
-  const grid = getLayerGrid({ ...layer, pixels: new Uint32Array(pixels) }, size);
+  const grid = getLayerGrid({ ...layer, pixels: new Uint32Array(pixels) });
   const updatedLayer = syncLayerPixels(layer, grid);
 
   const layers = [...project.canvas.layers];

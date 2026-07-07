@@ -64,6 +64,8 @@ interface PixelRestoreStore {
   gridCreateActive: boolean;
   gridDrawing: boolean;
   mergeAlgorithm: GridMergeAlgorithm;
+  centerPriorityEnabled: boolean;
+  excludeRingCount: number;
 
   openPage: () => void;
   closePage: () => void;
@@ -94,6 +96,8 @@ interface PixelRestoreStore {
   adjustGridCounts: (dx: number, dy: number) => void;
   cancelGrid: () => void;
   setMergeAlgorithm: (algorithm: GridMergeAlgorithm) => void;
+  setCenterPriorityEnabled: (enabled: boolean) => void;
+  setExcludeRingCount: (count: number) => void;
   applyGridRestoreResult: () => void;
 }
 
@@ -117,6 +121,8 @@ const initialState = {
   restoreMode: DEFAULT_PIXEL_RESTORE_PREFERENCES.restoreMode,
   selectedScale: DEFAULT_PIXEL_RESTORE_PREFERENCES.selectedScale,
   mergeAlgorithm: DEFAULT_PIXEL_RESTORE_PREFERENCES.mergeAlgorithm,
+  centerPriorityEnabled: DEFAULT_PIXEL_RESTORE_PREFERENCES.centerPriorityEnabled,
+  excludeRingCount: DEFAULT_PIXEL_RESTORE_PREFERENCES.excludeRingCount,
   gridScaleType: DEFAULT_PIXEL_RESTORE_PREFERENCES.gridScaleType,
   gridColumnCount: DEFAULT_PIXEL_RESTORE_PREFERENCES.gridColumnCount,
   gridRowCount: DEFAULT_PIXEL_RESTORE_PREFERENCES.gridRowCount,
@@ -252,6 +258,8 @@ function pickPreferenceFields(state: PixelRestoreStore) {
     gridScaleType: state.gridScaleType,
     gridColumnCount: state.gridColumnCount,
     gridRowCount: state.gridRowCount,
+    centerPriorityEnabled: state.centerPriorityEnabled,
+    excludeRingCount: state.excludeRingCount,
   };
 }
 
@@ -272,6 +280,8 @@ export const usePixelRestoreStore = create<PixelRestoreStore>((set, get) => ({
       gridScaleType: applied.gridScaleType,
       gridColumnCount: applied.gridColumnCount,
       gridRowCount: applied.gridRowCount,
+      centerPriorityEnabled: applied.centerPriorityEnabled,
+      excludeRingCount: applied.excludeRingCount,
     });
     isHydratingPreferences = false;
   },
@@ -576,6 +586,13 @@ export const usePixelRestoreStore = create<PixelRestoreStore>((set, get) => ({
 
   setMergeAlgorithm: (algorithm) => set({ mergeAlgorithm: algorithm }),
 
+  setCenterPriorityEnabled: (enabled) => set({ centerPriorityEnabled: enabled }),
+
+  setExcludeRingCount: (count) =>
+    set({
+      excludeRingCount: Math.min(Math.max(Math.round(count), 0), 5),
+    }),
+
   applyGridRestoreResult: () => {
     const {
       sourceImageData,
@@ -585,8 +602,15 @@ export const usePixelRestoreStore = create<PixelRestoreStore>((set, get) => ({
       gridColumnCount,
       gridRowCount,
       mergeAlgorithm,
+      centerPriorityEnabled,
+      excludeRingCount,
     } = get();
     if (!sourceImageData) return;
+
+    const centerPriority = {
+      enabled: centerPriorityEnabled,
+      excludeRingCount,
+    };
 
     try {
       if (gridScaleType === "region") {
@@ -597,13 +621,19 @@ export const usePixelRestoreStore = create<PixelRestoreStore>((set, get) => ({
           gridColumnCount,
           gridRowCount,
           mergeAlgorithm,
+          centerPriority,
         );
         set({ resultImageData: result.resultImageData, error: null });
         return;
       }
 
       if (!gridSeedCell) return;
-      const result = applyGridRestore(sourceImageData, gridSeedCell, mergeAlgorithm);
+      const result = applyGridRestore(
+        sourceImageData,
+        gridSeedCell,
+        mergeAlgorithm,
+        centerPriority,
+      );
       set({ resultImageData: result.resultImageData, error: null });
     } catch (err) {
       set({
@@ -622,7 +652,9 @@ usePixelRestoreStore.subscribe((state, prev) => {
     state.mergeAlgorithm === prev.mergeAlgorithm &&
     state.gridScaleType === prev.gridScaleType &&
     state.gridColumnCount === prev.gridColumnCount &&
-    state.gridRowCount === prev.gridRowCount
+    state.gridRowCount === prev.gridRowCount &&
+    state.centerPriorityEnabled === prev.centerPriorityEnabled &&
+    state.excludeRingCount === prev.excludeRingCount
   ) {
     return;
   }

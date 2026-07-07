@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   computeRelativeOffsetWithinSecondaryGrid,
   computeSecondaryGridCellOrigin,
+  computeSecondaryGridCellOriginWithSpans,
+  computeOrthographicSecondaryGridCellOrigin,
   formatGridRelativePosition,
 } from "@/domain/grid/GridRelativePosition";
 
@@ -13,6 +15,23 @@ describe("computeSecondaryGridCellOrigin", () => {
     expect(computeSecondaryGridCellOrigin(7, 7, secondary)).toEqual({ x: 0, y: 0 });
     expect(computeSecondaryGridCellOrigin(8, 0, secondary)).toEqual({ x: 8, y: 0 });
     expect(computeSecondaryGridCellOrigin(10, 15, secondary)).toEqual({ x: 8, y: 8 });
+  });
+});
+
+describe("computeSecondaryGridCellOriginWithSpans", () => {
+  it("uses independent X and Y spans", () => {
+    expect(computeSecondaryGridCellOriginWithSpans(10, 15, 8, 11)).toEqual({
+      x: 8,
+      y: 11,
+    });
+  });
+});
+
+describe("computeOrthographicSecondaryGridCellOrigin", () => {
+  it("aligns Y origin within each primary cell", () => {
+    expect(
+      computeOrthographicSecondaryGridCellOrigin(10, 13, 8, 11, 6),
+    ).toEqual({ x: 8, y: 11 });
   });
 });
 

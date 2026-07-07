@@ -1,4 +1,4 @@
-import type { PixelGrid } from "../canvas/PixelGrid";
+import type { WritableCanvasSurface } from "../canvas/MaskedPixelGrid";
 import { getAlpha } from "../canvas/PixelColor";
 import type { SelectionMask } from "./SelectionMask";
 import { createEmptyMask } from "./SelectionMask";
@@ -45,9 +45,9 @@ export function getEffectiveSelectionMask(
 }
 
 export function commitFloating(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   state: SelectionState,
-): { grid: PixelGrid; selection: SelectionState } {
+): { grid: WritableCanvasSurface; selection: SelectionState } {
   if (!state.floating) return { grid, selection: state };
 
   blitFloatingToGrid(grid, state.floating, null);
@@ -59,9 +59,9 @@ export function commitFloating(
 }
 
 export function cancelFloating(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   state: SelectionState,
-): { grid: PixelGrid; selection: SelectionState } {
+): { grid: WritableCanvasSurface; selection: SelectionState } {
   if (!state.floating) return { grid, selection: state };
 
   if (state.floating.source !== "paste") {

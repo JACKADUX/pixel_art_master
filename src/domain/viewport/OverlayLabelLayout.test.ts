@@ -3,6 +3,7 @@ import {
   computeGridRelativeLabelPosition,
   computeGridRelativeLabelScreenPosition,
   computeSecondaryGridCellScreenBounds,
+  computeSecondaryGridCellScreenBoundsWithSpans,
 } from "@/domain/viewport/OverlayLabelLayout";
 
 describe("computeGridRelativeLabelPosition", () => {
@@ -44,6 +45,25 @@ describe("computeSecondaryGridCellScreenBounds", () => {
       top: 114,
       width: 64,
       height: 64,
+    });
+  });
+});
+
+describe("computeSecondaryGridCellScreenBoundsWithSpans", () => {
+  it("returns independent width and height from spans", () => {
+    expect(
+      computeSecondaryGridCellScreenBoundsWithSpans(
+        { left: 100, top: 50 },
+        { x: 8, y: 11 },
+        8,
+        11,
+        8,
+      ),
+    ).toEqual({
+      left: 164,
+      top: 138,
+      width: 64,
+      height: 88,
     });
   });
 });

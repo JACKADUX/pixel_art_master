@@ -1,4 +1,4 @@
-import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 import type { Point } from "@/domain/tool/ITool";
 import type { FloatingSelection } from "@/domain/selection/FloatingSelection";
 import {
@@ -20,7 +20,7 @@ import { syncMaskWithFloating } from "@/domain/selection/FloatingSelectionLifecy
 import { beginMoveSelection } from "./SelectionUseCases";
 
 export function ensureFloatingForTransform(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   state: SelectionState,
 ): SelectionState {
   return beginMoveSelection(grid, state);

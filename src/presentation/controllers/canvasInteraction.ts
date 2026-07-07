@@ -1,11 +1,14 @@
-import { pushHistory } from "@/application/use-cases/HistoryUseCases";
+import { pushHistory, pushStructureHistory } from "@/application/use-cases/HistoryUseCases";
+import { getActiveLayer } from "@/domain/project/Project";
+import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
+import type { LayerPosition } from "@/domain/layer/Layer";
 import {
   beginMoveSelection,
   cancelFloatingSelection,
   commitFloatingSelection,
+  commitFloatingSelectionInProject,
   createSelectionFromDrag,
   createSelectionFromLasso,
-  createSelectionFromLayerContent,
   createSelectionFromMagicWand,
   isPointInSelection,
 } from "@/application/use-cases/SelectionUseCases";
@@ -33,7 +36,7 @@ import type { ResizeHandle } from "@/domain/selection/ResizeTransform";
 import { shouldAppendLassoPoint } from "@/domain/selection/LassoRasterize";
 import type { Point } from "@/domain/tool/ITool";
 import type { ToolSettings } from "@/domain/tool/ToolType";
-import type { PixelGrid } from "@/domain/canvas/PixelGrid";
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 import type { ReferenceLayerPixelData } from "@/infrastructure/canvas/ReferenceLayerPixelCache";
 import {
   hitTestTransformHandle,
@@ -45,20 +48,30 @@ export interface DeferredCreateDrag {
   lassoPoints: Point[];
 }
 
+/** 框选创建时按住空格整体偏移的基准状态 */
+export interface CreateOffsetDrag {
+  anchor: Point;
+  baseStart: Point;
+  baseCurrent: Point;
+  baseLassoPoints: Point[];
+}
+
 export interface SelectionDragState {
   start: Point;
   current: Point;
-  mode: "create" | "move" | "transform";
+  mode: "create" | "move" | "transform" | "layerPosition";
   transformHandle?: TransformHandle;
   initialBounds?: SelectionRect;
   initialOffset?: Point;
   initialFloating?: FloatingSelection;
   initialScale?: { x: number; y: number };
   initialAngle?: number;
-  /** 拖拽新建选区时按住空格暂存的原 marquee / 套索状态 */
+  /** 拖拽新建选区时按住空格暂存的原 marquee / 套索状态（移动已有选区） */
   deferredCreate?: DeferredCreateDrag;
-  /** 无选区时平移整个图层，不显示变换框 */
-  layerPan?: boolean;
+  /** 框选创建时按住空格整体偏移 */
+  createOffset?: CreateOffsetDrag;
+  /** 无选区时平移整个绘制层位置 */
+  initialPosition?: LayerPosition;
 }
 
 export interface ModifierKeys {
@@ -73,9 +86,58 @@ function canSpaceMoveSelection(
   return selection !== null && !isSelectionEmpty(selection);
 }
 
+function hasActiveCreateDrag(
+  selectionDrag: SelectionDragState,
+  lassoPoints: Point[],
+  settings: ToolSettings,
+): boolean {
+  if (settings.selectionMode === "lasso") {
+    return (
+      lassoPoints.length > 1 ||
+      selectionDrag.start.x !== selectionDrag.current.x ||
+      selectionDrag.start.y !== selectionDrag.current.y
+    );
+  }
+  return (
+    selectionDrag.start.x !== selectionDrag.current.x ||
+    selectionDrag.start.y !== selectionDrag.current.y
+  );
+}
+
+function resolveCreateOffsetPoints(
+  createOffset: CreateOffsetDrag,
+  point: Point,
+): { start: Point; current: Point; lassoPoints: Point[] } {
+  const dx = point.x - createOffset.anchor.x;
+  const dy = point.y - createOffset.anchor.y;
+  return {
+    start: {
+      x: createOffset.baseStart.x + dx,
+      y: createOffset.baseStart.y + dy,
+    },
+    current: {
+      x: createOffset.baseCurrent.x + dx,
+      y: createOffset.baseCurrent.y + dy,
+    },
+    lassoPoints: createOffset.baseLassoPoints.map((p) => ({
+      x: p.x + dx,
+      y: p.y + dy,
+    })),
+  };
+}
+
+function previewRectForCreateDrag(
+  start: Point,
+  current: Point,
+  settings: ToolSettings,
+): SelectionRect | null {
+  if (settings.selectionMode === "lasso") return null;
+  return normalizeRect(start.x, start.y, current.x, current.y);
+}
+
 export function handleSelectPointerDown(options: {
   project: Project;
-  grid: PixelGrid;
+  grid: WritableCanvasSurface;
   point: Point;
   settings: ToolSettings;
   selection: SelectionState | null;
@@ -90,7 +152,7 @@ export function handleSelectPointerDown(options: {
   selectionDrag: SelectionDragState | null;
   lassoPoints: Point[];
   selectionPreviewRect: SelectionRect | null;
-  grid?: PixelGrid;
+  grid?: WritableCanvasSurface;
   pushHistory?: boolean;
 } {
   const {
@@ -183,7 +245,7 @@ export function handleSelectPointerMove(options: {
   selection: SelectionState | null;
   selectionDrag: SelectionDragState;
   lassoPoints: Point[];
-  grid: PixelGrid;
+  grid: WritableCanvasSurface;
   modifiers: ModifierKeys;
   historyStack: HistoryStack;
 }): {
@@ -191,7 +253,7 @@ export function handleSelectPointerMove(options: {
   selectionDrag: SelectionDragState;
   lassoPoints: Point[];
   selectionPreviewRect: SelectionRect | null;
-  grid?: PixelGrid;
+  grid?: WritableCanvasSurface;
 } {
   const {
     project,
@@ -207,7 +269,79 @@ export function handleSelectPointerMove(options: {
 
   if (
     selectionDrag.mode === "create" &&
+    selectionDrag.createOffset &&
+    !modifiers.spaceKey
+  ) {
+    const resolved = resolveCreateOffsetPoints(selectionDrag.createOffset, point);
+    return {
+      selection,
+      selectionDrag: {
+        start: resolved.start,
+        current: point,
+        mode: "create",
+      },
+      lassoPoints: resolved.lassoPoints,
+      selectionPreviewRect: previewRectForCreateDrag(
+        resolved.start,
+        point,
+        settings,
+      ),
+    };
+  }
+
+  if (
+    selectionDrag.mode === "create" &&
+    selectionDrag.createOffset &&
+    modifiers.spaceKey
+  ) {
+    const resolved = resolveCreateOffsetPoints(selectionDrag.createOffset, point);
+    return {
+      selection,
+      selectionDrag: {
+        ...selectionDrag,
+        start: resolved.start,
+        current: resolved.current,
+      },
+      lassoPoints: resolved.lassoPoints,
+      selectionPreviewRect: previewRectForCreateDrag(
+        resolved.start,
+        resolved.current,
+        settings,
+      ),
+    };
+  }
+
+  if (
+    selectionDrag.mode === "create" &&
     modifiers.spaceKey &&
+    !selectionDrag.createOffset &&
+    hasActiveCreateDrag(selectionDrag, lassoPoints, settings)
+  ) {
+    return {
+      selection,
+      selectionDrag: {
+        ...selectionDrag,
+        createOffset: {
+          anchor: point,
+          baseStart: { ...selectionDrag.start },
+          baseCurrent: { ...selectionDrag.current },
+          baseLassoPoints: [...lassoPoints],
+        },
+      },
+      lassoPoints,
+      selectionPreviewRect: previewRectForCreateDrag(
+        selectionDrag.start,
+        selectionDrag.current,
+        settings,
+      ),
+    };
+  }
+
+  if (
+    selectionDrag.mode === "create" &&
+    modifiers.spaceKey &&
+    !selectionDrag.createOffset &&
+    !hasActiveCreateDrag(selectionDrag, lassoPoints, settings) &&
     canSpaceMoveSelection(selection)
   ) {
     pushHistory(historyStack, project, selection);
@@ -259,7 +393,7 @@ export function handleSelectPointerMove(options: {
     };
   }
 
-  if (selectionDrag.mode === "move") {
+    if (selectionDrag.mode === "move") {
     const dx = point.x - selectionDrag.start.x;
     const dy = point.y - selectionDrag.start.y;
 
@@ -282,6 +416,13 @@ export function handleSelectPointerMove(options: {
         selectionPreviewRect: null,
       };
     }
+
+    return {
+      selection,
+      selectionDrag: { ...selectionDrag, current: point },
+      lassoPoints,
+      selectionPreviewRect: null,
+    };
   }
 
   if (settings.selectionMode === "lasso") {
@@ -319,13 +460,14 @@ export function handleSelectPointerUp(options: {
   lassoPoints: Point[];
   modifiers: ModifierKeys;
   historyStack: HistoryStack;
-  grid: PixelGrid;
+  grid: WritableCanvasSurface;
 }): {
   selection: SelectionState | null;
   selectionDrag: null;
   lassoPoints: Point[];
   selectionPreviewRect: null;
-  grid?: PixelGrid;
+  grid?: WritableCanvasSurface;
+  project?: Project;
 } {
   const {
     project,
@@ -334,13 +476,24 @@ export function handleSelectPointerUp(options: {
     selection,
     selectionDrag,
     lassoPoints,
-    grid,
     modifiers,
     historyStack,
   } = options;
   const size = getCanvasSize(project);
 
-  if (!selectionDrag) {
+  let effectiveDrag = selectionDrag;
+  let effectiveLasso = lassoPoints;
+  if (selectionDrag?.mode === "create" && selectionDrag.createOffset) {
+    const resolved = resolveCreateOffsetPoints(selectionDrag.createOffset, point);
+    effectiveDrag = {
+      ...selectionDrag,
+      start: resolved.start,
+      current: resolved.current,
+    };
+    effectiveLasso = resolved.lassoPoints;
+  }
+
+  if (!effectiveDrag) {
     return {
       selection,
       selectionDrag: null,
@@ -349,7 +502,7 @@ export function handleSelectPointerUp(options: {
     };
   }
 
-  if (selectionDrag.mode === "move") {
+  if (effectiveDrag.mode === "move") {
     return {
       selection,
       selectionDrag: null,
@@ -359,18 +512,21 @@ export function handleSelectPointerUp(options: {
   }
 
   const dragged =
-    selectionDrag.start.x !== point.x || selectionDrag.start.y !== point.y;
+    effectiveDrag.start.x !== point.x || effectiveDrag.start.y !== point.y;
   if (!dragged) {
     const keepSelection =
       selection && isPointInSelection(selection, point);
     if (!keepSelection && selection?.floating) {
-      const { grid: committedGrid } = commitFloatingSelection(grid, selection);
+      const { project: committedProject } = commitFloatingSelectionInProject(
+        project,
+        selection,
+      );
       return {
+        project: committedProject,
         selection: null,
         selectionDrag: null,
         lassoPoints: [],
         selectionPreviewRect: null,
-        grid: committedGrid,
       };
     }
     return {
@@ -383,21 +539,21 @@ export function handleSelectPointerUp(options: {
 
   pushHistory(historyStack, project, selection);
 
-  let workingGrid = grid;
+  let workingProject = project;
   let existingSelection = selection;
-  let gridChanged = false;
+  let projectChanged = false;
   if (selection?.floating) {
-    const committed = commitFloatingSelection(grid, selection);
-    workingGrid = committed.grid;
+    const committed = commitFloatingSelectionInProject(project, selection);
+    workingProject = committed.project;
     existingSelection = committed.selection;
-    gridChanged = true;
+    projectChanged = true;
   }
 
   if (settings.selectionMode === "lasso") {
     const points =
-      lassoPoints.length > 0 && shouldAppendLassoPoint(lassoPoints, point)
-        ? [...lassoPoints, point]
-        : lassoPoints;
+      effectiveLasso.length > 0 && shouldAppendLassoPoint(effectiveLasso, point)
+        ? [...effectiveLasso, point]
+        : effectiveLasso;
     const next = createSelectionFromLasso(
       points,
       size.width,
@@ -407,16 +563,16 @@ export function handleSelectPointerUp(options: {
       modifiers.altKey,
     );
     return {
+      project: projectChanged ? workingProject : undefined,
       selection: next,
       selectionDrag: null,
       lassoPoints: [],
       selectionPreviewRect: null,
-      ...(gridChanged ? { grid: workingGrid } : {}),
     };
   }
 
   const next = createSelectionFromDrag(
-    selectionDrag.start,
+    effectiveDrag.start,
     point,
     size.width,
     size.height,
@@ -427,17 +583,17 @@ export function handleSelectPointerUp(options: {
   );
 
   return {
+    project: projectChanged ? workingProject : undefined,
     selection: next,
     selectionDrag: null,
     lassoPoints: [],
     selectionPreviewRect: null,
-    ...(gridChanged ? { grid: workingGrid } : {}),
   };
 }
 
 export function handleTransformPointerDown(options: {
   project: Project;
-  grid: PixelGrid;
+  grid: WritableCanvasSurface;
   point: Point;
   selection: SelectionState | null;
   historyStack: HistoryStack;
@@ -445,7 +601,7 @@ export function handleTransformPointerDown(options: {
 }): {
   selection: SelectionState | null;
   selectionDrag: SelectionDragState | null;
-  grid?: PixelGrid;
+  grid?: WritableCanvasSurface;
 } {
   const { project, grid, point, selection, historyStack, transformMode } = options;
 
@@ -453,26 +609,18 @@ export function handleTransformPointerDown(options: {
     if (transformMode !== "move") {
       return { selection, selectionDrag: null };
     }
-    const layerSelection = createSelectionFromLayerContent(grid);
-    if (!layerSelection) {
+    const activeLayer = getActiveLayer(project);
+    if (!isDrawingLayer(activeLayer) || activeLayer.locked) {
       return { selection, selectionDrag: null };
     }
-    pushHistory(historyStack, project, selection);
-    const withFloating = beginMoveSelection(grid, layerSelection);
-    if (!withFloating.floating) {
-      return { selection, selectionDrag: null };
-    }
+    pushStructureHistory(historyStack, project, selection);
     return {
-      selection: withFloating,
-      grid,
+      selection,
       selectionDrag: {
         start: point,
         current: point,
-        mode: "transform",
-        transformHandle: "move",
-        layerPan: true,
-        initialOffset: { ...withFloating.floating.offset },
-        initialFloating: cloneFloatingSelection(withFloating.floating),
+        mode: "layerPosition",
+        initialPosition: { ...activeLayer.position },
       },
     };
   }
@@ -509,7 +657,7 @@ export function handleTransformPointerMove(options: {
   point: Point;
   selection: SelectionState;
   selectionDrag: SelectionDragState;
-  grid: PixelGrid;
+  grid: WritableCanvasSurface;
   shiftKey: boolean;
   altKey: boolean;
 }): { selection: SelectionState; selectionDrag: SelectionDragState } {
@@ -577,37 +725,43 @@ export function handleTransformPointerMove(options: {
   };
 }
 
+export function resolveLayerPositionFromDrag(
+  selectionDrag: SelectionDragState,
+  point: Point,
+): LayerPosition | null {
+  if (selectionDrag.mode !== "layerPosition" || !selectionDrag.initialPosition) {
+    return null;
+  }
+  const dx = point.x - selectionDrag.start.x;
+  const dy = point.y - selectionDrag.start.y;
+  return {
+    x: selectionDrag.initialPosition.x + dx,
+    y: selectionDrag.initialPosition.y + dy,
+  };
+}
+
 export function handleTransformPointerUp(options: {
-  grid: PixelGrid;
+  grid: WritableCanvasSurface;
   selection: SelectionState | null;
   selectionDrag: SelectionDragState | null;
 }): {
   selection: SelectionState | null;
   selectionDrag: null;
-  grid?: PixelGrid;
+  grid?: WritableCanvasSurface;
 } {
-  const { grid, selection, selectionDrag } = options;
+  const { selection, selectionDrag } = options;
 
   if (!selectionDrag) {
     return { selection, selectionDrag: null };
-  }
-
-  if (selectionDrag.layerPan && selection?.floating) {
-    const { grid: committedGrid } = commitFloatingSelection(grid, selection);
-    return {
-      selection: null,
-      selectionDrag: null,
-      grid: committedGrid,
-    };
   }
 
   return { selection, selectionDrag: null };
 }
 
 export function commitActiveFloating(options: {
-  grid: PixelGrid;
+  grid: WritableCanvasSurface;
   selection: SelectionState | null;
-}): { grid: PixelGrid; selection: SelectionState | null } {
+}): { grid: WritableCanvasSurface; selection: SelectionState | null } {
   if (!options.selection?.floating) {
     return { grid: options.grid, selection: options.selection };
   }
@@ -615,9 +769,9 @@ export function commitActiveFloating(options: {
 }
 
 export function cancelActiveFloating(options: {
-  grid: PixelGrid;
+  grid: WritableCanvasSurface;
   selection: SelectionState | null;
-}): { grid: PixelGrid; selection: SelectionState | null } {
+}): { grid: WritableCanvasSurface; selection: SelectionState | null } {
   if (!options.selection?.floating) {
     return { grid: options.grid, selection: options.selection };
   }

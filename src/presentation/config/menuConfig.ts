@@ -8,6 +8,7 @@ import {
   ArrowsPointingOutIcon,
   CommandLineIcon,
   DocumentDuplicateIcon,
+  ChartBarSquareIcon,
   Cog6ToothIcon,
   DocumentPlusIcon,
   FolderOpenIcon,
@@ -66,6 +67,7 @@ export interface MenuActions {
   pasteSelection: () => void;
   openPixelRestorePage: () => void;
   openColorEditPage: () => void;
+  openColorVariationPage: () => void;
   openWorldPage: () => void;
   openComfyUiPage: () => void;
   /** 已保存的 ComfyUI 应用列表（用于工具菜单二级子菜单） */
@@ -223,6 +225,12 @@ export function buildMenuGroups(actions: MenuActions): MenuGroup[] {
           label: "颜色编辑…",
           icon: SwatchIcon,
           onClick: actions.openColorEditPage,
+        },
+        {
+          type: "action",
+          label: "颜色变化分析…",
+          icon: ChartBarSquareIcon,
+          onClick: actions.openColorVariationPage,
         },
         {
           type: "action",
