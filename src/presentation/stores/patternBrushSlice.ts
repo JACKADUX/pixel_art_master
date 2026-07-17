@@ -1,6 +1,7 @@
 import type { IPatternBrushRepository } from "@/application/ports/IPatternBrushRepository";
 import type { ISoftwareDataPathStore } from "@/application/ports/ISoftwareDataPathStore";
 import { ensureSoftwareDataPathAccess } from "@/application/use-cases/EnsureSoftwareDataPathAccess";
+import { getActiveLayerProjectedSurfaceFromProject } from "@/application/use-cases/LayerUseCases";
 import { createPatternBrushFromGrid } from "@/application/use-cases/CreatePatternBrushFromGrid";
 import {
   extractPatternBrushPixelsFromSelection,
@@ -10,7 +11,8 @@ import { deletePatternBrush } from "@/application/use-cases/DeletePatternBrush";
 import { renamePatternBrush } from "@/application/use-cases/RenamePatternBrush";
 import type { PixelColor } from "@/domain/canvas/PixelColor";
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
-import { getActiveCanvas } from "@/domain/project/Project";
+import { isDrawingLayer } from "@/domain/layer/LayerTypeGuards";
+import { getActiveCanvas, getActiveLayer } from "@/domain/project/Project";
 import {
   getPatternBrush,
   type PatternBrushLibrary,
@@ -65,7 +67,6 @@ type PatternBrushGet = () => PatternBrushSliceState & {
   project: import("@/domain/project/Project").Project | null;
   setToolSettings: (settings: Partial<import("@/domain/tool/ToolType").ToolSettings>) => void;
   setActiveTool: (tool: import("@/domain/tool/ToolType").ToolType) => void;
-  getActiveLayerGrid: () => PixelGrid | null;
   deselectCanvas: () => void;
 };
 
@@ -194,10 +195,18 @@ export function createPatternBrushSlice(
         project,
         foregroundColor,
       } = get();
-      if (!project) return;
+      if (!project) {
+        toast.info("请先打开项目");
+        return;
+      }
 
-      const grid = get().getActiveLayerGrid();
-      if (!grid) return;
+      const activeLayer = getActiveLayer(project);
+      if (!isDrawingLayer(activeLayer)) {
+        toast.info("请先选择可绘制的图层");
+        return;
+      }
+
+      const grid = getActiveLayerProjectedSurfaceFromProject(project);
 
       const selectionState = resolvePatternBrushSelectionState({
         selection,

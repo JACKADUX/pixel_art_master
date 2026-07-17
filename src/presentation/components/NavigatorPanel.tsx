@@ -4,6 +4,8 @@ import {
   computeVisibleRect,
   mapDisplayRectToPreview,
   mapVisibleRectToPreview,
+  applyNavigatorPreviewButtonZoomRatio,
+  applyNavigatorPreviewWheelZoomRatio,
   resolvePixelGridDisplayRect,
 } from "@/domain/viewport/NavigatorViewport";
 import {
@@ -32,8 +34,6 @@ import { useAppStore } from "../stores/appStore";
 
 const NAVIGATOR_PROJECT_RENDER_DEBOUNCE_MS = 150;
 const HEADER_HEIGHT = 28;
-const PREVIEW_ZOOM_STEP = 0.1;
-const HEADER_ZOOM_STEP = 0.25;
 const RESIZE_HANDLE_SIZE = NAVIGATOR_RESIZE_HANDLE_SIZE;
 
 const RESIZE_CORNERS: NavigatorResizeCorner[] = ["nw", "ne", "sw", "se"];
@@ -412,24 +412,28 @@ export function NavigatorPanel() {
     if (!point) return;
 
     const currentScale = previewScaleRef.current;
-    const delta = e.deltaY > 0 ? -PREVIEW_ZOOM_STEP : PREVIEW_ZOOM_STEP;
-    zoomNavigatorPreviewAtPoint(point.x, point.y, currentScale + delta);
+    const nextScale = applyNavigatorPreviewWheelZoomRatio(currentScale, e.deltaY);
+    zoomNavigatorPreviewAtPoint(point.x, point.y, nextScale);
   };
 
-  const zoomPreviewAtCenter = (delta: number) => {
+  const zoomPreviewAtCenter = (nextScale: number) => {
     zoomNavigatorPreviewAtPoint(
       navigator.size.width / 2,
       navigator.size.height / 2,
-      navigator.previewScale + delta,
+      nextScale,
     );
   };
 
   const handleZoomOut = () => {
-    zoomPreviewAtCenter(-HEADER_ZOOM_STEP);
+    zoomPreviewAtCenter(
+      applyNavigatorPreviewButtonZoomRatio(navigator.previewScale, "out"),
+    );
   };
 
   const handleZoomIn = () => {
-    zoomPreviewAtCenter(HEADER_ZOOM_STEP);
+    zoomPreviewAtCenter(
+      applyNavigatorPreviewButtonZoomRatio(navigator.previewScale, "in"),
+    );
   };
 
   const handleAuxClick = (e: React.MouseEvent) => {

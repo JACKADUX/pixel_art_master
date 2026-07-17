@@ -4,6 +4,8 @@ import type { ColorMode } from "@/domain/color/ColorMode";
 import {
   COLOR_PICKER_LAYOUT_ORIENTATIONS,
   COLOR_PICKER_VERTICAL_WIDTH,
+  getEstimatedColorPickerPanelHeight,
+  getFloatingColorPickerPanelDimensions,
   type ColorPickerLayoutOrientation,
 } from "@/domain/color/ColorPickerLayout";
 import {
@@ -63,6 +65,14 @@ export interface FloatingColorPickerLayout {
   edgeAnchor: PanelEdgeAnchor;
 }
 
+export interface LuminancePalettePanelLayout {
+  visible: boolean;
+  position: PanelPosition;
+  panelWidth: number;
+  panelHeight: number;
+  edgeAnchor: PanelEdgeAnchor;
+}
+
 export interface EditorPreferences {
   activeTool: ToolType;
   toolSettings: ToolSettings;
@@ -77,6 +87,7 @@ export interface EditorPreferences {
   splitPaneRatio: number;
   navigatorLayout: NavigatorPanelLayout;
   floatingColorPickerLayout: FloatingColorPickerLayout;
+  luminancePaletteLayout: LuminancePalettePanelLayout;
   mousePositionOverlayVisible: boolean;
   canvasDisplayMode: CanvasDisplayMode;
   assetLibraryDrawerExpanded: boolean;
@@ -91,7 +102,13 @@ export const DEFAULT_SIDEBAR_WIDTH = 224;
 export const DEFAULT_SPLIT_PANE_RATIO = 0.55;
 export const DEFAULT_NAVIGATOR_WIDTH = 200;
 export const DEFAULT_NAVIGATOR_HEIGHT = 120;
-export const DEFAULT_COLOR_PICKER_PANEL_HEIGHT = 400;
+export const DEFAULT_COLOR_PICKER_PANEL_HEIGHT = getEstimatedColorPickerPanelHeight("vertical");
+export const DEFAULT_LUMINANCE_PALETTE_PANEL_WIDTH = 56;
+export const DEFAULT_LUMINANCE_PALETTE_PANEL_HEIGHT = 196;
+const MIN_LUMINANCE_PALETTE_WIDTH = 160;
+const MAX_LUMINANCE_PALETTE_WIDTH = 480;
+const MIN_LUMINANCE_PALETTE_HEIGHT = 180;
+const MAX_LUMINANCE_PALETTE_HEIGHT = 720;
 
 const MIN_ZOOM = EDITOR_MIN_ZOOM;
 const MAX_ZOOM = EDITOR_MAX_ZOOM;
@@ -101,10 +118,6 @@ const MIN_SPLIT_PANE_RATIO = 0.15;
 const MAX_SPLIT_PANE_RATIO = 0.85;
 const MIN_NAVIGATOR_WIDTH = 100;
 const MIN_NAVIGATOR_HEIGHT = 80;
-const MIN_COLOR_PICKER_HEIGHT = 280;
-const MAX_COLOR_PICKER_HEIGHT = 720;
-const MIN_COLOR_PICKER_WIDTH = 200;
-const MAX_COLOR_PICKER_WIDTH = 800;
 const MIN_ASSET_DRAWER_HEIGHT = 120;
 const MAX_ASSET_DRAWER_HEIGHT = 800;
 export const DEFAULT_ASSET_DRAWER_HEIGHT = 320;
@@ -159,6 +172,13 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
     activeSlot: "foreground",
     edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
   },
+  luminancePaletteLayout: {
+    visible: false,
+    position: { x: 32, y: 32 },
+    panelWidth: DEFAULT_LUMINANCE_PALETTE_PANEL_WIDTH,
+    panelHeight: DEFAULT_LUMINANCE_PALETTE_PANEL_HEIGHT,
+    edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
+  },
   mousePositionOverlayVisible: false,
   canvasDisplayMode: "normal",
   assetLibraryDrawerExpanded: false,
@@ -192,6 +212,13 @@ export interface EditorPreferencesSource {
     panelWidth: number;
     panelHeight: number;
     activeSlot: EditorColorSlot;
+    edgeAnchor: PanelEdgeAnchor;
+  };
+  luminancePalettePanel: {
+    visible: boolean;
+    position: PanelPosition;
+    panelWidth: number;
+    panelHeight: number;
     edgeAnchor: PanelEdgeAnchor;
   };
   mousePositionOverlayVisible: boolean;
@@ -297,6 +324,14 @@ function parseToolSettings(value: unknown): ToolSettings {
         ? value.patternBrushScale
         : defaults.patternBrushScale,
     ),
+    patternBrushFlipHorizontal:
+      typeof value.patternBrushFlipHorizontal === "boolean"
+        ? value.patternBrushFlipHorizontal
+        : defaults.patternBrushFlipHorizontal,
+    patternBrushFlipVertical:
+      typeof value.patternBrushFlipVertical === "boolean"
+        ? value.patternBrushFlipVertical
+        : defaults.patternBrushFlipVertical,
     eraserSize: clampStampSize(
       typeof value.eraserSize === "number" ? value.eraserSize : defaults.eraserSize,
     ),
@@ -347,9 +382,19 @@ function parseNavigatorLayout(value: unknown): NavigatorPanelLayout {
   };
 }
 
-function parseFloatingColorPickerLayout(value: unknown): FloatingColorPickerLayout {
+function parseFloatingColorPickerLayout(
+  value: unknown,
+  orientation: ColorPickerLayoutOrientation,
+): FloatingColorPickerLayout {
   const defaults = DEFAULT_EDITOR_PREFERENCES.floatingColorPickerLayout;
-  if (!isRecord(value)) return { ...defaults };
+  const panelDimensions = getFloatingColorPickerPanelDimensions(orientation);
+  if (!isRecord(value)) {
+    return {
+      ...defaults,
+      panelWidth: panelDimensions.width,
+      panelHeight: panelDimensions.height,
+    };
+  }
 
   const activeSlot = COLOR_SLOTS.includes(value.activeSlot as EditorColorSlot)
     ? (value.activeSlot as EditorColorSlot)
@@ -358,19 +403,32 @@ function parseFloatingColorPickerLayout(value: unknown): FloatingColorPickerLayo
   return {
     visible: typeof value.visible === "boolean" ? value.visible : defaults.visible,
     position: parsePosition(value.position, defaults.position),
+    panelWidth: panelDimensions.width,
+    panelHeight: panelDimensions.height,
+    activeSlot,
+    edgeAnchor: parseEdgeAnchor(value.edgeAnchor, defaults.edgeAnchor),
+  };
+}
+
+function parseLuminancePaletteLayout(value: unknown): LuminancePalettePanelLayout {
+  const defaults = DEFAULT_EDITOR_PREFERENCES.luminancePaletteLayout;
+  if (!isRecord(value)) return { ...defaults };
+
+  return {
+    visible: typeof value.visible === "boolean" ? value.visible : defaults.visible,
+    position: parsePosition(value.position, defaults.position),
     panelWidth: clampNumber(
       value.panelWidth,
-      MIN_COLOR_PICKER_WIDTH,
-      MAX_COLOR_PICKER_WIDTH,
+      MIN_LUMINANCE_PALETTE_WIDTH,
+      MAX_LUMINANCE_PALETTE_WIDTH,
       defaults.panelWidth,
     ),
     panelHeight: clampNumber(
       value.panelHeight,
-      MIN_COLOR_PICKER_HEIGHT,
-      MAX_COLOR_PICKER_HEIGHT,
+      MIN_LUMINANCE_PALETTE_HEIGHT,
+      MAX_LUMINANCE_PALETTE_HEIGHT,
       defaults.panelHeight,
     ),
-    activeSlot,
     edgeAnchor: parseEdgeAnchor(value.edgeAnchor, defaults.edgeAnchor),
   };
 }
@@ -433,6 +491,10 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
     navigatorLayout: parseNavigatorLayout(raw.navigatorLayout ?? raw.navigator),
     floatingColorPickerLayout: parseFloatingColorPickerLayout(
       raw.floatingColorPickerLayout ?? raw.floatingColorPicker,
+      colorPickerLayoutOrientation,
+    ),
+    luminancePaletteLayout: parseLuminancePaletteLayout(
+      raw.luminancePaletteLayout ?? raw.luminancePalettePanel,
     ),
     mousePositionOverlayVisible:
       typeof raw.mousePositionOverlayVisible === "boolean"
@@ -461,6 +523,9 @@ export function parseEditorPreferences(raw: unknown): EditorPreferences {
 }
 
 export function extractEditorPreferences(source: EditorPreferencesSource): EditorPreferences {
+  const floatingColorPickerPanelDimensions = getFloatingColorPickerPanelDimensions(
+    source.colorPickerLayoutOrientation,
+  );
   return {
     activeTool: source.activeTool,
     toolSettings: { ...source.toolSettings },
@@ -493,10 +558,17 @@ export function extractEditorPreferences(source: EditorPreferencesSource): Edito
     floatingColorPickerLayout: {
       visible: source.floatingColorPicker.visible,
       position: { ...source.floatingColorPicker.position },
-      panelWidth: source.floatingColorPicker.panelWidth,
-      panelHeight: source.floatingColorPicker.panelHeight,
+      panelWidth: floatingColorPickerPanelDimensions.width,
+      panelHeight: floatingColorPickerPanelDimensions.height,
       activeSlot: source.floatingColorPicker.activeSlot,
       edgeAnchor: { ...source.floatingColorPicker.edgeAnchor },
+    },
+    luminancePaletteLayout: {
+      visible: source.luminancePalettePanel.visible,
+      position: { ...source.luminancePalettePanel.position },
+      panelWidth: source.luminancePalettePanel.panelWidth,
+      panelHeight: source.luminancePalettePanel.panelHeight,
+      edgeAnchor: { ...source.luminancePalettePanel.edgeAnchor },
     },
     mousePositionOverlayVisible: source.mousePositionOverlayVisible,
     canvasDisplayMode: source.canvasDisplayMode,

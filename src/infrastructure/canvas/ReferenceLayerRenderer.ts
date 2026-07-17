@@ -27,7 +27,7 @@ export function renderReferenceLayerGrid(
 ): void {
   if (!grid.visible) return;
   const resolvedAppearance = appearance ?? defaultGridAppearance();
-  renderCanvasGrid(ctx, crop.width, crop.height, zoom, {
+  renderCanvasGrid(ctx, crop.width, crop.height, { offsetX: 0, offsetY: 0, zoom }, {
     primary: grid.primary,
     secondary: grid.secondary,
     ...resolvedAppearance,

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   computePreviewSyncForViewport,
   computeVisibleRect,
+  applyNavigatorPreviewButtonZoomRatio,
+  applyNavigatorPreviewWheelZoomRatio,
   mapVisibleRectToPreview,
   type NavigatorLayout,
   type ViewportSnapshot,
@@ -91,7 +93,22 @@ describe("computePreviewSyncForViewport", () => {
     });
     const sync = computePreviewSyncForViewport(snapshot, createLayout());
     expect(sync).not.toBeNull();
-    expect(sync!.previewScale).toBeLessThanOrEqual(4);
+    expect(sync!.previewScale).toBeLessThanOrEqual(10);
     expect(sync!.previewScale).toBeGreaterThanOrEqual(0.25);
+  });
+});
+
+describe("navigator preview ratio zoom", () => {
+  it("applies wheel ratio zoom relative to current scale", () => {
+    const at1 = applyNavigatorPreviewWheelZoomRatio(1, -100);
+    const at5 = applyNavigatorPreviewWheelZoomRatio(5, -100);
+    expect(at5 / 5).toBeCloseTo(at1 / 1, 5);
+    expect(at5).toBeGreaterThan(5);
+  });
+
+  it("applies button ratio zoom relative to current scale", () => {
+    const at1 = applyNavigatorPreviewButtonZoomRatio(1, "in");
+    const at4 = applyNavigatorPreviewButtonZoomRatio(4, "in");
+    expect(at4 / 4).toBeCloseTo(at1 / 1, 5);
   });
 });

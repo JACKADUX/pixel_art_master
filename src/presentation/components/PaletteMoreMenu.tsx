@@ -8,6 +8,7 @@ import {
   type PalettePanelMenuPreset,
 } from "../config/palettePanelMenu";
 import { listPalettePresets } from "@/domain/palette/PalettePresetLibrary";
+import { listLuminancePalettePresets } from "@/domain/luminancePalette/LuminancePalettePresetLibrary";
 import { useAppStore } from "../stores/appStore";
 
 interface PaletteMoreMenuProps {
@@ -26,9 +27,21 @@ export function PaletteMoreMenu({
   const paletteViewMode = useAppStore((s) => s.paletteViewMode);
   const setPaletteViewMode = useAppStore((s) => s.setPaletteViewMode);
   const palettePresetLibrary = useAppStore((s) => s.palettePresetLibrary);
+  const luminancePalettePresetLibrary = useAppStore((s) => s.luminancePalettePresetLibrary);
+  const luminancePalettePanelVisible = useAppStore((s) => s.luminancePalettePanel.visible);
   const saveCurrentPaletteAsPreset = useAppStore((s) => s.saveCurrentPaletteAsPreset);
   const importPresetToPalette = useAppStore((s) => s.importPresetToPalette);
   const openPalettePresetManager = useAppStore((s) => s.openPalettePresetManager);
+  const toggleLuminancePalettePanel = useAppStore((s) => s.toggleLuminancePalettePanel);
+  const saveCurrentLuminancePaletteAsPreset = useAppStore(
+    (s) => s.saveCurrentLuminancePaletteAsPreset,
+  );
+  const importLuminancePalettePresetToProject = useAppStore(
+    (s) => s.importLuminancePalettePresetToProject,
+  );
+  const openLuminancePalettePresetManager = useAppStore(
+    (s) => s.openLuminancePalettePresetManager,
+  );
 
   const [open, setOpen] = useState(false);
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -56,6 +69,15 @@ export function PaletteMoreMenu({
     [palettePresetLibrary],
   );
 
+  const luminancePalettePresets = useMemo<PalettePanelMenuPreset[]>(
+    () =>
+      listLuminancePalettePresets(luminancePalettePresetLibrary).map((p) => ({
+        id: p.id,
+        name: p.name,
+      })),
+    [luminancePalettePresetLibrary],
+  );
+
   const actions = useMemo<PalettePanelMenuActions>(
     () => ({
       setPaletteViewMode,
@@ -64,6 +86,10 @@ export function PaletteMoreMenu({
       saveAsPreset: () => saveCurrentPaletteAsPreset(),
       importPresetMerge: (id: string) => importPresetToPalette(id, "merge"),
       openPresetManager: openPalettePresetManager,
+      toggleLuminancePalettePanel,
+      saveLuminancePaletteAsPreset: () => void saveCurrentLuminancePaletteAsPreset(),
+      importLuminancePalettePreset: importLuminancePalettePresetToProject,
+      openLuminancePalettePresetManager,
     }),
     [
       setPaletteViewMode,
@@ -72,6 +98,10 @@ export function PaletteMoreMenu({
       saveCurrentPaletteAsPreset,
       importPresetToPalette,
       openPalettePresetManager,
+      toggleLuminancePalettePanel,
+      saveCurrentLuminancePaletteAsPreset,
+      importLuminancePalettePresetToProject,
+      openLuminancePalettePresetManager,
     ],
   );
 
@@ -83,10 +113,20 @@ export function PaletteMoreMenu({
           colorsCount,
           removeMode,
           presets,
+          luminancePalettePresets,
+          luminancePalettePanelVisible,
         },
         actions,
       ),
-    [paletteViewMode, colorsCount, removeMode, presets, actions],
+    [
+      paletteViewMode,
+      colorsCount,
+      removeMode,
+      presets,
+      luminancePalettePresets,
+      luminancePalettePanelVisible,
+      actions,
+    ],
   );
 
   useLayoutEffect(() => {

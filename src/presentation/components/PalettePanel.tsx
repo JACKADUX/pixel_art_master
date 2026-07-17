@@ -10,6 +10,7 @@ import { PaletteGridView } from "./PaletteGridView";
 import { PaletteMoreMenu } from "./PaletteMoreMenu";
 import { PaletteOklchMapView } from "./PaletteOklchMapView";
 import { PalettePresetManagerModal } from "./PalettePresetManagerModal";
+import { LuminancePalettePresetManagerModal } from "./LuminancePalettePresetManagerModal";
 import {
   handlePaletteBlankAreaClick,
   handlePaletteBlankAreaContextMenu,
@@ -137,7 +138,7 @@ export function PalettePanel() {
           <p className="p-2 text-xs text-zinc-500">点击添加将当前前景色加入色板</p>
         </div>
       ) : paletteViewMode === "grid" ? (
-        <PaletteGridView colors={colors} {...sharedViewProps} />
+        <PaletteGridView colors={colors} {...sharedViewProps} enableDragExport />
       ) : (
         <PaletteOklchMapView colors={mapColors} {...sharedViewProps} />
       )}
@@ -173,6 +174,7 @@ export function PalettePanel() {
       />
 
       <PalettePresetManagerModal />
+      <LuminancePalettePresetManagerModal />
     </div>
   );
 }

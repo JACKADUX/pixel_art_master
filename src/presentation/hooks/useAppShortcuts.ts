@@ -53,6 +53,30 @@ export function useAppShortcuts() {
 
       const store = useAppStore.getState();
       const capturePhase = store.assetCapturePhase;
+      const ctrl = event.ctrlKey || event.metaKey;
+
+      if (store.luminancePalettePanel.visible) {
+        if (event.key === "q" || event.key === "Q") {
+          event.preventDefault();
+          store.navigateLuminancePaletteColor("prev");
+          return;
+        }
+        if (event.key === "a" || event.key === "A") {
+          event.preventDefault();
+          store.navigateLuminancePaletteColor("next");
+          return;
+        }
+        if (!ctrl && event.altKey && /^[1-9]$/.test(event.key)) {
+          event.preventDefault();
+          store.pickLuminancePaletteGroupByShortcut(event.key);
+          return;
+        }
+        if (!ctrl && !event.altKey && /^[0-9]$/.test(event.key)) {
+          event.preventDefault();
+          store.pickLuminancePaletteColorByShortcut(event.key);
+          return;
+        }
+      }
 
       if (capturePhase === "adjusting") {
         if (event.key === "Escape") {
@@ -92,7 +116,6 @@ export function useAppShortcuts() {
       const { selection } = store;
       const hasSelection = selection !== null && !isSelectionEmpty(selection);
       const hasFloatingSelection = selection?.floating != null;
-      const ctrl = event.ctrlKey || event.metaKey;
 
       if (ctrl && (event.key === "z" || event.key === "Z")) {
         event.preventDefault();
@@ -209,12 +232,32 @@ export function useAppShortcuts() {
       }
 
       if (!ctrl && event.shiftKey && (event.key === "h" || event.key === "H")) {
+        const patternBrushActive =
+          store.activeTool === "brush" &&
+          store.toolSettings.brushShape === "pattern" &&
+          store.activePatternBrushId !== null;
+        if (patternBrushActive) {
+          event.preventDefault();
+          store.togglePatternBrushFlipHorizontal();
+          return;
+        }
+        if (!hasSelection) return;
         event.preventDefault();
         store.flipSelectionHorizontal();
         return;
       }
 
       if (!ctrl && event.shiftKey && (event.key === "v" || event.key === "V")) {
+        const patternBrushActive =
+          store.activeTool === "brush" &&
+          store.toolSettings.brushShape === "pattern" &&
+          store.activePatternBrushId !== null;
+        if (patternBrushActive) {
+          event.preventDefault();
+          store.togglePatternBrushFlipVertical();
+          return;
+        }
+        if (!hasSelection) return;
         event.preventDefault();
         store.flipSelectionVertical();
         return;

@@ -27,6 +27,7 @@ import {
   gridColorRgbString,
 } from "@/domain/appSettings/AppSettings";
 import { renderCanvasGrid } from "@/infrastructure/canvas/CanvasGridRenderer";
+import type { CanvasScreenTransform } from "@/domain/viewport/CanvasScreenTransform";
 import {
   blitWithDisplayMode,
   OklchDisplayGlRenderer,
@@ -324,7 +325,7 @@ export function ReferenceCropModal() {
     ctx.clearRect(0, 0, displayWidth, displayHeight);
     if (!showPixelGrid) return;
 
-    renderCanvasGrid(ctx, imageSize.width, imageSize.height, zoom, {
+    renderCanvasGrid(ctx, imageSize.width, imageSize.height, { offsetX: 0, offsetY: 0, zoom } satisfies CanvasScreenTransform, {
       primary: 1,
       secondary: 1,
       colorRgb: gridColorRgbString(DEFAULT_APP_SETTINGS.gridColorHex),

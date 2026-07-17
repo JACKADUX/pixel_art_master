@@ -4,6 +4,11 @@ import { forEachStampPixel } from "@/domain/tool/BrushStamp";
 import { forEachBrushLinePreviewCenter } from "@/domain/tool/BrushStroke";
 import type { Point } from "@/domain/tool/ITool";
 import type { ToolSettings } from "@/domain/tool/ToolType";
+import {
+  type CanvasScreenTransform,
+  logicalToScreenX,
+  logicalToScreenY,
+} from "@/domain/viewport/CanvasScreenTransform";
 
 interface GridBounds {
   width: number;
@@ -21,7 +26,7 @@ export function renderBrushLinePreview(
   to: Point,
   settings: Pick<ToolSettings, "brushSize" | "brushShape">,
   color: PixelColor,
-  zoom: number,
+  transform: CanvasScreenTransform,
   _bounds: GridBounds,
 ): void {
   ctx.imageSmoothingEnabled = false;
@@ -30,6 +35,7 @@ export function renderBrushLinePreview(
 
   const { brushSize: size, brushShape: shape } = settings;
   const filled = new Set<string>();
+  const cell = transform.zoom;
 
   ctx.fillStyle = pixelColorToCss(color);
 
@@ -38,7 +44,7 @@ export function renderBrushLinePreview(
       const key = `${x},${y}`;
       if (filled.has(key)) return;
       filled.add(key);
-      ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+      ctx.fillRect(logicalToScreenX(x, transform), logicalToScreenY(y, transform), cell, cell);
     });
   });
 }

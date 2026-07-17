@@ -9,16 +9,25 @@ import {
   TRANSFORM_HANDLE_SIZE,
   type TransformHandle,
 } from "@/domain/selection/TransformHandleInteraction";
+import {
+  type CanvasScreenTransform,
+  logicalRectToScreenHeight,
+  logicalRectToScreenWidth,
+  logicalToScreenX,
+  logicalToScreenY,
+} from "@/domain/viewport/CanvasScreenTransform";
 
 const MARCH_COLOR = "#ffffff";
 const MARCH_SHADOW = "#000000";
+const MARCH_DASH_SCREEN_PX = 4;
+const HANDLE_SIZE = TRANSFORM_HANDLE_SIZE;
 
 export interface SelectionOverlayOptions {
   selection: SelectionState | null;
   previewRect: SelectionRect | null;
   lassoPoints: Point[] | null;
   phase: number;
-  zoom: number;
+  transform: CanvasScreenTransform;
   canvasWidth: number;
   canvasHeight: number;
 }
@@ -27,23 +36,23 @@ export function renderSelectionOverlay(
   ctx: CanvasRenderingContext2D,
   options: SelectionOverlayOptions,
 ): void {
-  const { selection, previewRect, lassoPoints, phase, zoom, canvasWidth, canvasHeight } =
+  const { selection, previewRect, lassoPoints, phase, transform, canvasWidth, canvasHeight } =
     options;
 
   if (selection && !selection.floating) {
-    renderMaskMarchingAnts(ctx, selection.mask, phase, zoom);
+    renderMaskMarchingAnts(ctx, selection.mask, phase, transform);
   }
 
   if (selection?.floating) {
-    renderMaskMarchingAnts(ctx, selection.mask, phase, zoom);
+    renderMaskMarchingAnts(ctx, selection.mask, phase, transform);
   }
 
   if (previewRect && previewRect.width > 0 && previewRect.height > 0) {
-    renderPreviewRect(ctx, previewRect, zoom, phase);
+    renderPreviewRect(ctx, previewRect, transform, phase);
   }
 
   if (lassoPoints && lassoPoints.length > 1) {
-    renderLassoPath(ctx, lassoPoints, zoom, phase);
+    renderLassoPath(ctx, lassoPoints, transform, phase);
   }
 
   void canvasWidth;
@@ -54,9 +63,10 @@ function renderMaskMarchingAnts(
   ctx: CanvasRenderingContext2D,
   mask: SelectionMask,
   phase: number,
-  zoom: number,
+  transform: CanvasScreenTransform,
 ): void {
-  const dash = 4;
+  const cell = transform.zoom;
+  const dash = MARCH_DASH_SCREEN_PX;
   const offset = phase % (dash * 2);
 
   for (let y = 0; y < mask.height; y++) {
@@ -68,13 +78,13 @@ function renderMaskMarchingAnts(
       const hasLeft = x === 0 || !isMaskSelected(mask, x - 1, y);
       const hasRight = x === mask.width - 1 || !isMaskSelected(mask, x + 1, y);
 
-      const px = x * zoom;
-      const py = y * zoom;
+      const px = logicalToScreenX(x, transform);
+      const py = logicalToScreenY(y, transform);
 
-      if (hasTop) drawMarchLine(ctx, px, py, px + zoom, py, offset, dash);
-      if (hasBottom) drawMarchLine(ctx, px, py + zoom, px + zoom, py + zoom, offset, dash);
-      if (hasLeft) drawMarchLine(ctx, px, py, px, py + zoom, offset, dash);
-      if (hasRight) drawMarchLine(ctx, px + zoom, py, px + zoom, py + zoom, offset, dash);
+      if (hasTop) drawMarchLine(ctx, px, py, px + cell, py, offset, dash);
+      if (hasBottom) drawMarchLine(ctx, px, py + cell, px + cell, py + cell, offset, dash);
+      if (hasLeft) drawMarchLine(ctx, px, py, px, py + cell, offset, dash);
+      if (hasRight) drawMarchLine(ctx, px + cell, py, px + cell, py + cell, offset, dash);
     }
   }
 }
@@ -82,15 +92,15 @@ function renderMaskMarchingAnts(
 function renderPreviewRect(
   ctx: CanvasRenderingContext2D,
   rect: SelectionRect,
-  zoom: number,
+  transform: CanvasScreenTransform,
   phase: number,
 ): void {
-  const x = rect.x * zoom;
-  const y = rect.y * zoom;
-  const w = rect.width * zoom;
-  const h = rect.height * zoom;
+  const x = logicalToScreenX(rect.x, transform);
+  const y = logicalToScreenY(rect.y, transform);
+  const w = logicalRectToScreenWidth(rect.width, transform);
+  const h = logicalRectToScreenHeight(rect.height, transform);
 
-  const dash = 4;
+  const dash = MARCH_DASH_SCREEN_PX;
   const offset = phase % (dash * 2);
   drawMarchLine(ctx, x, y, x + w, y, offset, dash);
   drawMarchLine(ctx, x, y + h, x + w, y + h, offset, dash);
@@ -101,17 +111,24 @@ function renderPreviewRect(
 function renderLassoPath(
   ctx: CanvasRenderingContext2D,
   points: Point[],
-  zoom: number,
+  transform: CanvasScreenTransform,
   phase: number,
 ): void {
   if (points.length < 2) return;
-  const dash = 4;
+  const cell = transform.zoom;
+  const dash = MARCH_DASH_SCREEN_PX;
   const offset = phase % (dash * 2);
 
   ctx.beginPath();
-  ctx.moveTo(points[0].x * zoom + zoom / 2, points[0].y * zoom + zoom / 2);
+  ctx.moveTo(
+    logicalToScreenX(points[0].x, transform) + cell / 2,
+    logicalToScreenY(points[0].y, transform) + cell / 2,
+  );
   for (let i = 1; i < points.length; i++) {
-    ctx.lineTo(points[i].x * zoom + zoom / 2, points[i].y * zoom + zoom / 2);
+    ctx.lineTo(
+      logicalToScreenX(points[i].x, transform) + cell / 2,
+      logicalToScreenY(points[i].y, transform) + cell / 2,
+    );
   }
   ctx.strokeStyle = MARCH_SHADOW;
   ctx.lineWidth = 1;
@@ -153,11 +170,9 @@ export type { TransformHandle };
 
 export interface TransformOverlayOptions {
   selection: SelectionState;
-  zoom: number;
+  transform: CanvasScreenTransform;
   phase: number;
 }
-
-const HANDLE_SIZE = TRANSFORM_HANDLE_SIZE;
 
 export function renderTransformHandles(
   ctx: CanvasRenderingContext2D,
@@ -166,10 +181,11 @@ export function renderTransformHandles(
   const bounds = getEffectiveBounds(options.selection);
   if (bounds.width <= 0 || bounds.height <= 0) return;
 
-  const x = bounds.x * options.zoom;
-  const y = bounds.y * options.zoom;
-  const w = bounds.width * options.zoom;
-  const h = bounds.height * options.zoom;
+  const transform = options.transform;
+  const x = logicalToScreenX(bounds.x, transform);
+  const y = logicalToScreenY(bounds.y, transform);
+  const w = logicalRectToScreenWidth(bounds.width, transform);
+  const h = logicalRectToScreenHeight(bounds.height, transform);
 
   ctx.strokeStyle = "#0066cc";
   ctx.lineWidth = 1;

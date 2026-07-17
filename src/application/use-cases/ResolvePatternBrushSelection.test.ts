@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { wrapLayerOnCanvas } from "@/domain/canvas/LayerProjectedSurface";
 import { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { rgba } from "@/domain/canvas/PixelColor";
 import { createSelectionState } from "@/domain/selection/SelectionState";
@@ -63,6 +64,20 @@ describe("ResolvePatternBrushSelection", () => {
       floating,
       mask: createRectMask({ x: 0, y: 0 }, { x: 0, y: 0 }, 4, 4),
     });
+
+    expect(pixels?.width).toBe(1);
+    expect(pixels?.getPixel(0, 0)).toBe(rgba(255, 0, 0, 255));
+  });
+
+  it("extracts pixels from selection on offset layer surface", () => {
+    const layerGrid = PixelGrid.createEmpty(2, 2);
+    layerGrid.setPixel(0, 0, rgba(255, 0, 0, 255));
+
+    const surface = wrapLayerOnCanvas(layerGrid, { x: 5, y: 5 }, { width: 10, height: 10 });
+    const mask = createRectMask({ x: 5, y: 5 }, { x: 5, y: 5 }, 10, 10);
+    const selection = createSelectionState(mask);
+
+    const pixels = extractPatternBrushPixelsFromSelection(surface, selection);
 
     expect(pixels?.width).toBe(1);
     expect(pixels?.getPixel(0, 0)).toBe(rgba(255, 0, 0, 255));

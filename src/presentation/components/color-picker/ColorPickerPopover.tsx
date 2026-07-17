@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { createPortal } from "react-dom";
 import { toHexAlpha, type PixelColor } from "@/domain/canvas/PixelColor";
 import {
-  COLOR_PICKER_HEADER_HEIGHT,
   getDefaultColorPickerPanelWidth,
   getEstimatedColorPickerPanelHeight,
 } from "@/domain/color/ColorPickerLayout";
@@ -69,8 +68,7 @@ export function ColorPickerPopover({
     if (!anchor) return;
 
     const rect = anchor.getBoundingClientRect();
-    const estimatedHeight =
-      getEstimatedColorPickerPanelHeight(orientation) + COLOR_PICKER_HEADER_HEIGHT;
+    const estimatedHeight = getEstimatedColorPickerPanelHeight(orientation);
     let left = rect.right + GAP;
     let top = rect.top;
 
@@ -85,8 +83,7 @@ export function ColorPickerPopover({
     const panel = panelRef.current;
     const width = panel?.offsetWidth ?? panelWidth;
     const height =
-      panel?.offsetHeight ??
-      getEstimatedColorPickerPanelHeight(orientation) + COLOR_PICKER_HEADER_HEIGHT;
+      panel?.offsetHeight ?? getEstimatedColorPickerPanelHeight(orientation);
     setPosition((prev) => clampPopoverPosition(prev.left, prev.top, width, height));
   }, [orientation, panelWidth]);
 

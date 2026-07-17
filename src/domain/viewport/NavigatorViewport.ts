@@ -50,10 +50,36 @@ export interface PreviewTransform {
 }
 
 const MIN_PREVIEW_SCALE = 0.25;
-const MAX_PREVIEW_SCALE = 4;
+const MAX_PREVIEW_SCALE = 10;
+
+/** 滚轮缩放倍率，与主编辑器一致 */
+export const NAVIGATOR_PREVIEW_WHEEL_ZOOM_RATIO = 1.1;
+
+/** 导航面板 +/- 按钮每次缩放倍率 */
+export const NAVIGATOR_PREVIEW_BUTTON_ZOOM_RATIO = 1.25;
 
 export function clampPreviewScale(scale: number): number {
   return Math.max(MIN_PREVIEW_SCALE, Math.min(MAX_PREVIEW_SCALE, scale));
+}
+
+export function applyNavigatorPreviewWheelZoomRatio(
+  currentScale: number,
+  deltaY: number,
+): number {
+  if (deltaY === 0) return currentScale;
+  const factor = Math.pow(NAVIGATOR_PREVIEW_WHEEL_ZOOM_RATIO, -deltaY / 100);
+  return clampPreviewScale(currentScale * factor);
+}
+
+export function applyNavigatorPreviewButtonZoomRatio(
+  currentScale: number,
+  direction: "in" | "out",
+): number {
+  const factor =
+    direction === "in"
+      ? NAVIGATOR_PREVIEW_BUTTON_ZOOM_RATIO
+      : 1 / NAVIGATOR_PREVIEW_BUTTON_ZOOM_RATIO;
+  return clampPreviewScale(currentScale * factor);
 }
 
 export function resolvePixelGridDisplayRect(snapshot: ViewportSnapshot): Rect {

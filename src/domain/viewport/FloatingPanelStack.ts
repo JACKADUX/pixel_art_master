@@ -1,5 +1,5 @@
 /** 画布上的悬浮窗口标识（参与统一的层级堆叠顺序） */
-export type FloatingPanelId = "navigator" | "colorPicker" | "comfyRunner";
+export type FloatingPanelId = "navigator" | "colorPicker" | "comfyRunner" | "luminancePalette";
 
 /**
  * 悬浮窗口层级基准。需高于画布内的覆盖层（z-20/区域边框 z-30），

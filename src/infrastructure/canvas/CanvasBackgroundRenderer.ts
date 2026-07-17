@@ -29,6 +29,15 @@ export function renderTransparencyCheckerboard(
   tileCtx.fillRect(0, 0, tileSize, tileHeight);
   tileCtx.fillRect(tileSize, tileHeight, tileSize, tileHeight);
 
+  if (zoom === 1) {
+    const pattern = ctx.createPattern(tileCanvas, "repeat");
+    if (!pattern) return;
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = pattern;
+    ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+    return;
+  }
+
   const logicalCanvas = document.createElement("canvas");
   logicalCanvas.width = logicalWidth;
   logicalCanvas.height = logicalHeight;

@@ -51,12 +51,23 @@ export function getDefaultColorPickerPanelWidth(
     : COLOR_PICKER_VERTICAL_WIDTH;
 }
 
+/** 悬浮/弹窗面板的完整高度（含标题栏） */
 export function getEstimatedColorPickerPanelHeight(
   orientation: ColorPickerLayoutOrientation,
 ): number {
-  if (orientation === "horizontal") {
-    return COLOR_PICKER_HORIZONTAL_MIN_HEIGHT;
-  }
-  const contentWidth = COLOR_PICKER_VERTICAL_WIDTH - 24;
-  return estimateColorPickerPlaneHeight("vertical", contentWidth) + 236;
+  const contentHeight =
+    orientation === "horizontal"
+      ? COLOR_PICKER_HORIZONTAL_MIN_HEIGHT
+      : estimateColorPickerPlaneHeight("vertical", COLOR_PICKER_VERTICAL_WIDTH - 24) + 236;
+  return contentHeight + COLOR_PICKER_HEADER_HEIGHT;
+}
+
+/** 悬浮色彩选择器边界计算用的面板尺寸（随布局方向变化） */
+export function getFloatingColorPickerPanelDimensions(
+  orientation: ColorPickerLayoutOrientation,
+): { width: number; height: number } {
+  return {
+    width: getDefaultColorPickerPanelWidth(orientation),
+    height: getEstimatedColorPickerPanelHeight(orientation),
+  };
 }

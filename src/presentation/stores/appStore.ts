@@ -209,14 +209,11 @@ import type { CanvasSize } from "@/domain/canvas/CanvasSize";
 import type { CanvasDisplayMode } from "@/domain/color/CanvasDisplayMode";
 import type { ColorMode } from "@/domain/color/ColorMode";
 import {
-  COLOR_PICKER_VERTICAL_WIDTH,
-  getDefaultColorPickerPanelWidth,
-  getEstimatedColorPickerPanelHeight,
+  getFloatingColorPickerPanelDimensions,
   type ColorPickerLayoutOrientation,
 } from "@/domain/color/ColorPickerLayout";
 import { rgba, TRANSPARENT, rgbKey, type PixelColor } from "@/domain/canvas/PixelColor";
 import {
-  DEFAULT_COLOR_PICKER_PANEL_HEIGHT,
   DEFAULT_NAVIGATOR_HEIGHT,
   DEFAULT_NAVIGATOR_WIDTH,
   DEFAULT_SIDEBAR_WIDTH,
@@ -406,6 +403,18 @@ import { fieldPromptConfigRepository } from "@/infrastructure/storage/FileFieldP
 import { appSettingsRepository } from "@/infrastructure/storage/FileAppSettingsRepository";
 import { llmSettingsRepository } from "@/infrastructure/storage/FileLlmSettingsRepository";
 import { palettePresetRepository } from "@/infrastructure/storage/FilePalettePresetRepository";
+import { luminancePalettePresetRepository } from "@/infrastructure/storage/FileLuminancePalettePresetRepository";
+import {
+  createLuminancePaletteSlice,
+  syncLuminanceLiveEditFromColorPicker,
+  type LuminancePaletteSliceActions,
+  type LuminancePaletteSliceState,
+} from "@/presentation/stores/luminancePaletteSlice";
+import {
+  createLuminancePalettePresetSlice,
+  type LuminancePalettePresetSliceActions,
+  type LuminancePalettePresetSliceState,
+} from "@/presentation/stores/luminancePalettePresetSlice";
 import {
   createWorkspaceRegionSlice,
   type WorkspaceRegionSliceActions,
@@ -451,8 +460,6 @@ const NAVIGATOR_MIN_WIDTH = 100;
 const NAVIGATOR_MIN_HEIGHT = 80;
 const NAVIGATOR_DEFAULT_WIDTH = DEFAULT_NAVIGATOR_WIDTH;
 const NAVIGATOR_DEFAULT_HEIGHT = DEFAULT_NAVIGATOR_HEIGHT;
-
-const COLOR_PICKER_FLOAT_DEFAULT_HEIGHT = DEFAULT_COLOR_PICKER_PANEL_HEIGHT;
 
 const SIDEBAR_MIN_WIDTH = 180;
 const SIDEBAR_MAX_WIDTH = 400;
@@ -526,7 +533,7 @@ export interface FloatingColorPickerState {
   edgeAnchor: PanelEdgeAnchor;
 }
 
-interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, PatternBrushSliceState, PatternBrushSliceActions, SettingsSliceState, SettingsSliceActions, HelpSliceState, HelpSliceActions, AppSettingsSliceState, AppSettingsSliceActions, LlmSettingsSliceState, LlmSettingsSliceActions, PalettePresetSliceState, PalettePresetSliceActions, WorkspaceRegionSliceState, WorkspaceRegionSliceActions {
+interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, PatternBrushSliceState, PatternBrushSliceActions, SettingsSliceState, SettingsSliceActions, HelpSliceState, HelpSliceActions, AppSettingsSliceState, AppSettingsSliceActions, LlmSettingsSliceState, LlmSettingsSliceActions, PalettePresetSliceState, PalettePresetSliceActions, LuminancePaletteSliceState, LuminancePaletteSliceActions, LuminancePalettePresetSliceState, LuminancePalettePresetSliceActions, WorkspaceRegionSliceState, WorkspaceRegionSliceActions {
 
   project: Project | null;
 
@@ -850,6 +857,10 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
   flipSelectionHorizontal: () => void;
 
   flipSelectionVertical: () => void;
+
+  togglePatternBrushFlipHorizontal: () => void;
+
+  togglePatternBrushFlipVertical: () => void;
 
   pickColorAt: (point: Point, slot: ColorSlot) => Promise<void>;
 
@@ -1405,6 +1416,20 @@ export const useAppStore = create<AppState>((set, get) => {
     },
   );
 
+  const luminancePaletteSlice = createLuminancePaletteSlice(
+    set as Parameters<typeof createLuminancePaletteSlice>[0],
+    get as Parameters<typeof createLuminancePaletteSlice>[1],
+  );
+
+  const luminancePalettePresetSlice = createLuminancePalettePresetSlice(
+    set as Parameters<typeof createLuminancePalettePresetSlice>[0],
+    get as Parameters<typeof createLuminancePalettePresetSlice>[1],
+    {
+      pathStore: softwareDataPathStore,
+      luminancePalettePresetRepository,
+    },
+  );
+
   const workspaceRegionSlice = createWorkspaceRegionSlice(
     set as Parameters<typeof createWorkspaceRegionSlice>[0],
     get,
@@ -1425,6 +1450,10 @@ export const useAppStore = create<AppState>((set, get) => {
   ...llmSettingsSlice,
 
   ...palettePresetSlice,
+
+  ...luminancePaletteSlice,
+
+  ...luminancePalettePresetSlice,
 
   ...workspaceRegionSlice,
 
@@ -1511,7 +1540,7 @@ export const useAppStore = create<AppState>((set, get) => {
     followViewport: false,
   },
 
-  floatingPanelStack: ["navigator", "colorPicker", "comfyRunner"],
+  floatingPanelStack: ["navigator", "colorPicker", "comfyRunner", "luminancePalette"],
 
   mousePositionOverlayVisible: false,
 
@@ -1521,8 +1550,8 @@ export const useAppStore = create<AppState>((set, get) => {
     visible: false,
     position: { x: 16, y: 16 },
     activeSlot: "foreground",
-    panelWidth: COLOR_PICKER_VERTICAL_WIDTH,
-    panelHeight: COLOR_PICKER_FLOAT_DEFAULT_HEIGHT,
+    panelWidth: getFloatingColorPickerPanelDimensions("vertical").width,
+    panelHeight: getFloatingColorPickerPanelDimensions("vertical").height,
     edgeAnchor: { ...DEFAULT_PANEL_EDGE_ANCHOR },
   },
 
@@ -1663,20 +1692,28 @@ export const useAppStore = create<AppState>((set, get) => {
           },
 
           floatingColorPicker: {
-
             ...current.floatingColorPicker,
-
             visible: prefs.floatingColorPickerLayout.visible,
-
             position: prefs.floatingColorPickerLayout.position,
-
             panelWidth: prefs.floatingColorPickerLayout.panelWidth,
-
             panelHeight: prefs.floatingColorPickerLayout.panelHeight,
-
             activeSlot: prefs.floatingColorPickerLayout.activeSlot,
-
             edgeAnchor: prefs.floatingColorPickerLayout.edgeAnchor,
+          },
+
+          luminancePalettePanel: {
+
+            ...current.luminancePalettePanel,
+
+            visible: prefs.luminancePaletteLayout.visible,
+
+            position: prefs.luminancePaletteLayout.position,
+
+            panelWidth: prefs.luminancePaletteLayout.panelWidth,
+
+            panelHeight: prefs.luminancePaletteLayout.panelHeight,
+
+            edgeAnchor: prefs.luminancePaletteLayout.edgeAnchor,
 
           },
 
@@ -1715,6 +1752,8 @@ export const useAppStore = create<AppState>((set, get) => {
     void get().refreshPatternBrushLibrary();
 
     void get().loadPalettePresets();
+
+    void get().loadLuminancePalettePresets();
 
     isHydratingPreferences = false;
     setUserDataHydrating(false);
@@ -2201,8 +2240,10 @@ export const useAppStore = create<AppState>((set, get) => {
 
   setBackgroundColor: (color) => set({ backgroundColor: color }),
 
-  setColorSlot: (slot, color) =>
-    set(slot === "foreground" ? { foregroundColor: color } : { backgroundColor: color }),
+  setColorSlot: (slot, color) => {
+    set(slot === "foreground" ? { foregroundColor: color } : { backgroundColor: color });
+    syncLuminanceLiveEditFromColorPicker(get, set, color);
+  },
 
 
 
@@ -2321,12 +2362,10 @@ export const useAppStore = create<AppState>((set, get) => {
   detachColorPicker: (slot, position, panelSize) =>
     set((s) => {
       const container = s.viewportContainer;
-      const width =
-        panelSize?.width ??
-        getDefaultColorPickerPanelWidth(s.colorPickerLayoutOrientation);
-      const height =
-        panelSize?.height ??
-        getEstimatedColorPickerPanelHeight(s.colorPickerLayoutOrientation);
+      const orientation = s.colorPickerLayoutOrientation;
+      const estimated = getFloatingColorPickerPanelDimensions(orientation);
+      const width = panelSize?.width ?? estimated.width;
+      const height = panelSize?.height ?? estimated.height;
       const containerSize = getContainerDimensions(container);
       const panelDimensions = { width, height };
       const clamped = clampPanelPosition(
@@ -2556,7 +2595,9 @@ export const useAppStore = create<AppState>((set, get) => {
       const containerSize = getContainerDimensions(s.viewportContainer);
       if (!containerSize) return {};
 
-      const updates: Partial<Pick<AppState, "navigator" | "floatingColorPicker">> = {};
+      const updates: Partial<
+        Pick<AppState, "navigator" | "floatingColorPicker" | "luminancePalettePanel">
+      > = {};
 
       if (s.navigator.visible) {
         updates.navigator = {
@@ -2580,6 +2621,21 @@ export const useAppStore = create<AppState>((set, get) => {
               height: s.floatingColorPicker.panelHeight,
             },
             s.floatingColorPicker.edgeAnchor,
+            containerSize,
+          ),
+        };
+      }
+
+      if (s.luminancePalettePanel.visible) {
+        updates.luminancePalettePanel = {
+          ...s.luminancePalettePanel,
+          position: adaptPanelPositionOnResize(
+            s.luminancePalettePanel.position,
+            {
+              width: s.luminancePalettePanel.panelWidth,
+              height: s.luminancePalettePanel.panelHeight,
+            },
+            s.luminancePalettePanel.edgeAnchor,
             containerSize,
           ),
         };
@@ -4163,6 +4219,28 @@ export const useAppStore = create<AppState>((set, get) => {
     });
   },
 
+  togglePatternBrushFlipHorizontal: () => {
+    if (!isPatternBrushActive(get())) return;
+    const { toolSettings } = get();
+    set({
+      toolSettings: {
+        ...toolSettings,
+        patternBrushFlipHorizontal: !toolSettings.patternBrushFlipHorizontal,
+      },
+    });
+  },
+
+  togglePatternBrushFlipVertical: () => {
+    if (!isPatternBrushActive(get())) return;
+    const { toolSettings } = get();
+    set({
+      toolSettings: {
+        ...toolSettings,
+        patternBrushFlipVertical: !toolSettings.patternBrushFlipVertical,
+      },
+    });
+  },
+
 
 
   setLayersPanelTab: (tab) => set({ layersPanelTab: tab }),
@@ -4197,9 +4275,7 @@ export const useAppStore = create<AppState>((set, get) => {
   setColorPickerLayoutOrientation: (orientation) =>
     set((s) => {
       const containerSize = getContainerDimensions(s.viewportContainer);
-      const panelWidth = getDefaultColorPickerPanelWidth(orientation);
-      const panelHeight = getEstimatedColorPickerPanelHeight(orientation);
-      const panelSize = { width: panelWidth, height: panelHeight };
+      const panelSize = getFloatingColorPickerPanelDimensions(orientation);
 
       let position = s.floatingColorPicker.position;
       if (s.floatingColorPicker.visible) {
@@ -4213,8 +4289,8 @@ export const useAppStore = create<AppState>((set, get) => {
           : clampPanelPosition(
               s.floatingColorPicker.position.x,
               s.floatingColorPicker.position.y,
-              panelWidth,
-              panelHeight,
+              panelSize.width,
+              panelSize.height,
               null,
               null,
             );
@@ -4224,8 +4300,8 @@ export const useAppStore = create<AppState>((set, get) => {
         colorPickerLayoutOrientation: orientation,
         floatingColorPicker: {
           ...s.floatingColorPicker,
-          panelWidth,
-          panelHeight,
+          panelWidth: panelSize.width,
+          panelHeight: panelSize.height,
           position,
         },
       };

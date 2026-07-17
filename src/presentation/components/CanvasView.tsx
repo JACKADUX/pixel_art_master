@@ -11,6 +11,7 @@ import {
 } from "@/domain/viewport/WorkspaceLayout";
 import { fitActiveCanvasInViewport } from "@/application/use-cases/FitActiveCanvasInViewport";
 import { applyEditorWheelZoomRatio } from "@/domain/viewport/EditorZoom";
+import { canvasScreenTransformFromViewport } from "@/domain/viewport/CanvasScreenTransform";
 import { computeActiveCanvasCenterScroll } from "@/domain/pixelCanvas/ActiveCanvasViewport";
 import {
   boardLayoutToWorkspaceStage,
@@ -99,12 +100,13 @@ import type { DropPointerPosition } from "../hooks/useImageFileDrop";
 import { WorkspaceRegionBorder } from "./WorkspaceRegionBorder";
 import { focusCanvasKeyboard } from "../utils/canvasKeyboardFocus";
 import { isTextEntryElement } from "../utils/editableFocus";
-import { CanvasBoundsLabel } from "./CanvasBoundsLabel";
+import { renderBoundsDimensionLabel } from "@/infrastructure/canvas/BoundsDimensionLabelRenderer";
 import { CanvasBrushSizeHint } from "./CanvasBrushSizeHint";
 import { CanvasMousePositionHint } from "./CanvasMousePositionHint";
 import { CanvasMousePositionGridHighlight } from "./CanvasMousePositionGridHighlight";
 import { ContextMenu } from "./ContextMenu";
 import { FloatingColorPickerPanel } from "./color-picker/FloatingColorPickerPanel";
+import { FloatingLuminancePalettePanel } from "./luminancePalette/FloatingLuminancePalettePanel";
 import { NavigatorPanel } from "./NavigatorPanel";
 import { ComfyAppFloatingRunner } from "./comfyui/ComfyAppFloatingRunner";
 import { ReferenceCropModal } from "./ReferenceCropModal";
@@ -190,8 +192,7 @@ export function CanvasView() {
   const { regionProps: canvasRegionProps, isActive: canvasRegionActive } =
     useWorkspaceRegion("canvas");
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const gridRef = useRef<HTMLCanvasElement>(null);
-  const previewRef = useRef<HTMLCanvasElement>(null);
+  const toolOverlayRef = useRef<HTMLCanvasElement>(null);
   const boardBackgroundRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const oklchRendererRef = useRef<OklchDisplayGlRenderer | null>(null);
@@ -199,6 +200,7 @@ export function CanvasView() {
   const pixelGridOffscreenRef = useRef<HTMLCanvasElement | null>(null);
   const floatOffscreenRef = useRef<HTMLCanvasElement | null>(null);
   const canvasRenderFrameRef = useRef<number | null>(null);
+  const toolOverlayFrameRef = useRef<number | null>(null);
   const isPanningRef = useRef(false);
   const mousePositionOverlaySuppressedRef = useRef(false);
   const lastPanRef = useRef({ x: 0, y: 0 });
@@ -274,6 +276,9 @@ export function CanvasView() {
   const cancelSelection = useAppStore((s) => s.cancelSelection);
   const sendSelectionColorsToColorVariationAnalysis = useAppStore(
     (s) => s.sendSelectionColorsToColorVariationAnalysis,
+  );
+  const createLuminanceGroupFromSelection = useAppStore(
+    (s) => s.createLuminanceGroupFromSelection,
   );
   const symmetry = useAppStore((s) => s.symmetry);
   const symmetryAxisDrag = useAppStore((s) => s.symmetryAxisDrag);
@@ -359,12 +364,11 @@ export function CanvasView() {
     }
     if (
       activeTool === "select" &&
-      selectionDrag?.mode === "create" &&
-      toolSettings.selectionMode !== "lasso" &&
-      toolSettings.selectionMode !== "magicWand" &&
       selectionPreviewRect &&
       selectionPreviewRect.width > 0 &&
-      selectionPreviewRect.height > 0
+      selectionPreviewRect.height > 0 &&
+      toolSettings.selectionMode !== "lasso" &&
+      toolSettings.selectionMode !== "magicWand"
     ) {
       return selectionPreviewRect;
     }
@@ -389,7 +393,6 @@ export function CanvasView() {
     drawStart,
     isDrawing,
     lastPoint,
-    selectionDrag,
     selectionPreviewRect,
     toolSettings.selectionMode,
     toolSettings.shapeMode,
@@ -486,6 +489,7 @@ export function CanvasView() {
         commitSelection,
         cancelSelection,
         sendSelectionColorsToAnalysis: sendSelectionColorsToColorVariationAnalysis,
+        createLuminanceGroupFromSelection,
       },
     );
   }, [
@@ -502,9 +506,9 @@ export function CanvasView() {
     commitSelection,
     cancelSelection,
     sendSelectionColorsToColorVariationAnalysis,
+    createLuminanceGroupFromSelection,
   ]);
 
-  const overlayZIndex = 2;
 
   const boardLayout = useMemo(() => {
     if (!project) return null;
@@ -671,11 +675,12 @@ export function CanvasView() {
 
   const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
-    const gridCanvas = gridRef.current;
     if (!canvas || !project || !composite) return;
 
-    canvas.width = displayWidth;
-    canvas.height = displayHeight;
+    // Backing store stays at 1× logical pixels; CSS scales to display size so high
+    // zoom does not exceed browser canvas dimension limits (~16k px).
+    canvas.width = composite.width;
+    canvas.height = composite.height;
     canvas.style.width = `${displayWidth}px`;
     canvas.style.height = `${displayHeight}px`;
 
@@ -684,18 +689,12 @@ export function CanvasView() {
     ctx.imageSmoothingEnabled = false;
 
     const orthographicAngle = resolveOrthographicAngle(project.orthographicView);
-    const primarySpanY = computeForeshortenedSpan(project.grid.primary, orthographicAngle);
-    const secondarySpanY = computeForeshortenedSecondarySpan(
-      project.grid.primary,
-      project.grid.secondary,
-      orthographicAngle,
-    );
     const checkerboardTileHeight = computeForeshortenedSpan(
       appSettings.checkerboardTileSize,
       orthographicAngle,
     );
 
-    renderTransparencyCheckerboard(ctx, composite.width, composite.height, zoom, {
+    renderTransparencyCheckerboard(ctx, composite.width, composite.height, 1, {
       tileSize: appSettings.checkerboardTileSize,
       tileHeight: checkerboardTileHeight,
       lightColor: appSettings.checkerboardLightHex,
@@ -726,16 +725,14 @@ export function CanvasView() {
         composite.height,
         canvasDisplayMode,
       );
-      ctx.drawImage(glCanvas, 0, 0, displayWidth, displayHeight);
+      ctx.drawImage(glCanvas, 0, 0, composite.width, composite.height);
     } else {
       renderPixelGrid1x(offCtx, composite);
-      ctx.drawImage(offscreen, 0, 0, displayWidth, displayHeight);
+      ctx.drawImage(offscreen, 0, 0, composite.width, composite.height);
     }
 
     if (selection?.floating) {
       const { pixels, offset } = selection.floating;
-      const floatDisplayWidth = pixels.width * zoom;
-      const floatDisplayHeight = pixels.height * zoom;
 
       if (canvasDisplayMode === "oklchLightness" && renderer && glCanvas) {
         const floatImageData = new ImageData(pixels.toRgba(), pixels.width, pixels.height);
@@ -743,17 +740,11 @@ export function CanvasView() {
           renderer,
           glCanvas,
           floatImageData,
-          floatDisplayWidth,
-          floatDisplayHeight,
+          pixels.width,
+          pixels.height,
           canvasDisplayMode,
         );
-        ctx.drawImage(
-          glCanvas,
-          offset.x * zoom,
-          offset.y * zoom,
-          floatDisplayWidth,
-          floatDisplayHeight,
-        );
+        ctx.drawImage(glCanvas, offset.x, offset.y, pixels.width, pixels.height);
       } else {
         if (!floatOffscreenRef.current) {
           floatOffscreenRef.current = document.createElement("canvas");
@@ -768,59 +759,27 @@ export function CanvasView() {
           const imageData = floatCtx.createImageData(pixels.width, pixels.height);
           imageData.data.set(pixels.toRgba());
           floatCtx.putImageData(imageData, 0, 0);
-          ctx.drawImage(
-            floatCanvas,
-            offset.x * zoom,
-            offset.y * zoom,
-            floatDisplayWidth,
-            floatDisplayHeight,
-          );
+          ctx.drawImage(floatCanvas, offset.x, offset.y, pixels.width, pixels.height);
         }
       }
     }
-
-    if (gridCanvas && project.grid.visible) {
-      gridCanvas.width = displayWidth;
-      gridCanvas.height = displayHeight;
-      gridCanvas.style.width = `${displayWidth}px`;
-      gridCanvas.style.height = `${displayHeight}px`;
-      const gridCtx = gridCanvas.getContext("2d");
-      if (gridCtx) {
-        const { primary, secondary } = project.grid;
-        renderCanvasGrid(
-          gridCtx,
-          composite.width,
-          composite.height,
-          zoom,
-          {
-            primary,
-            secondary,
-            primarySpanY,
-            secondarySpanY,
-            colorRgb: gridColorRgbString(appSettings.gridColorHex),
-            lineWidth: appSettings.gridLineWidth,
-            subGridEnabled: appSettings.subGridEnabled,
-          },
-        );
-      }
-    } else if (gridCanvas) {
-      const gridCtx = gridCanvas.getContext("2d");
-      gridCtx?.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
-    }
-  }, [project, composite, displayWidth, displayHeight, zoom, selection, canvasDisplayMode, appSettings]);
+  }, [project, composite, displayWidth, displayHeight, selection, canvasDisplayMode, appSettings]);
 
   const renderBoardBackground = useCallback(() => {
     const boardCanvas = boardBackgroundRef.current;
     if (!boardCanvas || !project || !boardLayout || !stageLayout) return;
 
-    boardCanvas.width = stageLayout.stageWidth;
-    boardCanvas.height = stageLayout.stageHeight;
+    const boardBackingWidth = Math.max(1, Math.ceil(stageLayout.stageWidth / zoom));
+    const boardBackingHeight = Math.max(1, Math.ceil(stageLayout.stageHeight / zoom));
+
+    boardCanvas.width = boardBackingWidth;
+    boardCanvas.height = boardBackingHeight;
     boardCanvas.style.width = `${stageLayout.stageWidth}px`;
     boardCanvas.style.height = `${stageLayout.stageHeight}px`;
 
     const ctx = boardCanvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, stageLayout.stageWidth, stageLayout.stageHeight);
+    ctx.clearRect(0, 0, boardBackingWidth, boardBackingHeight);
     ctx.imageSmoothingEnabled = false;
 
     const orthographicAngle = resolveOrthographicAngle(project.orthographicView);
@@ -839,13 +798,13 @@ export function CanvasView() {
       const { width, height } = canvasComposite;
 
       ctx.save();
-      ctx.translate(layout.left, layout.top);
+      ctx.translate(layout.left / zoom, layout.top / zoom);
 
       renderTransparencyCheckerboard(
         ctx,
         width,
         height,
-        zoom,
+        1,
         {
           tileSize: appSettings.checkerboardTileSize,
           tileHeight: checkerboardTileHeight,
@@ -864,7 +823,7 @@ export function CanvasView() {
           height,
           canvasDisplayMode,
         );
-        ctx.drawImage(glCanvas, 0, 0, layout.displayWidth, layout.displayHeight);
+        ctx.drawImage(glCanvas, 0, 0, width, height);
       } else {
         const offscreen = document.createElement("canvas");
         offscreen.width = width;
@@ -875,7 +834,7 @@ export function CanvasView() {
           continue;
         }
         renderPixelGrid1x(offCtx, canvasComposite);
-        ctx.drawImage(offscreen, 0, 0, layout.displayWidth, layout.displayHeight);
+        ctx.drawImage(offscreen, 0, 0, width, height);
       }
       ctx.restore();
     }
@@ -901,19 +860,58 @@ export function CanvasView() {
 
   const patternBrushGrid = brushPreview?.isPattern ? activePatternBrushGrid : null;
 
-  const renderOverlay = useCallback(() => {
-    const previewCanvas = previewRef.current;
-    if (!previewCanvas || !composite) return;
+  const renderToolOverlay = useCallback(() => {
+    const overlay = toolOverlayRef.current;
+    const container = containerRef.current;
+    if (!overlay || !container || !composite || !project) return;
 
-    previewCanvas.width = displayWidth;
-    previewCanvas.height = displayHeight;
-    previewCanvas.style.width = `${displayWidth}px`;
-    previewCanvas.style.height = `${displayHeight}px`;
+    const viewportW = container.clientWidth;
+    const viewportH = container.clientHeight;
+    if (viewportW <= 0 || viewportH <= 0) return;
 
-    const ctx = previewCanvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const backingW = Math.max(1, Math.round(viewportW * dpr));
+    const backingH = Math.max(1, Math.round(viewportH * dpr));
+
+    overlay.width = backingW;
+    overlay.height = backingH;
+    overlay.style.width = `${viewportW}px`;
+    overlay.style.height = `${viewportH}px`;
+    overlay.style.left = `${container.scrollLeft}px`;
+    overlay.style.top = `${container.scrollTop}px`;
+
+    const ctx = overlay.getContext("2d");
     if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, viewportW, viewportH);
 
-    ctx.clearRect(0, 0, displayWidth, displayHeight);
+    const transform = canvasScreenTransformFromViewport(
+      activeCanvasLeft,
+      activeCanvasTop,
+      container.scrollLeft,
+      container.scrollTop,
+      zoom,
+    );
+
+    if (project.grid.visible) {
+      const orthographicAngle = resolveOrthographicAngle(project.orthographicView);
+      const primarySpanY = computeForeshortenedSpan(project.grid.primary, orthographicAngle);
+      const secondarySpanY = computeForeshortenedSecondarySpan(
+        project.grid.primary,
+        project.grid.secondary,
+        orthographicAngle,
+      );
+      const { primary, secondary } = project.grid;
+      renderCanvasGrid(ctx, composite.width, composite.height, transform, {
+        primary,
+        secondary,
+        primarySpanY,
+        secondarySpanY,
+        colorRgb: gridColorRgbString(appSettings.gridColorHex),
+        lineWidth: appSettings.gridLineWidth,
+        subGridEnabled: appSettings.subGridEnabled,
+      });
+    }
 
     const capturePreviewRect =
       isAssetCaptureActive &&
@@ -945,7 +943,7 @@ export function CanvasView() {
       previewRect: capturePreviewRect ?? (showTileRegionOverlay ? null : selectionPreviewRect),
       lassoPoints,
       phase: marchPhase,
-      zoom,
+      transform,
       canvasWidth: composite.width,
       canvasHeight: composite.height,
     });
@@ -954,17 +952,17 @@ export function CanvasView() {
       renderTileOverlay(
         ctx,
         isRepeatTileDrawing ? tileSession.region : tileCreatePreviewRect!,
-        zoom,
+        transform,
       );
     }
 
     if (activeTool === "transform" && selection && selectionDrag?.mode !== "layerPosition") {
-      renderTransformHandles(ctx, { selection, zoom, phase: marchPhase });
+      renderTransformHandles(ctx, { selection, transform, phase: marchPhase });
     }
 
       renderSymmetryAxis(ctx, {
       config: symmetry,
-      zoom,
+      transform,
       canvasWidth: composite.width,
       canvasHeight: composite.height,
       style: {
@@ -988,8 +986,10 @@ export function CanvasView() {
           brushPreview!.patternScale,
           foregroundColor,
           applyForegroundTint,
-          zoom,
+          transform,
           { width: composite.width, height: composite.height },
+          toolSettings.patternBrushFlipHorizontal,
+          toolSettings.patternBrushFlipVertical,
         );
         return;
       }
@@ -999,7 +999,7 @@ export function CanvasView() {
         brushPreview!.size,
         brushPreview!.shape,
         activeTool === "brush" ? foregroundColor : null,
-        zoom,
+        transform,
         { width: composite.width, height: composite.height },
       );
     };
@@ -1019,14 +1019,14 @@ export function CanvasView() {
             to,
             { brushSize: brushPreview.size, brushShape: brushPreview.shape },
             foregroundColor,
-            zoom,
+            transform,
             { width: composite.width, height: composite.height },
           );
         };
 
         if (isSymmetryActive(symmetry)) {
-          forEachSymmetricTransform(symmetry, (transform) => {
-            drawLinePreview(transform(brushLineAnchor), transform(hoverPoint));
+          forEachSymmetricTransform(symmetry, (mirror) => {
+            drawLinePreview(mirror(brushLineAnchor), mirror(hoverPoint));
           });
         } else {
           drawLinePreview(brushLineAnchor, hoverPoint);
@@ -1034,12 +1034,16 @@ export function CanvasView() {
       }
 
       if (isSymmetryActive(symmetry)) {
-        forEachSymmetricTransform(symmetry, (transform) => {
-          renderStampPreviewAt(transform(hoverPoint));
+        forEachSymmetricTransform(symmetry, (mirror) => {
+          renderStampPreviewAt(mirror(hoverPoint));
         });
       } else {
         renderStampPreviewAt(hoverPoint);
       }
+    }
+
+    if (boundsLabelRect) {
+      renderBoundsDimensionLabel(ctx, boundsLabelRect, transform);
     }
   }, [
     activeTool,
@@ -1048,6 +1052,8 @@ export function CanvasView() {
     brushPreview,
     patternBrushGrid,
     patternBrushAnchorForegroundColor,
+    toolSettings.patternBrushFlipHorizontal,
+    toolSettings.patternBrushFlipVertical,
     composite,
     displayWidth,
     displayHeight,
@@ -1070,8 +1076,26 @@ export function CanvasView() {
     appSettings.symmetryAxisColorHex,
     appSettings.symmetryAxisLineWidth,
     appSettings.symmetryAxisOutlineEnabled,
+    appSettings.gridColorHex,
+    appSettings.gridLineWidth,
+    appSettings.subGridEnabled,
+    project,
+    activeCanvasLeft,
+    activeCanvasTop,
+    boundsLabelRect,
     zoom,
   ]);
+
+  const renderToolOverlayRef = useRef(renderToolOverlay);
+  renderToolOverlayRef.current = renderToolOverlay;
+
+  const scheduleToolOverlayRedraw = useCallback(() => {
+    if (toolOverlayFrameRef.current !== null) return;
+    toolOverlayFrameRef.current = requestAnimationFrame(() => {
+      toolOverlayFrameRef.current = null;
+      renderToolOverlayRef.current();
+    });
+  }, []);
 
   const resolveSymmetryHitAtClient = useCallback(
     (clientX: number, clientY: number) => {
@@ -1126,8 +1150,7 @@ export function CanvasView() {
       ? transformCursor
       : undefined;
 
-  const showEyedropperCursor =
-    (altHeld || altPickPending) && activeTool !== "select" && !isDrawing;
+  const showEyedropperCursor = (altHeld || altPickPending) && !isDrawing;
 
   useEffect(() => {
     if (activeTool === "shape" && isDrawing) return;
@@ -1385,8 +1408,12 @@ export function CanvasView() {
   }, [renderBoardBackground]);
 
   useLayoutEffect(() => {
-    renderOverlay();
-  }, [renderOverlay]);
+    renderToolOverlay();
+  }, [renderToolOverlay]);
+
+  useEffect(() => {
+    scheduleToolOverlayRedraw();
+  }, [marchPhase, scheduleToolOverlayRedraw]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1400,6 +1427,7 @@ export function CanvasView() {
 
     const handleScroll = () => {
       syncBoardViewport();
+      scheduleToolOverlayRedraw();
     };
 
     const resizeObserver = new ResizeObserver((entries) => {
@@ -1410,6 +1438,7 @@ export function CanvasView() {
       }
       syncBoardViewport();
       adaptFloatingPanelsToViewport();
+      scheduleToolOverlayRedraw();
     });
 
     container.addEventListener("scroll", handleScroll, { passive: true });
@@ -1421,8 +1450,12 @@ export function CanvasView() {
       container.removeEventListener("scroll", handleScroll);
       resizeObserver.disconnect();
       setViewportContainer(null);
+      if (toolOverlayFrameRef.current !== null) {
+        cancelAnimationFrame(toolOverlayFrameRef.current);
+        toolOverlayFrameRef.current = null;
+      }
     };
-  }, [project, setViewportContainer, syncBoardViewport, adaptFloatingPanelsToViewport]);
+  }, [project, setViewportContainer, syncBoardViewport, adaptFloatingPanelsToViewport, scheduleToolOverlayRedraw]);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
@@ -1909,7 +1942,7 @@ export function CanvasView() {
     }
     const point = toPixel(e);
     const modifiers = canvasModifiersFromMouseEvent(e, spaceKeyHeldRef.current);
-    if (e.altKey && activeTool !== "select") {
+    if (e.altKey) {
       beginAltPickSession(point, button);
       return;
     }
@@ -2274,29 +2307,6 @@ export function CanvasView() {
                 onContextMenu={handleCanvasContextMenu}
                 onMouseLeave={handleMouseLeave}
               />
-              <canvas
-                ref={gridRef}
-                className="pointer-events-none absolute left-0 top-0"
-                style={{ imageRendering: "pixelated" }}
-              />
-              <div
-                className="pointer-events-none absolute left-0 top-0"
-                style={{
-                  width: displayWidth,
-                  height: displayHeight,
-                  zIndex: overlayZIndex,
-                  imageRendering: "pixelated",
-                }}
-              >
-                <canvas
-                  ref={previewRef}
-                  className="block"
-                  style={{ imageRendering: "pixelated" }}
-                />
-                {boundsLabelRect && (
-                  <CanvasBoundsLabel rect={boundsLabelRect} zoom={zoom} />
-                )}
-              </div>
             </div>
             {referenceLayers.map((layer) => (
                 <ReferenceLayerOverlay
@@ -2341,6 +2351,11 @@ export function CanvasView() {
             )}
           </div>
         )}
+        <canvas
+          ref={toolOverlayRef}
+          className="pointer-events-none absolute z-10 block"
+          aria-hidden
+        />
         <div className="sr-only">当前工具: {activeTool}</div>
       </div>
       {isCapturing && (
@@ -2409,6 +2424,7 @@ export function CanvasView() {
       )}
       <NavigatorPanel />
       <FloatingColorPickerPanel />
+      <FloatingLuminancePalettePanel />
       <ComfyAppFloatingRunner scope="canvas" floatingPanelId="comfyRunner" />
       <ReferenceCropModal />
       {referenceContextMenu && referenceContextMenuItems.length > 0 && (

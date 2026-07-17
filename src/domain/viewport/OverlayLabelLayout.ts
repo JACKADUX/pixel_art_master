@@ -1,6 +1,8 @@
 import type { Point } from "@/domain/tool/ITool";
 import type { SelectionRect } from "@/domain/selection/SelectionRect";
 import { normalizeRect } from "@/domain/selection/SelectionRect";
+import type { CanvasScreenTransform } from "@/domain/viewport/CanvasScreenTransform";
+import { logicalRectToScreenHeight, logicalRectToScreenWidth, logicalToScreenX, logicalToScreenY } from "@/domain/viewport/CanvasScreenTransform";
 
 export function formatPixelDimensions(width: number, height: number): string {
   return `${width} × ${height}`;
@@ -14,6 +16,17 @@ export function computeBoundsLabelPosition(
   return {
     left: rect.x * zoom + (rect.width * zoom) / 2,
     top: rect.y * zoom + rect.height * zoom + gap,
+  };
+}
+
+export function computeBoundsLabelScreenPosition(
+  rect: SelectionRect,
+  transform: CanvasScreenTransform,
+  gap = 6,
+): { left: number; top: number } {
+  return {
+    left: logicalToScreenX(rect.x, transform) + logicalRectToScreenWidth(rect.width, transform) / 2,
+    top: logicalToScreenY(rect.y, transform) + logicalRectToScreenHeight(rect.height, transform) + gap,
   };
 }
 

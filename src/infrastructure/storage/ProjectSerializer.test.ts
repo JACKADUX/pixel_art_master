@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyDrawingLayer, createEmptyReferenceLayer } from "@/domain/layer/Layer";
+import { createEmptyLuminancePalette } from "@/domain/luminancePalette/LuminancePalette";
 import { Palette } from "@/domain/palette/Palette";
 import { DEFAULT_GRID, type Project } from "@/domain/project/Project";
 import { getActiveCanvas } from "@/domain/project/ProjectTestUtils";
@@ -51,6 +52,7 @@ function buildProject(scale: number, paletteVisible = true): Project {
     referenceLayers: [reference],
     activeReferenceLayerId: reference.id,
     palette: Palette.empty(),
+    luminancePalette: createEmptyLuminancePalette(),
     notes: [],
     grid: { ...DEFAULT_GRID },
     orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
@@ -114,10 +116,25 @@ describe("ProjectSerializer reference layer", () => {
     expect(reference.position).toEqual({ x: 1, y: 2 });
   });
 
-  it("serializes as v6 with project-level reference layers", () => {
+  it("serializes as v7 with luminance palette", () => {
     const json = serializeProject(buildProject(1));
-    const parsed = JSON.parse(json) as { version: number; referenceLayers: unknown[] };
-    expect(parsed.version).toBe(6);
+    const parsed = JSON.parse(json) as {
+      version: number;
+      referenceLayers: unknown[];
+      luminancePalette: { groups: unknown[] };
+    };
+    expect(parsed.version).toBe(7);
     expect(parsed.referenceLayers).toHaveLength(1);
+    expect(parsed.luminancePalette.groups).toEqual([]);
+  });
+
+  it("migrates v6 projects with empty luminance palette", () => {
+    const v7Json = serializeProject(buildProject(1));
+    const v6 = JSON.parse(v7Json) as Record<string, unknown>;
+    v6.version = 6;
+    delete v6.luminancePalette;
+
+    const restored = deserializeProject(JSON.stringify(v6), "test.json");
+    expect(restored.luminancePalette.groups).toEqual([]);
   });
 });

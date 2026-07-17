@@ -54,6 +54,13 @@ export const SHORTCUT_REFERENCE_SECTIONS: ShortcutReferenceSection[] = [
     ],
   },
   {
+    title: "图案笔刷（图案画笔模式）",
+    entries: [
+      { shortcut: SHORTCUT_LABELS.flipHorizontal, description: "水平翻转图案" },
+      { shortcut: SHORTCUT_LABELS.flipVertical, description: "垂直翻转图案" },
+    ],
+  },
+  {
     title: "选区",
     entries: [
       { shortcut: "Esc", description: "取消选区" },
@@ -81,6 +88,14 @@ export const SHORTCUT_REFERENCE_SECTIONS: ShortcutReferenceSection[] = [
       { shortcut: "Alt+拖拽", description: "形状工具从中心绘制（矩形/椭圆）；拖拽时不取色" },
       { shortcut: "Space", description: "按住时切换为平移模式" },
       { shortcut: "中键拖拽", description: "平移画布视口" },
+    ],
+  },
+  {
+    title: "明度色板（浮窗显示时）",
+    entries: [
+      { shortcut: "1 - 9", description: "选择当前组第 1-9 色为前景色" },
+      { shortcut: "0", description: "选择当前组第 10 色为前景色" },
+      { shortcut: "Q / A", description: "在当前前景色所在组内按明度前后切换" },
     ],
   },
 ];

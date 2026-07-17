@@ -3,6 +3,11 @@ import { getAlpha, toRgbaComponents } from "@/domain/canvas/PixelColor";
 import { collectStampBoundaryPolygon, forEachStampPixel } from "@/domain/tool/BrushStamp";
 import type { BrushShape } from "@/domain/tool/ToolType";
 import type { Point } from "@/domain/tool/ITool";
+import {
+  type CanvasScreenTransform,
+  logicalToScreenX,
+  logicalToScreenY,
+} from "@/domain/viewport/CanvasScreenTransform";
 
 interface GridBounds {
   width: number;
@@ -27,14 +32,20 @@ function strokeContrastPath(ctx: CanvasRenderingContext2D, draw: () => void): vo
 function drawBoundaryPolygon(
   ctx: CanvasRenderingContext2D,
   polygon: Point[],
-  zoom: number,
+  transform: CanvasScreenTransform,
 ): void {
   if (polygon.length === 0) return;
 
   ctx.beginPath();
-  ctx.moveTo(polygon[0].x * zoom + 0.5, polygon[0].y * zoom + 0.5);
+  ctx.moveTo(
+    logicalToScreenX(polygon[0].x, transform) + 0.5,
+    logicalToScreenY(polygon[0].y, transform) + 0.5,
+  );
   for (let i = 1; i < polygon.length; i++) {
-    ctx.lineTo(polygon[i].x * zoom + 0.5, polygon[i].y * zoom + 0.5);
+    ctx.lineTo(
+      logicalToScreenX(polygon[i].x, transform) + 0.5,
+      logicalToScreenY(polygon[i].y, transform) + 0.5,
+    );
   }
   ctx.closePath();
 }
@@ -45,11 +56,12 @@ function renderFilledStamp(
   size: number,
   shape: BrushShape,
   color: PixelColor,
-  zoom: number,
+  transform: CanvasScreenTransform,
 ): void {
+  const cell = transform.zoom;
   ctx.fillStyle = pixelColorToCss(color);
   forEachStampPixel(center, size, shape, (x, y) => {
-    ctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+    ctx.fillRect(logicalToScreenX(x, transform), logicalToScreenY(y, transform), cell, cell);
   });
 }
 
@@ -58,12 +70,12 @@ function renderOutlineStamp(
   center: Point,
   size: number,
   shape: BrushShape,
-  zoom: number,
+  transform: CanvasScreenTransform,
 ): void {
   const polygon = collectStampBoundaryPolygon(center, size, shape);
   if (polygon.length === 0) return;
 
-  strokeContrastPath(ctx, () => drawBoundaryPolygon(ctx, polygon, zoom));
+  strokeContrastPath(ctx, () => drawBoundaryPolygon(ctx, polygon, transform));
 }
 
 export function renderBrushStampPreview(
@@ -72,15 +84,15 @@ export function renderBrushStampPreview(
   size: number,
   shape: BrushShape,
   color: PixelColor | null,
-  zoom: number,
+  transform: CanvasScreenTransform,
   _bounds: GridBounds,
 ): void {
   ctx.imageSmoothingEnabled = false;
 
   if (color && getAlpha(color) > 0) {
-    renderFilledStamp(ctx, center, size, shape, color, zoom);
+    renderFilledStamp(ctx, center, size, shape, color, transform);
     return;
   }
 
-  renderOutlineStamp(ctx, center, size, shape, zoom);
+  renderOutlineStamp(ctx, center, size, shape, transform);
 }

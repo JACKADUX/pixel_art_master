@@ -16,6 +16,22 @@ export interface PatternStampOptions {
   foregroundColor: PixelColor;
   backgroundColor: PixelColor;
   applyForegroundTint: boolean;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
+}
+
+function resolvePatternSourceCoords(
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  flipHorizontal: boolean,
+  flipVertical: boolean,
+): { srcX: number; srcY: number } {
+  return {
+    srcX: flipHorizontal ? width - 1 - x : x,
+    srcY: flipVertical ? height - 1 - y : y,
+  };
 }
 
 export function computePatternTopLeft(
@@ -42,10 +58,20 @@ export function stampPatternAt(
   if (!pattern) return;
 
   const topLeft = computePatternTopLeft(center, pattern.width, pattern.height);
+  const flipHorizontal = options.flipHorizontal ?? false;
+  const flipVertical = options.flipVertical ?? false;
 
   for (let y = 0; y < pattern.height; y++) {
     for (let x = 0; x < pattern.width; x++) {
-      const sourcePixel = pattern.getPixel(x, y);
+      const { srcX, srcY } = resolvePatternSourceCoords(
+        pattern.width,
+        pattern.height,
+        x,
+        y,
+        flipHorizontal,
+        flipVertical,
+      );
+      const sourcePixel = pattern.getPixel(srcX, srcY);
       if (getAlpha(sourcePixel) === 0) continue;
       const color = tintPatternPixel(
         sourcePixel,

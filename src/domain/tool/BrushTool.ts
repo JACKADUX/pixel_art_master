@@ -16,6 +16,8 @@ function buildPatternStampOptions(ctx: ToolContext): PatternStampOptions | null 
     foregroundColor: ctx.patternStamp.foregroundColor,
     backgroundColor: ctx.patternStamp.backgroundColor,
     applyForegroundTint: ctx.patternStamp.applyForegroundTint,
+    flipHorizontal: ctx.settings.patternBrushFlipHorizontal,
+    flipVertical: ctx.settings.patternBrushFlipVertical,
   };
 }
 

@@ -20,6 +20,10 @@ import {
   setReferenceImage,
 } from "../layer/ReferenceLayerOperations";
 import type { Note } from "../note/Note";
+import {
+  createEmptyLuminancePalette,
+  type LuminancePaletteData,
+} from "../luminancePalette/LuminancePalette";
 import { Palette } from "../palette/Palette";
 import {
   DEFAULT_ORTHOGRAPHIC_VIEW,
@@ -58,6 +62,7 @@ export interface Project {
   referenceLayers: ReferenceLayer[];
   activeReferenceLayerId: string | null;
   palette: Palette;
+  luminancePalette: LuminancePaletteData;
   notes: Note[];
   grid: GridConfig;
   orthographicView: OrthographicViewConfig;
@@ -96,6 +101,7 @@ export function createEmptyProject(name?: string, size?: CanvasSize): Project {
     referenceLayers: [],
     activeReferenceLayerId: null,
     palette: Palette.empty(),
+    luminancePalette: createEmptyLuminancePalette(),
     notes: [],
     grid: { ...DEFAULT_GRID },
     orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
@@ -159,6 +165,7 @@ export function createProjectFromImage(
     referenceLayers: [reference],
     activeReferenceLayerId: reference.id,
     palette,
+    luminancePalette: createEmptyLuminancePalette(),
     notes: [],
     grid: { ...DEFAULT_GRID },
     orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },
@@ -200,6 +207,7 @@ export function createProjectFromPixelGrid(
     referenceLayers: [reference],
     activeReferenceLayerId: reference.id,
     palette,
+    luminancePalette: createEmptyLuminancePalette(),
     notes: [],
     grid: { ...DEFAULT_GRID },
     orthographicView: { ...DEFAULT_ORTHOGRAPHIC_VIEW },

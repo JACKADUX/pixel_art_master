@@ -1,3 +1,11 @@
+import {
+  type CanvasScreenTransform,
+  logicalRectToScreenHeight,
+  logicalRectToScreenWidth,
+  logicalToScreenX,
+  logicalToScreenY,
+} from "@/domain/viewport/CanvasScreenTransform";
+
 export interface CanvasGridRenderOptions {
   primary: number;
   secondary: number;
@@ -12,14 +20,14 @@ export function renderCanvasGrid(
   ctx: CanvasRenderingContext2D,
   gridWidth: number,
   gridHeight: number,
-  zoom: number,
+  transform: CanvasScreenTransform,
   options: CanvasGridRenderOptions,
 ): void {
   const { primary, secondary, colorRgb, lineWidth, subGridEnabled } = options;
   const primarySpanY = options.primarySpanY ?? primary;
   const secondarySpanY = options.secondarySpanY ?? secondary;
-  const displayWidth = gridWidth * zoom;
-  const displayHeight = gridHeight * zoom;
+  const displayWidth = logicalRectToScreenWidth(gridWidth, transform);
+  const displayHeight = logicalRectToScreenHeight(gridHeight, transform);
 
   ctx.lineWidth = lineWidth;
 
@@ -27,9 +35,10 @@ export function renderCanvasGrid(
     ctx.strokeStyle = `rgba(${colorRgb}, 0.5)`;
     for (let x = 0; x <= gridWidth; x += secondary) {
       if (x % primary !== 0) {
+        const screenX = logicalToScreenX(x, transform) + 0.5;
         ctx.beginPath();
-        ctx.moveTo(x * zoom + 0.5, 0);
-        ctx.lineTo(x * zoom + 0.5, displayHeight);
+        ctx.moveTo(screenX, transform.offsetY);
+        ctx.lineTo(screenX, transform.offsetY + displayHeight);
         ctx.stroke();
       }
     }
@@ -37,9 +46,10 @@ export function renderCanvasGrid(
       for (let sub = secondarySpanY; sub < primarySpanY; sub += secondarySpanY) {
         const y = primaryY + sub;
         if (y > gridHeight) break;
+        const screenY = logicalToScreenY(y, transform) + 0.5;
         ctx.beginPath();
-        ctx.moveTo(0, y * zoom + 0.5);
-        ctx.lineTo(displayWidth, y * zoom + 0.5);
+        ctx.moveTo(transform.offsetX, screenY);
+        ctx.lineTo(transform.offsetX + displayWidth, screenY);
         ctx.stroke();
       }
     }
@@ -47,15 +57,17 @@ export function renderCanvasGrid(
 
   ctx.strokeStyle = `rgba(${colorRgb}, 1)`;
   for (let x = 0; x <= gridWidth; x += primary) {
+    const screenX = logicalToScreenX(x, transform) + 0.5;
     ctx.beginPath();
-    ctx.moveTo(x * zoom + 0.5, 0);
-    ctx.lineTo(x * zoom + 0.5, displayHeight);
+    ctx.moveTo(screenX, transform.offsetY);
+    ctx.lineTo(screenX, transform.offsetY + displayHeight);
     ctx.stroke();
   }
   for (let y = 0; y <= gridHeight; y += primarySpanY) {
+    const screenY = logicalToScreenY(y, transform) + 0.5;
     ctx.beginPath();
-    ctx.moveTo(0, y * zoom + 0.5);
-    ctx.lineTo(displayWidth, y * zoom + 0.5);
+    ctx.moveTo(transform.offsetX, screenY);
+    ctx.lineTo(transform.offsetX + displayWidth, screenY);
     ctx.stroke();
   }
 }

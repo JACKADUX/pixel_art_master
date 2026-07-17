@@ -574,7 +574,7 @@ export function ReferenceLayerOverlay({
           className={`block${
             isDragging
               ? " cursor-grabbing"
-              : altHeld && !selectionToolActive
+              : altHeld
                 ? " cursor-eyedropper"
                 : selectionToolActive
                   ? " cursor-crosshair"

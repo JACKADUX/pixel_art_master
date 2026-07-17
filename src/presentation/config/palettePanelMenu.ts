@@ -3,6 +3,7 @@ import {
   BookmarkSquareIcon,
   NoSymbolIcon,
   Squares2X2Icon,
+  SunIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import type { MenuItem } from "../components/MenuDropdown";
@@ -17,6 +18,8 @@ export interface PalettePanelMenuState {
   colorsCount: number;
   removeMode: boolean;
   presets: PalettePanelMenuPreset[];
+  luminancePalettePresets: PalettePanelMenuPreset[];
+  luminancePalettePanelVisible: boolean;
 }
 
 export interface PalettePanelMenuActions {
@@ -26,6 +29,10 @@ export interface PalettePanelMenuActions {
   saveAsPreset: () => void;
   importPresetMerge: (id: string) => void;
   openPresetManager: () => void;
+  toggleLuminancePalettePanel: () => void;
+  saveLuminancePaletteAsPreset: () => void;
+  importLuminancePalettePreset: (id: string) => void;
+  openLuminancePalettePresetManager: () => void;
 }
 
 export function buildPalettePanelMenuItems(
@@ -82,6 +89,39 @@ export function buildPalettePanelMenuItems(
       label: "管理预设…",
       icon: Squares2X2Icon,
       onClick: actions.openPresetManager,
+    });
+
+    items.push({ type: "separator" });
+    items.push({
+      type: "action",
+      label: state.luminancePalettePanelVisible ? "关闭明度色板" : "打开明度色板",
+      icon: SunIcon,
+      onClick: actions.toggleLuminancePalettePanel,
+    });
+    items.push({
+      type: "action",
+      label: "保存明度色板为预设",
+      icon: BookmarkSquareIcon,
+      onClick: actions.saveLuminancePaletteAsPreset,
+    });
+    items.push({
+      type: "submenu",
+      label: "从明度色板预设导入",
+      icon: ArrowDownOnSquareIcon,
+      items:
+        state.luminancePalettePresets.length > 0
+          ? state.luminancePalettePresets.map((preset) => ({
+              type: "action" as const,
+              label: preset.name,
+              onClick: () => actions.importLuminancePalettePreset(preset.id),
+            }))
+          : [{ type: "action" as const, label: "暂无预设", onClick: () => {}, disabled: true }],
+    });
+    items.push({
+      type: "action",
+      label: "管理明度色板预设…",
+      icon: Squares2X2Icon,
+      onClick: actions.openLuminancePalettePresetManager,
     });
   }
 

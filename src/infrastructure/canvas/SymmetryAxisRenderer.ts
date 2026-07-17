@@ -1,7 +1,14 @@
 import { symmetryAxisColorRgba } from "@/domain/appSettings/AppSettings";
 import type { SymmetryConfig } from "@/domain/symmetry/SymmetryConfig";
 import { isSymmetryActive } from "@/domain/symmetry/SymmetryConfig";
-import { symmetryAxisDisplayCoord } from "@/domain/symmetry/SymmetryMirror";
+import { symmetryAxisCoord } from "@/domain/symmetry/SymmetryMirror";
+import {
+  type CanvasScreenTransform,
+  logicalRectToScreenHeight,
+  logicalRectToScreenWidth,
+  logicalToScreenX,
+  logicalToScreenY,
+} from "@/domain/viewport/CanvasScreenTransform";
 
 export interface SymmetryAxisStyle {
   visible: boolean;
@@ -12,7 +19,7 @@ export interface SymmetryAxisStyle {
 
 export interface SymmetryAxisRenderOptions {
   config: SymmetryConfig;
-  zoom: number;
+  transform: CanvasScreenTransform;
   canvasWidth: number;
   canvasHeight: number;
   style: SymmetryAxisStyle;
@@ -54,22 +61,22 @@ export function renderSymmetryAxis(
   ctx: CanvasRenderingContext2D,
   options: SymmetryAxisRenderOptions,
 ): void {
-  const { config, zoom, canvasWidth, canvasHeight, style } = options;
+  const { config, transform, canvasWidth, canvasHeight, style } = options;
   if (!style.visible || !isSymmetryActive(config)) return;
 
-  const displayWidth = canvasWidth * zoom;
-  const displayHeight = canvasHeight * zoom;
+  const displayWidth = logicalRectToScreenWidth(canvasWidth, transform);
+  const displayHeight = logicalRectToScreenHeight(canvasHeight, transform);
 
   ctx.save();
 
   if (config.horizontal) {
-    const x = symmetryAxisDisplayCoord(config.originX, zoom) + 0.5;
-    strokeAxisLine(ctx, x, 0, x, displayHeight, style);
+    const x = logicalToScreenX(symmetryAxisCoord(config.originX), transform) + 0.5;
+    strokeAxisLine(ctx, x, transform.offsetY, x, transform.offsetY + displayHeight, style);
   }
 
   if (config.vertical) {
-    const y = symmetryAxisDisplayCoord(config.originY, zoom) + 0.5;
-    strokeAxisLine(ctx, 0, y, displayWidth, y, style);
+    const y = logicalToScreenY(symmetryAxisCoord(config.originY), transform) + 0.5;
+    strokeAxisLine(ctx, transform.offsetX, y, transform.offsetX + displayWidth, y, style);
   }
 
   ctx.restore();

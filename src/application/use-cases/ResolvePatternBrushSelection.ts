@@ -1,3 +1,4 @@
+import type { WritableCanvasSurface } from "@/domain/canvas/MaskedPixelGrid";
 import type { PixelGrid } from "@/domain/canvas/PixelGrid";
 import { cropPixelGridToOpaqueBounds } from "@/domain/patternBrush/PatternBrushCrop";
 import { getEffectiveSelectionMask } from "@/domain/selection/FloatingSelectionLifecycle";
@@ -83,7 +84,7 @@ function resolvePendingCreateSelection(
 }
 
 export function extractPatternBrushPixelsFromSelection(
-  grid: PixelGrid,
+  grid: WritableCanvasSurface,
   selection: SelectionState,
 ): PixelGrid | null {
   if (selection.floating) {

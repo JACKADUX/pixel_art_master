@@ -4,6 +4,7 @@ export const MIGRATION_MANIFEST_FILE = "migration-manifest.json";
 export const APP_SETTINGS_FILE = "app-settings.json";
 export const EDITOR_PREFERENCES_FILE = "editor-preferences.json";
 export const PALETTE_PRESETS_FILE = "palette-presets.json";
+export const LUMINANCE_PALETTE_PRESETS_FILE = "luminance-palette-presets.json";
 export const COMFY_PROMPT_PRESETS_FILE = "comfy-prompt-presets.json";
 export const IMAGE_EXPORT_PREFERENCES_FILE = "image-export-preferences.json";
 export const COLOR_EDIT_PREFERENCES_FILE = "color-edit-preferences.json";
@@ -44,6 +45,10 @@ export function buildEditorPreferencesPath(softwareDataPath: string): string {
 
 export function buildPalettePresetsPath(softwareDataPath: string): string {
   return joinPath(buildUserDataRoot(softwareDataPath), PALETTE_PRESETS_FILE);
+}
+
+export function buildLuminancePalettePresetsPath(softwareDataPath: string): string {
+  return joinPath(buildUserDataRoot(softwareDataPath), LUMINANCE_PALETTE_PRESETS_FILE);
 }
 
 export function buildComfyPromptPresetsPath(softwareDataPath: string): string {

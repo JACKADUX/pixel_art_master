@@ -7,6 +7,7 @@ import type { IFieldPromptConfigRepository } from "@/application/ports/IFieldPro
 import type { IImageExportPreferencesRepository } from "@/application/ports/IImageExportPreferencesRepository";
 import type { ILlmSettingsRepository } from "@/application/ports/ILlmSettingsRepository";
 import type { IPalettePresetRepository } from "@/application/ports/IPalettePresetRepository";
+import type { ILuminancePalettePresetRepository } from "@/application/ports/ILuminancePalettePresetRepository";
 import type { IPixelRestorePreferencesRepository } from "@/application/ports/IPixelRestorePreferencesRepository";
 import type { IPromptPresetRepository } from "@/application/ports/IPromptPresetRepository";
 import type { IWindowPreferencesStore } from "@/application/ports/IWindowPreferencesStore";
@@ -22,6 +23,10 @@ import {
   createEmptyPalettePresetLibrary,
   type PalettePresetLibrary,
 } from "@/domain/palette/PalettePresetLibrary";
+import {
+  createEmptyLuminancePalettePresetLibrary,
+  type LuminancePalettePresetLibrary,
+} from "@/domain/luminancePalette/LuminancePalettePresetLibrary";
 import type { PixelRestorePreferences } from "@/domain/pixelRestore/PixelRestorePreferences";
 import type { EditorPreferences } from "@/domain/preferences/EditorPreferences";
 import type { WorldAgentSettings } from "@/domain/world/WorldAgentSettings";
@@ -44,6 +49,7 @@ export interface UserDataBundle {
   appSettings: AppSettings;
   editorPreferences: EditorPreferences | null;
   palettePresetLibrary: PalettePresetLibrary;
+  luminancePalettePresetLibrary: LuminancePalettePresetLibrary;
   promptPresetLibrary: PromptPresetLibrary;
   imageExportPreferences: ImageExportPreferences;
   colorEditPreferences: ColorEditPreferences | null;
@@ -61,6 +67,7 @@ export interface UserDataRepositories {
   appSettingsRepository: IAppSettingsRepository;
   editorPreferencesRepository: IEditorPreferencesRepository;
   palettePresetRepository: IPalettePresetRepository;
+  luminancePalettePresetRepository: ILuminancePalettePresetRepository;
   promptPresetRepository: IPromptPresetRepository;
   imageExportPreferencesRepository: IImageExportPreferencesRepository;
   colorEditPreferencesRepository: IColorEditPreferencesRepository;
@@ -80,6 +87,7 @@ export async function loadUserDataBundle(
   const [
     editorPreferences,
     paletteRaw,
+    luminancePaletteRaw,
     promptRaw,
     imageExportRaw,
     colorEditPreferences,
@@ -95,6 +103,7 @@ export async function loadUserDataBundle(
   ] = await Promise.all([
     loadEditorPreferences(repositories.editorPreferencesRepository, softwareDataPath),
     repositories.palettePresetRepository.load(softwareDataPath),
+    repositories.luminancePalettePresetRepository.load(softwareDataPath),
     repositories.promptPresetRepository.load(softwareDataPath),
     repositories.imageExportPreferencesRepository.load(softwareDataPath),
     loadColorEditPreferences(repositories.colorEditPreferencesRepository, softwareDataPath),
@@ -120,6 +129,16 @@ export async function loadUserDataBundle(
         }
       : createEmptyPalettePresetLibrary();
 
+  const luminancePalettePresetLibrary: LuminancePalettePresetLibrary =
+    luminancePaletteRaw &&
+    typeof luminancePaletteRaw === "object" &&
+    "presets" in luminancePaletteRaw
+      ? {
+          ...createEmptyLuminancePalettePresetLibrary(),
+          ...(luminancePaletteRaw as LuminancePalettePresetLibrary),
+        }
+      : createEmptyLuminancePalettePresetLibrary();
+
   const promptPresetLibrary = promptRaw
     ? parsePromptPresetLibrary(promptRaw)
     : createEmptyPromptPresetLibrary();
@@ -130,6 +149,7 @@ export async function loadUserDataBundle(
     appSettings,
     editorPreferences,
     palettePresetLibrary,
+    luminancePalettePresetLibrary,
     promptPresetLibrary,
     imageExportPreferences,
     colorEditPreferences,

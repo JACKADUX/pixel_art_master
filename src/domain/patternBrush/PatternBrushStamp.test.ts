@@ -85,4 +85,44 @@ describe("PatternBrushStamp", () => {
     expect(grid.getPixel(0, 0)).toBe(TRANSPARENT);
     expect(grid.getPixel(1, 0)).toBe(TRANSPARENT);
   });
+
+  it("stamps pattern flipped horizontally", () => {
+    const source = PixelGrid.createEmpty(3, 1);
+    source.setPixel(0, 0, rgba(255, 0, 0, 255));
+    source.setPixel(2, 0, rgba(0, 255, 0, 255));
+
+    const grid = PixelGrid.createEmpty(5, 3);
+    stampPatternAt(grid, { x: 2, y: 1 }, {
+      source,
+      scalePercent: 100,
+      drawMode: "foreground",
+      foregroundColor: rgba(255, 0, 0, 255),
+      backgroundColor: TRANSPARENT,
+      applyForegroundTint: false,
+      flipHorizontal: true,
+    });
+
+    expect(grid.getPixel(1, 1)).toBe(rgba(0, 255, 0, 255));
+    expect(grid.getPixel(3, 1)).toBe(rgba(255, 0, 0, 255));
+  });
+
+  it("stamps pattern flipped vertically", () => {
+    const source = PixelGrid.createEmpty(1, 3);
+    source.setPixel(0, 0, rgba(255, 0, 0, 255));
+    source.setPixel(0, 2, rgba(0, 255, 0, 255));
+
+    const grid = PixelGrid.createEmpty(3, 5);
+    stampPatternAt(grid, { x: 1, y: 2 }, {
+      source,
+      scalePercent: 100,
+      drawMode: "foreground",
+      foregroundColor: rgba(255, 0, 0, 255),
+      backgroundColor: TRANSPARENT,
+      applyForegroundTint: false,
+      flipVertical: true,
+    });
+
+    expect(grid.getPixel(1, 1)).toBe(rgba(0, 255, 0, 255));
+    expect(grid.getPixel(1, 3)).toBe(rgba(255, 0, 0, 255));
+  });
 });

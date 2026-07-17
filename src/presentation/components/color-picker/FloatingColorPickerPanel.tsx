@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { getDefaultColorPickerPanelWidth } from "@/domain/color/ColorPickerLayout";
 import { computeFloatingPanelZIndex } from "@/domain/viewport/FloatingPanelStack";
 import { useAppStore } from "@/presentation/stores/appStore";
@@ -35,7 +35,7 @@ export function FloatingColorPickerPanel() {
       ? backgroundColor
       : foregroundColor;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel || !floatingColorPicker.visible) return;
 

@@ -9,6 +9,13 @@ import type {
 } from "@/domain/layer/Layer";
 import { createEmptyReferenceLayer, DEFAULT_DRAWING_LAYER_OPACITY } from "@/domain/layer/Layer";
 import { Palette } from "@/domain/palette/Palette";
+import {
+  createEmptyLuminancePalette,
+  luminancePaletteFromJSON,
+  luminancePaletteToJSON,
+  type LuminancePaletteData,
+  type SerializedLuminancePalette,
+} from "@/domain/luminancePalette/LuminancePalette";
 import type { GridConfig, Project } from "@/domain/project/Project";
 import { DEFAULT_GRID } from "@/domain/project/Project";
 import type { BoardPosition, PixelCanvas } from "@/domain/pixelCanvas/PixelCanvas";
@@ -146,6 +153,22 @@ interface SerializedProjectV6 {
   referenceLayers: SerializedReferenceLayer[];
   activeReferenceLayerId?: string | null;
   palette: { color: number; hex: string }[];
+  notes: Note[];
+  grid: GridConfig;
+  orthographicView?: OrthographicViewConfig;
+}
+
+interface SerializedProjectV7 {
+  version: 7;
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  board: SerializedBoardV6;
+  referenceLayers: SerializedReferenceLayer[];
+  activeReferenceLayerId?: string | null;
+  palette: { color: number; hex: string }[];
+  luminancePalette?: SerializedLuminancePalette;
   notes: Note[];
   grid: GridConfig;
   orthographicView?: OrthographicViewConfig;
@@ -440,6 +463,7 @@ function buildProjectFromPixelCanvas(
     createdAt: string;
     updatedAt: string;
     palette: Palette;
+    luminancePalette?: LuminancePaletteData;
     notes: Note[];
     grid: GridConfig;
     orthographicView: OrthographicViewConfig;
@@ -465,6 +489,7 @@ function buildProjectFromPixelCanvas(
     referenceLayers: options?.referenceLayers ?? [],
     activeReferenceLayerId: options?.activeReferenceLayerId ?? null,
     palette: meta.palette,
+    luminancePalette: meta.luminancePalette ?? createEmptyLuminancePalette(),
     notes: meta.notes,
     grid: meta.grid,
     orthographicView: meta.orthographicView,
@@ -535,8 +560,8 @@ function deserializeReferenceLayer(sl: SerializedReferenceLayer): ReferenceLayer
 }
 
 export function serializeProject(project: Project): string {
-  const data: SerializedProjectV6 = {
-    version: 6,
+  const data: SerializedProjectV7 = {
+    version: 7,
     id: project.id,
     name: project.name,
     createdAt: project.createdAt,
@@ -551,6 +576,7 @@ export function serializeProject(project: Project): string {
     ),
     activeReferenceLayerId: project.activeReferenceLayerId,
     palette: project.palette.toJSON(),
+    luminancePalette: luminancePaletteToJSON(project.luminancePalette),
     notes: project.notes,
     grid: project.grid,
     orthographicView: project.orthographicView,
@@ -709,6 +735,7 @@ function deserializeV5Project(v5: SerializedProjectV5, filePath: string, grid: G
       activeCanvasMeta?.activeReferenceLayerId,
     ),
     palette: Palette.fromJSON(v5.palette),
+    luminancePalette: createEmptyLuminancePalette(),
     notes: v5.notes ?? [],
     grid,
     orthographicView: v5.orthographicView ?? { ...DEFAULT_ORTHOGRAPHIC_VIEW },
@@ -755,15 +782,67 @@ function deserializeV6Project(v6: SerializedProjectV6, filePath: string, grid: G
       v6.activeReferenceLayerId,
     ),
     palette: Palette.fromJSON(v6.palette),
+    luminancePalette: createEmptyLuminancePalette(),
     notes: v6.notes ?? [],
     grid,
     orthographicView: v6.orthographicView ?? { ...DEFAULT_ORTHOGRAPHIC_VIEW },
   };
 }
 
+function deserializeV7Project(v7: SerializedProjectV7, filePath: string, grid: GridConfig): Project {
+  const canvases: PixelCanvas[] = v7.board.canvases.map((sc) =>
+    buildPixelCanvasFromLayers(
+      {
+        id: sc.id,
+        name: sc.name,
+        boardPosition: sc.boardPosition ?? { ...DEFAULT_BOARD_POSITION },
+        canvasWidth: sc.width,
+        canvasHeight: sc.height,
+        scaleFactor: sc.scaleFactor,
+        activeLayerId: sc.activeLayerId,
+      },
+      sc.layers.map((layer) => deserializeDrawingLayerV4(layer)),
+    ),
+  );
+
+  const activeCanvasId = v7.board.activeCanvasId;
+  const resolvedActiveId = canvases.some((canvas) => canvas.id === activeCanvasId)
+    ? activeCanvasId
+    : canvases[0]?.id ?? activeCanvasId;
+
+  const referenceLayers = v7.referenceLayers.map((layer) => deserializeReferenceLayer(layer));
+
+  return {
+    id: v7.id,
+    name: v7.name,
+    filePath,
+    createdAt: v7.createdAt,
+    updatedAt: v7.updatedAt,
+    board: {
+      canvases,
+      activeCanvasId: resolvedActiveId,
+      totalCanvasCount: v7.board.totalCanvasCount ?? canvases.length,
+    },
+    referenceLayers,
+    activeReferenceLayerId: resolveActiveReferenceLayerId(
+      referenceLayers,
+      v7.activeReferenceLayerId,
+    ),
+    palette: Palette.fromJSON(v7.palette),
+    luminancePalette: luminancePaletteFromJSON(v7.luminancePalette),
+    notes: v7.notes ?? [],
+    grid,
+    orthographicView: v7.orthographicView ?? { ...DEFAULT_ORTHOGRAPHIC_VIEW },
+  };
+}
+
 export function deserializeProject(json: string, filePath: string): Project {
   const data = JSON.parse(json) as { version?: number };
   const grid = (data as SerializedProjectV4).grid ?? { ...DEFAULT_GRID };
+
+  if (data.version === 7) {
+    return deserializeV7Project(data as SerializedProjectV7, filePath, grid);
+  }
 
   if (data.version === 6) {
     return deserializeV6Project(data as SerializedProjectV6, filePath, grid);

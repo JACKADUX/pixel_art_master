@@ -2,6 +2,7 @@ import { colorsEqual, type PixelColor } from "@/domain/canvas/PixelColor";
 import type { ColorEntry } from "@/domain/palette/Palette";
 import { formatPaletteColorTooltip } from "@/domain/palette/PaletteColorTooltip";
 import type { ColorSlot } from "../stores/appStore";
+import { PALETTE_COLOR_DRAG_MIME } from "./luminancePalette/luminancePaletteDrag";
 import {
   handlePaletteBlankAreaClick,
   handlePaletteBlankAreaContextMenu,
@@ -16,6 +17,7 @@ interface PaletteGridViewProps {
   removeMode?: boolean;
   selectedHexes?: ReadonlySet<string>;
   onToggleRemoveSelect?: (hex: string) => void;
+  enableDragExport?: boolean;
 }
 
 function buildPaletteSwatchBackground(hex: string): string {
@@ -33,6 +35,7 @@ export function PaletteGridView({
   removeMode = false,
   selectedHexes,
   onToggleRemoveSelect,
+  enableDragExport = false,
 }: PaletteGridViewProps) {
   return (
     <div
@@ -55,7 +58,16 @@ export function PaletteGridView({
             <button
               key={entry.hex}
               type="button"
+              draggable={enableDragExport && !removeMode}
               title={tooltip}
+              onDragStart={(event) => {
+                if (!enableDragExport || removeMode) return;
+                event.dataTransfer.setData(
+                  PALETTE_COLOR_DRAG_MIME,
+                  JSON.stringify({ hexes: [entry.hex] }),
+                );
+                event.dataTransfer.effectAllowed = "copy";
+              }}
               onClick={() => {
                 if (removeMode) {
                   onToggleRemoveSelect?.(entry.hex);

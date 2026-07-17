@@ -60,6 +60,8 @@ export interface ToolSettings {
   brushShape: BrushShape;
   brushPerfectPixel: boolean;
   patternBrushScale: number;
+  patternBrushFlipHorizontal: boolean;
+  patternBrushFlipVertical: boolean;
   eraserSize: number;
   eraserShape: BrushShape;
   shapeMode: ShapeMode;
@@ -79,6 +81,8 @@ export const DEFAULT_TOOL_SETTINGS: ToolSettings = {
   brushShape: "square",
   brushPerfectPixel: false,
   patternBrushScale: DEFAULT_PATTERN_SCALE,
+  patternBrushFlipHorizontal: false,
+  patternBrushFlipVertical: false,
   eraserSize: 1,
   eraserShape: "square",
   shapeMode: "rectangle",

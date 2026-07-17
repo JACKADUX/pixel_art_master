@@ -17,6 +17,7 @@ export interface SelectionContextMenuActions {
   commitSelection: () => void;
   cancelSelection: () => void;
   sendSelectionColorsToAnalysis: () => void;
+  createLuminanceGroupFromSelection: () => void;
 }
 
 export function buildSelectionContextMenuItems(
@@ -73,6 +74,12 @@ export function buildSelectionContextMenuItems(
       label: "发送选区颜色到分析插件",
       disabled: !hasSelection,
       onClick: actions.sendSelectionColorsToAnalysis,
+    },
+    {
+      type: "action",
+      label: "从选区创建明度色板组",
+      disabled: !hasSelection,
+      onClick: actions.createLuminanceGroupFromSelection,
     },
     { type: "separator" },
     {
