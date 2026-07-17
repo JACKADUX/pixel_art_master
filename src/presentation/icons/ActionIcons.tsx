@@ -24,4 +24,4 @@ export {
   SwatchIcon,
 } from "@heroicons/react/24/outline";
 
-export { Save } from "lucide-react";
+export { Save, SquareArrowRightExit } from "lucide-react";

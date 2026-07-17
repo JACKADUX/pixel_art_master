@@ -42,6 +42,7 @@ function buildProject(scale: number, paletteVisible = true): Project {
     id: "project-1",
     name: "test",
     filePath: "test.json",
+    quickExportPath: null,
     createdAt: "2024-01-01T00:00:00.000Z",
     updatedAt: "2024-01-01T00:00:00.000Z",
     board: {
@@ -116,25 +117,32 @@ describe("ProjectSerializer reference layer", () => {
     expect(reference.position).toEqual({ x: 1, y: 2 });
   });
 
-  it("serializes as v7 with luminance palette", () => {
-    const json = serializeProject(buildProject(1));
+  it("serializes as v8 with luminance palette and quickExportPath", () => {
+    const json = serializeProject({
+      ...buildProject(1),
+      quickExportPath: "C:\\exports",
+    });
     const parsed = JSON.parse(json) as {
       version: number;
       referenceLayers: unknown[];
       luminancePalette: { groups: unknown[] };
+      quickExportPath: string | null;
     };
-    expect(parsed.version).toBe(7);
+    expect(parsed.version).toBe(8);
     expect(parsed.referenceLayers).toHaveLength(1);
     expect(parsed.luminancePalette.groups).toEqual([]);
+    expect(parsed.quickExportPath).toBe("C:\\exports");
   });
 
   it("migrates v6 projects with empty luminance palette", () => {
-    const v7Json = serializeProject(buildProject(1));
-    const v6 = JSON.parse(v7Json) as Record<string, unknown>;
+    const v8Json = serializeProject(buildProject(1));
+    const v6 = JSON.parse(v8Json) as Record<string, unknown>;
     v6.version = 6;
     delete v6.luminancePalette;
+    delete v6.quickExportPath;
 
     const restored = deserializeProject(JSON.stringify(v6), "test.json");
     expect(restored.luminancePalette.groups).toEqual([]);
+    expect(restored.quickExportPath).toBeNull();
   });
 });

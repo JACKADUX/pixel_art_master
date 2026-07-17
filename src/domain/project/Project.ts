@@ -55,6 +55,8 @@ export interface Project {
   id: string;
   name: string;
   filePath: string | null;
+  /** 项目绑定的快速导出目录；未设置时为 null */
+  quickExportPath: string | null;
   createdAt: string;
   updatedAt: string;
   board: CanvasBoard;
@@ -95,6 +97,7 @@ export function createEmptyProject(name?: string, size?: CanvasSize): Project {
     id: crypto.randomUUID(),
     name: projectName,
     filePath: null,
+    quickExportPath: null,
     createdAt: now,
     updatedAt: now,
     board: createCanvasBoard("画板 1", canvasSize),
@@ -155,6 +158,7 @@ export function createProjectFromImage(
     id: crypto.randomUUID(),
     name,
     filePath: null,
+    quickExportPath: null,
     createdAt: now,
     updatedAt: now,
     board: {
@@ -197,6 +201,7 @@ export function createProjectFromPixelGrid(
     id: crypto.randomUUID(),
     name,
     filePath: null,
+    quickExportPath: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     board: {
@@ -439,6 +444,16 @@ export function withProjectFilePath(project: Project, filePath: string | null): 
     return project;
   }
   return { ...project, filePath };
+}
+
+export function withQuickExportPath(
+  project: Project,
+  quickExportPath: string | null,
+): Project {
+  if (project.quickExportPath === quickExportPath) {
+    return project;
+  }
+  return { ...project, quickExportPath };
 }
 
 /** 重命名项目；名称未变化或为空时返回 null */

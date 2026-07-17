@@ -175,6 +175,7 @@ import { loadAgentProfiles } from "@/application/use-cases/LoadAgentProfiles";
 import { loadFieldPromptConfigs } from "@/application/use-cases/LoadFieldPromptConfigs";
 import { loadLlmSettings } from "@/application/use-cases/LoadLlmSettings";
 import { exportImage } from "@/application/use-cases/ExportImageUseCases";
+import { quickExportActiveCanvas as quickExportActiveCanvasUseCase } from "@/application/use-cases/QuickExportActiveCanvas";
 import { loadProject } from "@/application/use-cases/LoadProject";
 import { createBlankProjectWithPreferences } from "@/application/use-cases/CanvasSizePreferences";
 import { openLastProjectOnStartup } from "@/application/use-cases/OpenLastProjectOnStartup";
@@ -259,6 +260,8 @@ import {
   getCompositeGrid as compositeProjectLayers,
 
   withProjectFilePath,
+
+  withQuickExportPath,
 
   withOrthographicView,
 
@@ -1029,6 +1032,12 @@ interface AppState extends AssetLibrarySliceState, AssetLibrarySliceActions, Pat
     scalePreset: ImageExportScalePreset;
     customLongestEdge: number;
   }) => Promise<{ filePath: string } | "cancelled" | null>;
+
+  setQuickExportPath: (path: string | null) => void;
+
+  pickQuickExportPath: () => Promise<string | null>;
+
+  quickExportActiveCanvas: () => Promise<void>;
 
   getCompositeGrid: () => PixelGrid | null;
 
@@ -5000,6 +5009,60 @@ export const useAppStore = create<AppState>((set, get) => {
     } catch {
       toast.error("导出失败，请重试");
       return null;
+    }
+  },
+
+  setQuickExportPath: (path) => {
+    const { project } = get();
+    if (!project) return;
+    set({ project: withQuickExportPath(project, path) });
+  },
+
+  pickQuickExportPath: async () => {
+    const { project } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return null;
+    }
+
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      recursive: true,
+      defaultPath: project.quickExportPath ?? undefined,
+      title: "选择快速导出文件夹",
+    });
+    if (!selected || typeof selected !== "string") return null;
+
+    get().setQuickExportPath(selected);
+    return selected;
+  },
+
+  quickExportActiveCanvas: async () => {
+    const { project } = get();
+    if (!project) {
+      toast.info("请先打开项目");
+      return;
+    }
+
+    let directory = project.quickExportPath;
+    if (!directory) {
+      directory = await get().pickQuickExportPath();
+      if (!directory) return;
+    }
+
+    try {
+      const result = await quickExportActiveCanvasUseCase({
+        project: get().project!,
+        directory,
+      });
+      if (!result) {
+        toast.error("导出失败，请重试");
+        return;
+      }
+      toast.info(`已导出至 ${result.filePath}`);
+    } catch {
+      toast.error("导出失败，请重试");
     }
   },
 

@@ -174,6 +174,23 @@ interface SerializedProjectV7 {
   orthographicView?: OrthographicViewConfig;
 }
 
+interface SerializedProjectV8 {
+  version: 8;
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  board: SerializedBoardV6;
+  referenceLayers: SerializedReferenceLayer[];
+  activeReferenceLayerId?: string | null;
+  palette: { color: number; hex: string }[];
+  luminancePalette?: SerializedLuminancePalette;
+  notes: Note[];
+  grid: GridConfig;
+  orthographicView?: OrthographicViewConfig;
+  quickExportPath?: string | null;
+}
+
 interface SerializedCanvasV3 {
   width: number;
   height: number;
@@ -479,6 +496,7 @@ function buildProjectFromPixelCanvas(
     id: meta.id,
     name: meta.name,
     filePath: meta.filePath,
+    quickExportPath: null,
     createdAt: meta.createdAt,
     updatedAt: meta.updatedAt,
     board: {
@@ -560,8 +578,8 @@ function deserializeReferenceLayer(sl: SerializedReferenceLayer): ReferenceLayer
 }
 
 export function serializeProject(project: Project): string {
-  const data: SerializedProjectV7 = {
-    version: 7,
+  const data: SerializedProjectV8 = {
+    version: 8,
     id: project.id,
     name: project.name,
     createdAt: project.createdAt,
@@ -580,6 +598,7 @@ export function serializeProject(project: Project): string {
     notes: project.notes,
     grid: project.grid,
     orthographicView: project.orthographicView,
+    quickExportPath: project.quickExportPath,
   };
 
   return JSON.stringify(data, null, 2);
@@ -722,6 +741,7 @@ function deserializeV5Project(v5: SerializedProjectV5, filePath: string, grid: G
     id: v5.id,
     name: v5.name,
     filePath,
+    quickExportPath: null,
     createdAt: v5.createdAt,
     updatedAt: v5.updatedAt,
     board: {
@@ -769,6 +789,7 @@ function deserializeV6Project(v6: SerializedProjectV6, filePath: string, grid: G
     id: v6.id,
     name: v6.name,
     filePath,
+    quickExportPath: null,
     createdAt: v6.createdAt,
     updatedAt: v6.updatedAt,
     board: {
@@ -816,6 +837,7 @@ function deserializeV7Project(v7: SerializedProjectV7, filePath: string, grid: G
     id: v7.id,
     name: v7.name,
     filePath,
+    quickExportPath: null,
     createdAt: v7.createdAt,
     updatedAt: v7.updatedAt,
     board: {
@@ -836,9 +858,40 @@ function deserializeV7Project(v7: SerializedProjectV7, filePath: string, grid: G
   };
 }
 
+function deserializeV8Project(v8: SerializedProjectV8, filePath: string, grid: GridConfig): Project {
+  const base = deserializeV7Project(
+    {
+      version: 7,
+      id: v8.id,
+      name: v8.name,
+      createdAt: v8.createdAt,
+      updatedAt: v8.updatedAt,
+      board: v8.board,
+      referenceLayers: v8.referenceLayers,
+      activeReferenceLayerId: v8.activeReferenceLayerId,
+      palette: v8.palette,
+      luminancePalette: v8.luminancePalette,
+      notes: v8.notes,
+      grid: v8.grid,
+      orthographicView: v8.orthographicView,
+    },
+    filePath,
+    grid,
+  );
+  return {
+    ...base,
+    quickExportPath:
+      typeof v8.quickExportPath === "string" ? v8.quickExportPath : null,
+  };
+}
+
 export function deserializeProject(json: string, filePath: string): Project {
   const data = JSON.parse(json) as { version?: number };
   const grid = (data as SerializedProjectV4).grid ?? { ...DEFAULT_GRID };
+
+  if (data.version === 8) {
+    return deserializeV8Project(data as SerializedProjectV8, filePath, grid);
+  }
 
   if (data.version === 7) {
     return deserializeV7Project(data as SerializedProjectV7, filePath, grid);

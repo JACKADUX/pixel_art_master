@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from "react";
 import { isRecoveryPath } from "@/infrastructure/storage/RecoveryPath";
+import { Cog6ToothIcon, SquareArrowRightExit } from "../icons/ActionIcons";
 import { buildMenuGroups } from "../config/menuConfig";
 import { useAppStore } from "../stores/appStore";
 import { useComfyAppStore } from "../stores/comfyAppStore";
@@ -39,6 +40,8 @@ export function TopBar() {
   const openAboutModal = useAppStore((s) => s.openAboutModal);
   const openShortcutReferenceModal = useAppStore((s) => s.openShortcutReferenceModal);
   const project = useAppStore((s) => s.project);
+  const quickExportActiveCanvas = useAppStore((s) => s.quickExportActiveCanvas);
+  const pickQuickExportPath = useAppStore((s) => s.pickQuickExportPath);
 
   const comfyApps = useComfyAppStore((s) => s.apps);
   const refreshComfyApps = useComfyAppStore((s) => s.refreshApps);
@@ -133,15 +136,45 @@ export function TopBar() {
     return "";
   })();
 
+  const quickExportTitle = project?.quickExportPath
+    ? `快速导出到 ${project.quickExportPath}`
+    : "快速导出（未绑定路径，将先选择文件夹）";
+
   return (
     <header className="flex items-center gap-1 border-b border-zinc-700 bg-zinc-900 px-3 py-2">
       <MenuBar menus={menus} />
 
       {project && (
-        <span className="ml-auto truncate text-xs text-zinc-500">
-          {project.name}
-          {saveLabel}
-        </span>
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          <span className="truncate text-xs text-zinc-500">
+            {project.name}
+            {saveLabel}
+          </span>
+          <div className="flex shrink-0 overflow-hidden rounded border border-zinc-700">
+            <button
+              type="button"
+              title={quickExportTitle}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={() => void quickExportActiveCanvas()}
+            >
+              <SquareArrowRightExit className="h-3.5 w-3.5" aria-hidden />
+              <span>快速导出</span>
+            </button>
+            <button
+              type="button"
+              title={
+                project.quickExportPath
+                  ? `设置快速导出路径（当前：${project.quickExportPath}）`
+                  : "设置快速导出路径"
+              }
+              className="flex items-center justify-center border-l border-zinc-700 px-1.5 py-1 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={() => void pickQuickExportPath()}
+            >
+              <Cog6ToothIcon className="h-3.5 w-3.5" aria-hidden />
+              <span className="sr-only">设置快速导出路径</span>
+            </button>
+          </div>
+        </div>
       )}
     </header>
   );
